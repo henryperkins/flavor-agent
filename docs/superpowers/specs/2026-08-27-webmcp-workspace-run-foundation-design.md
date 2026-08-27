@@ -1,6 +1,7 @@
 # Flavor Agent WebMCP Implementation Series — Spec 1: Workspace, Context, and Run Foundation
 
-- **Status:** Draft companion implementation specification; runtime implementation is not part of this document
+- **Status:** Approved companion implementation specification; runtime implementation is not part of this document
+- **Approved:** 2026-08-27
 - **Series:** 1 of 5
 - **Date:** 2026-08-27
 - **Normative upstream:** `docs/superpowers/specs/2026-08-27-webmcp-recommendation-protocol-design.md`
@@ -130,7 +131,7 @@ Spec 1 implementation includes:
 - an authenticated run orchestration service and dedicated REST controller
 - a plugin-owned run table, schema lifecycle, lease/idempotency handling, TTL, tombstones, and prune job
 - pure run availability projection
-- unit, integration, REST, repository, race, and browser evidence described in section 18
+- unit, integration, REST, repository, race, and browser evidence described in section 19
 
 ### 5.2 Explicit non-goals
 
@@ -159,6 +160,8 @@ The manifest contains only static protocol data:
 - interaction modes and Spec 1 default execution-class policy
 - context group and seam path/source allowlists
 - mandatory context profiles by surface
+- exact hard/soft invocation policy for every requested seam consumer
+- final-receipt truncation limits and trusted docs URL/currentness policy
 - closed configuration enums and default values
 - string, collection, tree, request, result, and retained-payload limits
 - public run and internal REST JSON Schemas
@@ -169,6 +172,10 @@ The manifest MUST NOT contain localized labels, credentials, dynamic capability 
 PHP loads it through `FlavorAgent\Recommendations\Protocol\V1Contract` with a request-local static cache. JavaScript imports the same JSON at build time through `src/recommendations/protocol/v1-contract.js`, validates its expected manifest version, and freezes the exported projection.
 
 Failure to load or validate the manifest makes the run foundation unavailable. It MUST NOT silently fall back to duplicated hard-coded surface lists.
+
+The manifest uses a closed JSON Schema 2020-12 subset implemented identically in PHP and JavaScript. Validation keywords are `$ref` to local `$defs`, `type` as a string or non-empty unique type array, `required`, `properties`, `additionalProperties` as a boolean or schema, `items`, `minItems`, `maxItems`, `uniqueItems`, `minLength`, `maxLength`, `pattern`, `format` (`uuid`, `date-time`, or `uri` only), `minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`, `enum`, `const`, `anyOf`, `oneOf`, `allOf`, and `not`. `$schema`, `$id`, `$defs`, `title`, `description`, `default`, `examples`, `deprecated`, `readOnly`, and `writeOnly` are allowed metadata/definition keywords and do not independently validate an instance. Any other keyword makes the manifest invalid.
+
+Registered Ability schemas remain Gutenberg/WordPress-compatible draft-04 schemas; the additive `workspaceContext` schema therefore uses singleton `enum` rather than `const` and does not inject `$defs`/`$ref`. They are not silently narrowed to a smaller vocabulary. `ClosedJsonSchemaValidator` has an explicit Ability-schema mode that preserves object openness where the existing schema permits it, supports union-valued `type` and `anyOf` in the current recommendation schemas, and rejects a value unless both the recursive validator and applicable WordPress REST schema validation accept it. Contract tests enumerate the live input and output schema for all eight recommendation Abilities, record every keyword encountered, and fail when a keyword has neither implemented validation semantics nor an explicit annotation-only classification. Manifest/runtime-wire schemas use the closed 2020-12 subset above; the two dialects are never conflated.
 
 ## 7. Workspace identity and editor-scope lifecycle
 
@@ -197,6 +204,8 @@ style_book
 temporary
 ```
 
+For `style_book`, `entityId` is the Global Styles entity ID; the canonical block target is carried only by the final segment of `editorScope.key`.
+
 The `key` uses the canonical protocol forms:
 
 ```text
@@ -208,7 +217,11 @@ style_book:<id>:<block-name>
 temporary:<editorInstanceId>:<entity-kind>
 ```
 
-The resolver MUST validate and bound every segment. A selected block, inserter position, navigation block, or Style Book subsection does not change the primary workspace unless the primary editor entity itself changes.
+The resolver MUST validate and bound every segment. A selected content block, inserter position, navigation block, or control subsection within the same Style Book block target does not change the primary workspace unless the primary editor entity itself changes. The active Style Book block target is different: its canonical block name is part of `style_book:<id>:<block-name>`, so changing that target creates a new workspace.
+
+For `temporary`, `entityId` is the page-lifetime `editorInstanceId`; the unresolved entity kind remains in the scope key. This keeps the closed scope shape non-empty without pretending an unsaved WordPress entity already has a persistent ID.
+
+The final `entity-kind` segment of a temporary key is either a registered post-type slug or one of `wp_template`, `wp_template_part`, `global_styles`, and `style_book`. The server rejects any other value. A registered post type is authorized with that post type object's `edit_posts` capability; the four Site Editor kinds require `edit_theme_options`. POST and GET repeat this authorization. Temporary scopes may yield advisory or stage-only results where the source Ability permits them, but they can never yield a complete governed persistent binding.
 
 ### 7.2 Workspace creation
 
@@ -222,7 +235,7 @@ The composite is an in-memory binding, not a deterministic hash. The random `wor
 
 On a primary scope transition:
 
-1. abort the active client generation controller
+1. abort all active client generation controllers
 2. create a new `workspaceId`
 3. reset `workspaceRevision` to `0`
 4. install the new `editorScope`
@@ -231,11 +244,15 @@ On a primary scope transition:
 
 An unsaved temporary scope is never promoted in place. First successful save resolves a canonical entity and creates a new workspace.
 
+If the resolver temporarily has no valid primary scope, the bootstrap aborts all active generation controllers and dispatches `invalidateRecommendationWorkspace`. That lifecycle-only action installs the explicit unbound state (`workspaceId: null`, `editorScope: null`, `workspaceRevision: 0`) and clears configuration, run relationships, selection, review, plan, cache, and transient generation state. A later valid scope always receives a fresh random workspace ID. This null-scope transition prevents a late response from installing into the workspace that was current before Site Editor navigation entered an unresolved state.
+
 ### 7.3 Independence
 
 Two tabs editing the same entity create different `editorInstanceId`, `workspaceId`, and revision sequences. The page revision never claims to guard WordPress document content or another tab. Server Ability permissions, entity versions, exact freshness signatures, locks, and later apply-time checks own those boundaries.
 
 When a configured workspace uses `focus.scope: selected_block` or `focus.scope: selection`, a semantic Gutenberg selection change replaces `focus.clientIds` through the same context-configuration action. It does not create a workspace, but it does increment the current workspace revision once, supersede the current run relationship, and clear later selection/review/plan state. Selection changes are ignored for this purpose while the configuration is empty or its focus is `document`/`site_editor_entity`.
+
+Focus synchronization is deterministic. `selected_block` keeps only the first live selected client ID in Gutenberg selection order; `selection` keeps the ordered, first-occurrence-deduplicated live IDs up to the protocol limit of 20. IDs that no longer resolve through the block editor are discarded. Either mode may normalize to an empty array after deselection, which is a semantic complete replacement when the previous array was non-empty.
 
 ## 8. Page state model
 
@@ -261,7 +278,8 @@ The existing `flavor-agent` store gains these top-level slices:
     "applyPlan": {}
   },
   "recommendationRunCache": {
-    "byId": {}
+    "byId": {},
+    "payloadDigestsById": {}
   },
   "recommendationGeneration": {
     "requestToken": 0,
@@ -274,13 +292,19 @@ The existing `flavor-agent` store gains these top-level slices:
 }
 ```
 
+Before a valid primary scope resolves, and during the invalidation interval described in section 7.2, the same shape uses `workspaceId: null`, `editorScope: null`, and `workspaceRevision: 0`; all other workspace values are their empty defaults. No generation or install action succeeds while the store is unbound.
+
 An empty object is the only unconfigured `contextConfiguration` sentinel. It is not a valid generation configuration. The first successful configuration replacement installs the complete normalized shape from protocol section 10.
 
-`recommendationRunCache.byId` contains only public run payloads. An existing `runId` may be inserted once. A second payload with the same `runId` and a different digest is a fail-closed `run_payload_mismatch`; the reducer retains the first payload.
+`recommendationRunCache.byId` contains only public run payloads. `payloadDigestsById` is an internal sidecar keyed by the same run IDs and is omitted from every public selector projection. An existing `runId` may be inserted once. A second payload with the same `runId` and a different digest is a fail-closed `run_payload_mismatch`; the reducer retains the first payload and digest.
 
 The cache is bounded to ten runs. On insertion, it retains the current run plus the nine most recently completed non-current runs, with `completedAt` and then `runId` as deterministic ordering keys. Cache eviction is operational page state: it does not delete the server run, alter the current relationship, or increment `workspaceRevision`.
 
 Generation state is operational UI state. Updating it does not increment `workspaceRevision` and it is not returned as part of the public workspace protocol.
+
+The singular `recommendationGeneration` slice is the latest-request UI projection, not a count or registry of every active request. The coordinator owns the complete page-lifetime map of request tokens to active `AbortController` instances outside reducer state. A finish/fail action updates the projection only when its request token is still current; scope transition or invalidation aborts every controller.
+
+Every workspace revision, expected/base workspace revision, generation request token, and Ability `clientRequest.requestToken` is an integer in the closed range `0..9007199254740991`. Increment at the upper bound fails closed with `workspace_revision_exhausted`; neither runtime wraps, rounds, converts the value to floating-point scientific notation, or dispatches the requested semantic mutation. The shared manifest and both REST/store validators own this same ceiling.
 
 ### 8.2 Module boundary
 
@@ -308,6 +332,7 @@ The store exposes these foundation actions. Names are implementation contracts f
 | Action | CAS input | Revision effect |
 |---|---|---|
 | `initializeRecommendationWorkspace` | None; page lifecycle only | New workspace begins at `0` |
+| `invalidateRecommendationWorkspace` | None; page lifecycle only | Unbound workspace resets to `0` |
 | `replaceRecommendationContextConfiguration` | `workspaceId`, `expectedWorkspaceRevision` | No-op: none; semantic change: increment once |
 | `synchronizeRecommendationFocus` | Current workspace ID/revision; human editor bridge only | Delegates one semantic focus replacement to the context action |
 | `beginRecommendationGeneration` | Current workspace snapshot | None |
@@ -379,9 +404,13 @@ isRecommendationGenerationRunning
 
 Selectors that accept a run ID return public cached data only. `getRecommendationRunAvailability(runId, now)` and `getRecommendationWorkspaceProjection(now)` are pure projections over an injected time; they never dispatch cache eviction, expiry, relationship, or revision actions. If the required run is not cached, they report a bounded unresolved relationship and do not fetch it as a selector side effect.
 
+`getCurrentRecommendationRun()` returns the cached public run for either a current or superseded relationship so stale evidence can remain visible. Eligibility is reported separately by the relationship and availability projections; the selector does not make a superseded run current by hiding or rewriting it. `getRecommendationRunAvailability()` returns exactly one of `active`, `expired`, or `unresolved`; the unresolved projection uses `reasonCode: run_not_cached` and never guesses server state.
+
 ## 9. Context configuration normalization
 
 PHP and JavaScript normalizers MUST produce byte-equivalent canonical values for all valid protocol 1.0 configurations.
+
+JSON object/array identity is part of that contract. JavaScript uses plain objects for JSON objects and arrays only for JSON arrays. PHP decodes the raw REST body with `json_decode($raw, false, 512, JSON_THROW_ON_ERROR)`, validates objects as `stdClass`, and may convert a non-empty object to an associative map only at a typed domain boundary. An empty JSON object remains `stdClass`; an empty PHP array always represents `[]`, never `{}`. `CanonicalJson` serializes `stdClass` and non-list associative maps as objects and list arrays as arrays. It rejects resources, callables, non-finite numbers, sparse numeric-key arrays, and any value whose JSON kind is ambiguous. Shared fixtures MUST include top-level and nested `{}` versus `[]` cases so PHP cannot accidentally normalize `surfaceParameters: {}` to an array.
 
 Normalization rules are:
 
@@ -394,8 +423,23 @@ Normalization rules are:
 - deduplicate `focus.clientIds` while preserving editor selection order
 - materialize optional string defaults as the manifest defines
 - materialize `detailLevel`, `recentActivity`, and `content.mode` defaults
+- when `recentActivity` is `outcomes_only`, materialize `recent_outcomes` in `additionalContextGroups`; when it is `none`, reject an explicitly supplied `recent_outcomes` group as contradictory
 - reject `surfaceParameters.content` when `content` is not requested; otherwise materialize its normalized value
 - preserve array order where it carries priority, selection, or operation meaning
+
+Protocol 1.0 defaults are fixed:
+
+| Field | Normalized default |
+|---|---|
+| `intent.audience` | `""` |
+| `intent.tone` | `""` |
+| `intent.constraints` | `[]` |
+| `focus.clientIds` | `[]` |
+| `additionalContextGroups` | `[]` |
+| `detailLevel` | `"balanced"` |
+| `recentActivity` | `"none"` |
+| `surfaceParameters` when `content` is not requested | `{}` |
+| `surfaceParameters` when `content` is requested and no mode is supplied | `{ "content": { "mode": "draft" } }` |
 
 Semantic equality compares the canonical JSON bytes, not object identity, insertion order, or localized labels.
 
@@ -448,6 +492,8 @@ The client `capturedAt` value is provenance only. A malformed RFC 3339 value fai
 
 The client may report `included`, `summarized`, `truncated`, or `unavailable`. It may not claim final `omitted`; the server derives omission from the requested seam set and policy. A supplied seam that is not requested is discarded before signature construction and recorded only as a bounded diagnostic count.
 
+For `summarized`, `strategy` is not a caller-defined reason code. Each summarizable seam schema fixes its one permitted strategy string as a `const`; other dispositions forbid `strategy`. A client observation with `truncated` does not supply authoritative `limit`: the server obtains the exact positive safe-integer maximum and unit from the manifest and adds the numeric maximum to the final receipt. `sourceItemCount` is required for a truncated collection and for a summarized collection strategy, is a safe non-negative integer at least as large as the returned item count, and is forbidden otherwise.
+
 ### 10.3 Requested seam set
 
 The server computes requested seams as the union of:
@@ -461,17 +507,183 @@ The initial mandatory group profiles are:
 
 | Surface | Mandatory context groups |
 |---|---|
-| `block` | `document_identity`, `block_selection`, `block_constraints`, `block_registry`, `theme_tokens`, `save_publication_state` |
+| `block` | `document_identity`, `block_selection`, `block_constraints`, `block_registry`, `theme_tokens`, `save_publication_state`, `docs_grounding` |
 | `content` | `document_identity`, `document_summary`, `save_publication_state` |
-| `pattern` | `document_identity`, `block_selection`, `block_constraints`, `pattern_catalog`, `template_structure`, `save_publication_state` |
-| `navigation` | `document_identity`, `navigation_structure`, `block_constraints`, `save_publication_state` |
-| `template` | `document_identity`, `template_structure`, `pattern_catalog`, `theme_tokens`, `save_publication_state` |
-| `template_part` | `document_identity`, `template_structure`, `pattern_catalog`, `theme_tokens`, `save_publication_state` |
-| `post_blocks` | `document_identity`, `block_tree`, `block_constraints`, `pattern_catalog`, `save_publication_state` |
-| `global_styles` | `document_identity`, `theme_tokens`, `theme_style_summary`, `template_structure`, `save_publication_state` |
-| `style_book` | `document_identity`, `theme_tokens`, `theme_style_summary`, `template_structure`, `block_selection`, `save_publication_state` |
+| `pattern` | `document_identity`, `block_selection`, `block_constraints`, `pattern_catalog`, `template_structure`, `save_publication_state`, `docs_grounding` |
+| `navigation` | `document_identity`, `navigation_structure`, `block_constraints`, `save_publication_state`, `docs_grounding` |
+| `template` | `document_identity`, `template_structure`, `pattern_catalog`, `theme_tokens`, `save_publication_state`, `docs_grounding` |
+| `template_part` | `document_identity`, `template_structure`, `pattern_catalog`, `theme_tokens`, `save_publication_state`, `docs_grounding` |
+| `post_blocks` | `document_identity`, `save_publication_state`, `docs_grounding` |
+| `global_styles` | `document_identity`, `theme_tokens`, `theme_style_summary`, `template_structure`, `save_publication_state`, `docs_grounding` |
+| `style_book` | `document_identity`, `theme_tokens`, `theme_style_summary`, `template_structure`, `block_selection`, `save_publication_state`, `docs_grounding` |
 
-The manifest maps groups to exact seam paths. Adding a seam path or changing a value schema requires a collector-version change and shared fixtures. It does not silently inherit every selector Gutenberg later adds.
+The focus profiles are also fixed:
+
+| `focus.scope` | Added context groups |
+|---|---|
+| `selected_block` | `block_selection`, `block_constraints`, `block_registry` |
+| `selection` | `block_selection`, `block_constraints`, `block_registry` |
+| `document` | `document_summary`, `block_tree` |
+| `site_editor_entity` | `template_structure`, `navigation_structure`, `theme_style_summary` |
+
+These groups are unioned with surface-mandatory and explicitly requested groups, then deduplicated in manifest order. A group is collected for a surface only when the consumption registry later in this section gives that surface a consumer. An unavailable seam remains in the receipt as unavailable; focus never changes the declared source or substitutes a different group. A focus or optional group with no consumer among the requested surfaces is rejected as `context_configuration_invalid` rather than signed and ignored.
+
+Mandatory capture and invocation criticality are separate. The manifest materializes an exact `hardContextPaths` array for every surface. For protocol 1.0, that array is the expansion of the surface's mandatory profile with `guidance.docs_grounding` removed; every other mandatory-profile path is hard. A hard path that is unavailable prevents that surface from starting and yields `surface_unavailable` with reason code `required_context_unavailable`. A path requested only by focus or `additionalContextGroups` is soft unless it is independently present in that surface's `hardContextPaths`; its absence remains visible in the receipt but does not block invocation. `activity.recent_outcomes` is always soft. `guidance.docs_grounding` is mandatory-capture-but-soft for its eight declared wire consumers and soft when content requests it explicitly: unavailable docs produce `workspaceContext.docsGrounding: null`, zero secondary lookup, and continued Ability execution. Tests assert the fully expanded per-surface arrays rather than recomputing this policy by convention.
+
+The initial group-to-seam registry is closed as follows. `client` rows are the only paths accepted in `contextCapture.seams`; `server` rows are collected by `ContextEnvelopeBuilder` and a caller-supplied observation for one of those paths is discarded as unrequested input.
+
+| Context group | Seam path | Declared source | Owner |
+|---|---|---|---|
+| `document_identity` | `document.identity` | `flavor-agent/editor-scope` | client |
+| `document_identity` | `document.server_identity` | `flavor-agent/server` | server |
+| `document_summary` | `document.summary` | `core/editor` | client |
+| `document_summary` | `document.edited_content` | `core/editor` | client |
+| `block_selection` | `document.block_selection` | `core/block-editor` | client |
+| `block_tree` | `document.block_tree` | `core/block-editor` | client |
+| `block_constraints` | `document.block_constraints` | `core/block-editor` | client |
+| `block_registry` | `editor.block_registry` | `core/blocks` | client |
+| `pattern_catalog` | `editor.visible_patterns` | `core/block-editor` | client |
+| `pattern_catalog` | `server.pattern_catalog` | `flavor-agent/server` | server |
+| `theme_tokens` | `theme.tokens` | `core/block-editor` | client |
+| `theme_tokens` | `theme.server_tokens` | `flavor-agent/server` | server |
+| `theme_style_summary` | `theme.style_summary` | `core` | client |
+| `template_structure` | `document.template_structure` | `core/block-editor` | client |
+| `navigation_structure` | `document.navigation_structure` | `core/block-editor` | client |
+| `save_publication_state` | `document.save_publication_state` | `core/editor` | client |
+| `recent_outcomes` | `activity.recent_outcomes` | `flavor-agent/activity` | server |
+| `docs_grounding` | `guidance.docs_grounding` | `flavor-agent/docs-grounding` | server |
+
+`flavor-agent/editor-scope` is the bounded primary-scope adapter over the relevant post editor, Site Editor, Global Styles, and Style Book inputs; it is not a public selector store. `document.summary` contains bounded unsaved semantic metadata such as title, excerpt, post type, and status. `document.edited_content` contains the bounded current unsaved block-serialized content needed by content edit/critique requests; its schema and hard limit prevent it from becoming an unrestricted selector result. A client path whose declared source is unavailable on the current editor screen is reported as `unavailable`, never silently replaced by a different source. In particular, Site Editor entities may report `document.summary`, `document.edited_content`, or `document.save_publication_state` unavailable until a source with the declared semantics exists.
+
+The value grammar is also closed. Every object below has `additionalProperties: false`; every array has the manifest limit from section 11; every string has a path-specific maximum; all names/IDs are normalized strings; and nullability is exactly as written. `BlockRecord`, `BlockTypeRecord`, `PatternIdentity`, and `TokenRecord` are shared schema definitions:
+
+```text
+BlockRecord = {
+  clientId: string,
+  name: string,
+  parentClientId: string | null,
+  index: integer >= 0,
+  depth: integer >= 0,
+  serialized: string
+}
+
+BlockTypeRecord = {
+  name: string,
+  title: string,
+  category: string,
+  parent: string[],
+  ancestor: string[],
+  allowedBlocks: string[],
+  enabledSupports: string[]
+}
+
+PatternIdentity = {
+  name: string,
+  title: string,
+  categories: string[],
+  blockTypes: string[],
+  templateTypes: string[],
+  inserter: boolean,
+  source: string
+}
+
+TokenRecord = {
+  path: string,
+  value: string | number | boolean | null,
+  origin: "default" | "theme" | "user"
+}
+```
+
+The path-discriminated values are:
+
+| Seam path | Exact value shape |
+|---|---|
+| `document.identity` | `{ editorScopeKey: string, kind: EditorScopeKind, entityId: string }` |
+| `document.server_identity` | `{ editorScopeKey: string, targetKind: "post" | "template" | "template_part" | "global_styles" | "style_book" | "temporary", targetId: string | null, persistent: boolean, postType: string | null }` |
+| `document.summary` | `{ postType: string, title: string, excerpt: string, slug: string, status: string }` |
+| `document.edited_content` | `{ format: "block_markup", content: string }` |
+| `document.block_selection` | `{ clientIds: string[], blocks: BlockRecord[] }` |
+| `document.block_tree` | `{ blocks: BlockRecord[], totalCount: integer >= 0 }` |
+| `document.block_constraints` | `{ rootClientId: string | null, templateLock: false | "all" | "insert" | "contentOnly" | null, canInsert: boolean, canMove: boolean, canRemove: boolean, allowedBlockTypes: string[] }` |
+| `editor.block_registry` | `{ blockTypes: BlockTypeRecord[] }` |
+| `editor.visible_patterns` | `{ patterns: PatternIdentity[] }` |
+| `server.pattern_catalog` | `{ patterns: { name: string, title: string, categories: string[], source: string, synced: boolean, status: string }[] }` |
+| `theme.tokens` | `{ tokens: TokenRecord[] }` |
+| `theme.server_tokens` | `{ tokens: TokenRecord[] }` |
+| `theme.style_summary` | `{ scope: "root" | "block", blockName: string | null, tokens: TokenRecord[] }` |
+| `document.template_structure` | `{ entityKind: "template" | "template_part" | "post" | "temporary", entityId: string, blocks: BlockRecord[], totalCount: integer >= 0 }` |
+| `document.navigation_structure` | `{ navigationId: string | null, blocks: BlockRecord[], totalCount: integer >= 0 }` |
+| `document.save_publication_state` | `{ isDirty: boolean, isSaving: boolean, isAutosaving: boolean, isSaveable: boolean, hasPublishAction: boolean, status: string }` |
+| `activity.recent_outcomes` | `{ outcomes: { activityId: string, surface: string, outcome: string, reasonCode: string | null, createdAt: RFC3339 string }[] }` |
+| `guidance.docs_grounding` | `{ bySurface: { surfaceId: SurfaceId, queryFingerprint: 64-lowercase-hex string, disposition: "included" | "truncated" | "unavailable", reasonCode: DocsReasonCode | null, sourceItemCount: integer >= 0, items: { sourceId: string, title: string, url: string, lastModified: RFC3339 string | null, summary: string, fingerprint: 64-lowercase-hex string }[] }[] }` |
+
+Serialized block markup is normalized and bounded per record; it is not recursively parsed into an open attribute map inside the protocol. `enabledSupports` is the sorted list of allowlisted support paths whose normalized value is truthy, never the raw block registry `supports` object. Token paths are dot-separated allowlisted theme setting/style paths, never arbitrary object traversal supplied by the caller. Recent outcomes exclude prompt, suggestion, before/after, request, and document payloads. When at least one docs consumer has usable guidance, docs grounding contains exactly one entry per declared consumer surface in canonical surface order, including unavailable entries for mixed outcomes. Each query is deterministically derived from normalized intent plus that surface's normalized seam projection, preserving its current WordPress guidance topics while eliminating a second lookup inside the Ability. Docs items are trusted-source-policy summaries and fingerprints; they exclude retrieved full text, credentials, provider diagnostics, and raw search responses.
+
+`DocsReasonCode` is the closed set `docs_transport_unavailable`, `docs_empty`, and `docs_untrusted_or_stale`. Every docs surface entry includes its query fingerprint. Its remaining fields are cross-field exact: `included` has 1–8 items, `sourceItemCount` equal to `items.length`, and null `reasonCode`; `truncated` has exactly 8 items, `sourceItemCount` greater than 8, and null `reasonCode`; `unavailable` has zero items, `sourceItemCount: 0`, and one non-null `DocsReasonCode`. If every declared consumer is unavailable, the complete `guidance.docs_grounding` context value is absent and the receipt metadata described in section 10.4 carries all per-surface evidence.
+
+The manifest defines one closed value schema and permitted dispositions for every row above, and maps each group to exactly these paths. Adding a seam path, changing a declared source or owner, or changing a value schema requires a collector-version change and shared fixtures. It does not silently inherit every selector Gutenberg later adds.
+
+#### 10.3.1 Signed-context consumption registry
+
+The context signature may attest only values that affect orchestration, authorization/preflight, or an invoked recommendation. Manifest validation therefore requires every seam path to have at least one fixed consumer, and envelope construction includes a value only when at least one requested surface resolves to one of those consumers. `unavailable` and `omitted` receipt entries carry no context value.
+
+The eight recommendation Ability input schemas gain one optional, closed `workspaceContext` property. This is an additive compatibility field, not a ninth Ability. It has exactly these fields:
+
+`SurfaceDocsGrounding` projects only a matching `included` or `truncated` `guidance.docs_grounding.bySurface[]` entry and contains exactly `queryFingerprint` and `items` under the same closed schema and limits. A matching `unavailable` entry, a missing entry, or an all-unavailable docs seam projects to null.
+
+```text
+workspaceContext = {
+  schemaVersion: "recommendation-ability-context-v1",
+  semanticSummary: string,
+  recentOutcomeSummary: string,
+  docsGrounding: SurfaceDocsGrounding | null
+}
+```
+
+Only `schemaVersion` is required; empty optional fields are omitted except that `docsGrounding` is explicit `null` when its requested server source is unavailable. `semanticSummary` is a deterministic, bounded rendering of only the structural seam values routed to that surface. `recentOutcomeSummary` is a deterministic rendering of `activity.recent_outcomes`. Presence of `workspaceContext` identifies a run-based call and always suppresses the legacy internal docs lookup: a structured `docsGrounding` value is consumed exactly, `null` means requested but unavailable, and absence means not requested. A legacy direct caller that omits `workspaceContext` retains the current internal collection behavior.
+
+Before a docs entry enters the envelope, a new server-only trusted-source gate requires normalized HTTPS, an exact allowlisted WordPress documentation host/path, a non-empty lowercase SHA-256 content fingerprint, and the currentness rule below. `DocsGroundingSourcePolicy` supplies labels only and is not treated as this gate. The adapter maps `sourceId` to native `id`/`sourceKey`, `summary` to `excerpt`, `fingerprint` to `contentHash`, `lastModified` to `publishedAt`, preserves the normalized URL/title, derives `sourceType` from the matching allowlist row, and creates a normal `DocsGuidanceResult` so existing attribution and fingerprints remain coherent.
+
+The manifest owns this exact ordered allowlist; hosts are exact, not suffix matches:
+
+| `sourceType` | Exact host | Accepted normalized path | Currentness |
+|---|---|---|---|
+| `developer-docs` | `developer.wordpress.org` | `/block-editor/`, `/rest-api/`, `/themes/`, or `/reference/`, including descendants | Stable; `lastModified` may be null; a supplied value must not be in the future |
+| `developer-blog` | `developer.wordpress.org` | Dated document `^/news/[0-9]{4}/[0-9]{2}/(?:[0-9]{2}/)?[a-z0-9][a-z0-9-]*/$` | Time-sensitive |
+| `make-core` | `make.wordpress.org` | Dated document `^/core/[0-9]{4}/[0-9]{2}/[0-9]{2}/(?!xpost-)[a-z0-9][a-z0-9-]*/$` | Time-sensitive |
+| `make-ai` | `make.wordpress.org` | Dated document `^/ai/[0-9]{4}/[0-9]{2}/[0-9]{2}/(?!xpost-)[a-z0-9][a-z0-9-]*/$` | Time-sensitive |
+| `wordpress-news` | `wordpress.org` | Dated document `^/news/[0-9]{4}/[0-9]{2}/[a-z0-9][a-z0-9-]*/$` | Time-sensitive |
+
+URL normalization trims surrounding ASCII whitespace, parses one absolute URI, lowercases scheme and host, requires `https`, rejects user info, query, fragment, a trailing-dot host, any host other than the three exact values above, and every explicit port except `443` (which is removed). The raw path must have valid percent escapes, one leading slash, no repeated slash, and no backslash or control character. Each segment is percent-decoded exactly once for validation; a decoded slash/backslash/control, invalid UTF-8, or `.`/`..` segment is rejected. Remaining escapes use uppercase hex, path matching is case-sensitive, and one trailing slash is materialized before allowlist matching. Sibling domains, subdomains, encoded traversal/separators, archive/listing/tag paths, and unmatched roots fail closed.
+
+For a time-sensitive row, `lastModified` is required, must be a valid server-normalized timestamp no later than the envelope's captured time, and must be at most `15,552,000` seconds (180 days) old. A stable row may use null; a supplied timestamp is still rejected when future-dated. Filtering every candidate is a soft per-surface docs-source failure: that surface receives the `docs_untrusted_or_stale` disposition, its Ability receives null docs, and recommendation generation continues. Transport and empty-result failures use the other two closed docs reason codes. Mixed outcomes are aggregated into one seam receipt by section 10.4; they never create duplicate receipt paths.
+
+The fixed seam-to-consumer mapping is:
+
+| Seam path | Native/preflight consumers | Other permitted consumer |
+|---|---|---|
+| `document.identity` | Every surface: validate scope and build its existing `document`/target fields | None |
+| `document.server_identity` | Every surface: authoritative target and permission preflight | None |
+| `document.summary` | `content.postContext`; document-bearing template/navigation/style inputs | `workspaceContext.semanticSummary` for `block`, `pattern`, `navigation`, `template`, `template_part`, `global_styles`, or `style_book` when explicitly/focus requested |
+| `document.edited_content` | `content.postContext.content` only | None |
+| `document.block_selection` | `block.selectedBlock`/`clientId`/`editorContext`; `pattern.blockContext`; `style_book.styleContext` | `workspaceContext.semanticSummary` for the same three surfaces only |
+| `document.block_tree` | Template, template-part, navigation, block, pattern, and style structural input fields where their registered adapter declares the group | `workspaceContext.semanticSummary` for those same surfaces; never `post_blocks` |
+| `document.block_constraints` | `block.editorContext`, `pattern.insertionContext`, and `navigation.editorContext` | `workspaceContext.semanticSummary` for those three surfaces |
+| `editor.block_registry` | `block.editorContext` and `pattern.blockContext` | `workspaceContext.semanticSummary` for `block` and `pattern` |
+| `editor.visible_patterns` | `pattern.visiblePatternNames`; template/template-part pattern-name inputs | `workspaceContext.semanticSummary` for `pattern`, `template`, and `template_part` |
+| `server.pattern_catalog` | Pattern/template/template-part server-backed candidate input | `workspaceContext.semanticSummary` for `pattern`, `template`, and `template_part` |
+| `theme.tokens` | Block/template/template-part/style context fields | `workspaceContext.semanticSummary` for `block`, `template`, `template_part`, `global_styles`, and `style_book` |
+| `theme.server_tokens` | Same five server-backed context projections | `workspaceContext.semanticSummary` for those same surfaces |
+| `theme.style_summary` | `global_styles.styleContext` and `style_book.styleContext` | `workspaceContext.semanticSummary` for those two surfaces |
+| `document.template_structure` | Pattern/template/template-part/style structural fields | `workspaceContext.semanticSummary` for `pattern`, `template`, `template_part`, `global_styles`, and `style_book` |
+| `document.navigation_structure` | Navigation target, markup, and editor-context fields | `workspaceContext.semanticSummary` for `navigation` only |
+| `document.save_publication_state` | Every surface: freshness/preflight only | None |
+| `activity.recent_outcomes` | None | `workspaceContext.recentOutcomeSummary` for every requested surface |
+| `guidance.docs_grounding` | None | The matching per-surface entry becomes `workspaceContext.docsGrounding` for each declared consumer |
+
+No generic path/value bag reaches an Ability. The manifest stores the table as closed per-path surface allowlists plus a named destination. `SurfaceInputAdapter` rejects a projection if a requested included value has no destination, and tests spy on every Ability to prove the projected field is read by its native adapter, prompt/context builder, permission preflight, or freshness check.
+
+`post_blocks` is deliberately narrower. Its current Ability uses a fresh server-collected saved post context and produces its own resolved/review signatures. The shared collector therefore does not route live client block trees, constraints, pattern catalogs, or theme tokens to that surface. Before invocation, `document.save_publication_state` MUST show `isDirty: false`, `isSaving: false`, `isAutosaving: false`, and `isSaveable: true`; otherwise the surface is `unavailable` with reason `unsaved_editor_content` and the Ability is not executed. This prevents a shared signature over unsaved client structure from being presented as the saved structure consumed by `recommend-post-blocks`. `docs_grounding` is mandatory to preserve its existing guidance; optional `recent_outcomes` is permitted because the revised Ability consumes that bounded projection. The Ability's existing server context and surface-specific signatures remain authoritative for its document structure.
 
 ### 10.4 Receipt construction
 
@@ -484,6 +696,37 @@ The manifest maps groups to exact seam paths. Adding a seam path or changing a v
 5. `included` when the normalized bounded value was supplied directly
 
 The builder rejects duplicate path observations, source/path mismatches, invalid category metadata, and any final receipt that is not an exact partition. It sorts receipt entries by manifest seam order and sorts each entry's `consumerSurfaceIds` by canonical surface order.
+
+Final receipt metadata is category-exact. `summarized` requires the manifest-fixed `strategy`; `truncated` requires numeric `limit` and `sourceItemCount` and forbids `strategy`; `omitted` and `unavailable` require `reasonCode`; `included` forbids all four generic category-only fields (`strategy`, `limit`, `sourceItemCount`, and `reasonCode`). The server derives `limit`, never the caller. It is a positive safe integer whose unit is fixed by the seam definition. The path-specific docs metadata below does not relax those generic top-level rules.
+
+`guidance.docs_grounding` retains one receipt entry for the seam while exposing its multiplexed per-surface result. That entry always has a closed `surfaceDispositions` array with exactly one member for every surface in its `consumerSurfaceIds`, in the same canonical order:
+
+```text
+DocsSurfaceDisposition = {
+  surfaceId: SurfaceId,
+  disposition: "included" | "truncated" | "unavailable",
+  reasonCode: DocsReasonCode | null,
+  sourceItemCount: integer >= 0,
+  limit?: 8
+}
+```
+
+An `included` member has `sourceItemCount` in 1–8, null `reasonCode`, and no `limit`. A `truncated` member has `sourceItemCount` greater than 8, null `reasonCode`, and `limit: 8`. An `unavailable` member has `sourceItemCount: 0`, a non-null `DocsReasonCode`, and no `limit`. When a docs context value exists, these dispositions and counts exactly equal its `bySurface` metadata.
+
+The single path-level category is deterministic. It is `unavailable` with top-level `reasonCode: docs_grounding_unavailable` only when every member is unavailable; in that case the context value is absent. It is `truncated` when at least one member is truncated; the top level has `limit: 8` and `sourceItemCount` equal to the safe-integer sum of every member's pre-truncation usable count. Otherwise it is `included` because at least one member is included, even when other members are unavailable. `summarized` and `omitted` are not permitted for this seam in protocol 1.0. Thus a mixed outcome changes neither the exact one-entry partition nor an unavailable surface's null Ability projection.
+
+The numeric limits and their units are:
+
+| Truncatable seam paths | `limit` unit |
+|---|---|
+| `document.block_selection`, `document.block_constraints`, `editor.block_registry`, `editor.visible_patterns`, `server.pattern_catalog`, `activity.recent_outcomes` | Items; respectively 20, 256, 256, 100, 100, and 20 |
+| `guidance.docs_grounding` | Items per surface; 8 |
+| `document.block_tree`, `document.template_structure`, `document.navigation_structure` | Nodes; respectively 200, 200, and 100 |
+| `theme.tokens`, `theme.server_tokens`, `theme.style_summary` | Token leaves; 500 |
+
+No other seam permits `truncated` in protocol 1.0. Oversized identity/save-state values are invalid, `document.edited_content` follows its explicit reject boundary, and `document.summary` uses its declared summary strategy. Shared fixtures prove the numeric `limit` and manifest unit for every truncatable seam.
+
+Only the primary top-level collection/node/leaf count named in that table can produce `truncated`. If a nested record field must be reduced—such as one block type's support lists, one pattern's taxonomy lists, one block's serialized form, or one token's string value—the complete seam is `summarized` with its manifest-fixed strategy instead. This keeps one numeric `limit` unambiguous.
 
 Receipt provenance is public. Context values are not copied into the receipt.
 
@@ -515,6 +758,8 @@ The server captures the signature object's authoritative `capturedAt` while buil
 
 `binding` is never exported. Timestamps, random IDs, `actorSessionId`, `idempotencyKey`, transient editor-shell state, and `never_expose` values are excluded.
 
+For protocol 1.0, `siteScopeId` is the canonical base-10 string form of the current blog ID captured once from `RecommendationRunStorageContext`. It is never derived from a request field, URL, host header, mutable ambient `$wpdb` prefix, or network ID.
+
 The signature is computed after server normalization and before any Ability invocation. The public object contains only:
 
 ```json
@@ -544,13 +789,18 @@ It MUST NOT store an unrestricted copy of the combined Gutenberg/server context 
 
 These are hard protocol 1.0 implementation limits. The shared manifest owns the values.
 
+String lengths below are Unicode code points after normalization; byte limits are UTF-8 byte counts over canonical JSON or the named string. ASCII regexes are applied to the complete normalized string. Enum/const-valued strings are bounded by their literal schema and are not repeated in the tables. Any non-enum protocol string that is not covered by a row below is invalid; implementations may not invent an implicit fallback limit.
+
 | Value | Limit | Overflow behavior |
 |---|---:|---|
 | Internal run-create JSON request | 1 MiB UTF-8 | Reject before reservation |
 | Complete client seam values | 768 KiB UTF-8 canonical JSON | Summarize/truncate by seam policy or reject malformed request |
-| One client seam value | 256 KiB | Use declared summary/truncation; otherwise mark unavailable |
-| Receipt entries | 128 | Reject configuration as unsupported |
-| Bounded block/template tree | 200 nodes, depth 8 | `summarized` or `truncated` |
+| `document.edited_content` seam value | 576 KiB canonical JSON, including wrapper/escaping | Reject capture if the 256 KiB raw content cannot fit |
+| Any other one client seam value | 256 KiB canonical JSON | Use declared summary/truncation; otherwise mark unavailable |
+| One server seam value | 2 MiB canonical JSON | Mark unavailable or fail the affected surface; never truncate outside declared policy |
+| Complete normalized context envelope | 4 MiB canonical JSON | Fail before any Ability invocation; retain only the fenced building reservation |
+| Receipt entries | 18 | Internal invariant failure if the closed partition differs |
+| Bounded non-navigation block/template tree | 200 nodes, depth 8 | `summarized` or `truncated` |
 | Selected/focused client IDs | 20 | Configuration validation error |
 | Pattern/catalog identities | 100 | `truncated` |
 | Navigation items | 100 | `truncated` |
@@ -564,6 +814,107 @@ These are hard protocol 1.0 implementation limits. The shared manifest owns the 
 | Unit title | 160 characters | Truncate with warning |
 | Unit summary | 1,000 characters | Truncate with warning |
 | Public error/warning message | 240 characters | Truncate without provider payload |
+
+Protocol identifier and request-string schemas are fixed:
+
+| Field/path family | Length | Pattern/format |
+|---|---:|---|
+| `workspaceId`, `runId`, `editorInstanceId`, `actorSessionId` | 36 exactly | Both JSON Schema `uuid` format and canonical lowercase UUIDv4 pattern `^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$` |
+| `idempotencyKey` | 16–128 | `^[A-Za-z0-9][A-Za-z0-9._~:-]{15,127}$` |
+| `resultRef` | 35 exactly | `^rr_[0-9a-f]{32}$` |
+| `unitId` | 35 exactly | `^ru_[0-9a-f]{32}$` |
+| `editorScope.key` | 1–191 | Must be reconstructed exactly from the kind-specific grammar in section 7.1; no generic fallback regex |
+| Safe decimal persistent entity/navigation ID | 1–16 | `^[1-9][0-9]{0,15}$` and numeric value at most `9007199254740991` |
+| Template entity reference | 1–179 | `^[A-Za-z0-9._~-]+//[A-Za-z0-9._~-]+$`; prefix plus ref must fit the 191-character scope key |
+| Template-part entity reference | 1–174 | Same reference pattern; prefix plus ref must fit the 191-character scope key |
+| Registered post-type slug | 1–20 | `^[a-z0-9_][a-z0-9_-]{0,19}$` |
+| Entity-kind/status/category/source slug | 1–64 | `^[a-z0-9][a-z0-9_-]{0,63}$` |
+| Gutenberg block name | 3–128 | `^[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*$` |
+| Pattern name | 1–191 | `^(?:[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*|core/block/[1-9][0-9]{0,15})$` |
+| Gutenberg client/root/parent ID | 1–128 | `^[^\u0000-\u001F\u007F-\u009F]+$`; no path interpretation |
+| `activityId`, native stable key, or docs source ID | 1–191 | Same printable-scalar pattern; invalid UTF-8 and lone surrogates are rejected |
+| Error/reason/warning code | 1–64 | Strict wire snake case: `^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$` |
+| SHA-256/fingerprint/signature/digest | 64 exactly | `^[0-9a-f]{64}$` |
+| Caller RFC 3339 timestamp | 20–29 | Exact regex from the timestamp rule below plus semantic calendar validation |
+| Server/public RFC 3339 timestamp | 20 exactly | UTC seconds: `^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$` plus semantic calendar validation |
+| Private `siteScopeId`/`userId` decimal string | 1–20 | `^[1-9][0-9]{0,19}$`, value at most unsigned BIGINT; these are not JavaScript integer fields |
+
+Configuration and context strings are fixed:
+
+| Field/path family | Maximum |
+|---|---:|
+| `intent.goal` | 1,000 code points; minimum 1 after trim |
+| `intent.audience` | 300 code points |
+| `intent.tone` | 200 code points |
+| One `intent.constraints[]` entry | 240 code points; minimum 1 after trim |
+| Document/pattern/block/unit title or label | 300 code points for document titles; 160 for all catalog/block/unit labels |
+| Document excerpt or public/native bounded summary | 1,000 code points |
+| Document slug | 0–200 code points; `^(?:[A-Za-z0-9._~-]|%[0-9a-f]{2})*$` after lowercase percent-hex normalization |
+| `document.edited_content.content` | 256 KiB UTF-8 |
+| One `BlockRecord.serialized` | 32 KiB UTF-8 |
+| Pattern/template/navigation markup is not a public seam string | Not permitted outside the explicitly bounded edited-content or block-record fields |
+| Token path or enabled-support path | 256 code points; dot-separated `^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$` |
+| String-valued token | 1,000 code points |
+| Docs `sourceId` | 128 code points; printable non-control Unicode |
+| Docs title | 200 code points |
+| Docs URL | 2,048 code points; absolute HTTPS URI passing the server trusted-source policy |
+| Docs summary | 360 code points |
+| `workspaceContext.semanticSummary` | 16 KiB UTF-8 |
+| `workspaceContext.recentOutcomeSummary` | 4 KiB UTF-8 |
+
+Caller timestamps use exactly `^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\.[0-9]{1,3})?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$`. Both runtimes additionally reject impossible calendar dates and leap seconds. Accepted offsets and fractional seconds are normalized to UTC whole seconds wherever the server owns output; parser-specific rollover such as February 30 is forbidden.
+
+Collection schemas are fixed:
+
+| Collection | Maximum items |
+|---|---:|
+| `surfaceIds` | 9, minimum 1, unique before canonical sorting |
+| `intent.constraints` | 12 |
+| `focus.clientIds` | `selected_block`: 0–1; `selection`: 0–20; `document`/`site_editor_entity`: exactly 0; unique and selection-ordered |
+| `additionalContextGroups` | 14, unique before manifest-order sorting |
+| Client capture seams / final receipt entries | 13 / 18 |
+| Block/template tree | 200 nodes, maximum depth 8 |
+| Navigation structure | 100 nodes, maximum depth 8 |
+| Block-selection `clientIds` / `blocks` | 20 each; same count/order, IDs unique |
+| `editor.block_registry.blockTypes` | 256, unique `name` |
+| One block type's `parent`, `ancestor`, `allowedBlocks`, or `enabledSupports` list | 64 each, unique |
+| `document.block_constraints.allowedBlockTypes` | 256, unique |
+| Client/server pattern identities | 100, unique `name` |
+| One pattern's categories, block types, or template types | 20 each, unique |
+| Theme/style token records | 500, unique normalized `(path, origin)` |
+| Recent outcome records | 20 |
+| Docs grounding surface entries / items per entry | 9 / 8 |
+| Docs receipt `surfaceDispositions` | 1–9, exactly the docs consumer surfaces once in canonical order |
+| `RecommendationRun.results` | 1–9, exactly the requested surfaces once in canonical order |
+| One `SurfaceResult.contextPaths` | 18, unique in seam order |
+| One receipt category / complete receipt partition | 18 / exactly the requested paths once, at most 18 |
+| Receipt `consumerSurfaceIds` | 1–9, unique in canonical order |
+| Signature `receiptDisposition` | 18, unique path in seam order |
+| Units per surface / run | 25 / 100 |
+| Public warnings / dependencies on one unit | 20 / 25; dependencies unique, known, and not self-referential |
+
+Every protocol integer, including revisions, request tokens, entity IDs, counts, indices, and source-item counts, is in `0..9007199254740991`; fields representing a persistent entity require at least `1`. Tree depth is additionally capped at `8`. A numeric token is finite and its absolute value is at most `1000000000000000`; `NaN` and infinities are rejected, while negative zero is valid input and canonicalizes to `0` under RFC 8785. Every tree `totalCount` is at least its returned record count and remains within the safe-integer range.
+
+Shared records and derived projections have these additional constraints:
+
+| Record/field | Contract |
+|---|---|
+| `BlockRecord` | `clientId`/nullable parent use the client-ID grammar; `name` uses BlockName; `index` is safe non-negative; `depth` is `0..8`; `serialized` is 0–32 KiB UTF-8 |
+| `BlockTypeRecord` | `name` is BlockName; `title` is 1–160; `category` is a slug; all four string lists follow the collection rules above |
+| `PatternIdentity` | `name` uses PatternName; `title` is 1–160; `source` is a slug; lists follow the collection rules above |
+| `TokenRecord` | `path` is 1–256 and matches the token-path regex; string value is 0–1,000, numeric value follows the finite-number bound |
+| Derived Ability `prompt` | At most 5,000 code points after intent and guidance composition; adapter failure, never truncation of normalized intent |
+| `nativeStableKey` | 1–191 printable scalar and only from an adapter-declared stable property; otherwise use the canonical ordinal string |
+| Unit `title` / `summary` | Title 1–160; summary 0–1,000 |
+| Unit `executionClass` | Exactly `advisory` or `stage_only`; `executionBinding` is forbidden |
+| Unit `operationCount` | Content/navigation/pattern `0`; block `0..1`; template `0..4`; template-part/post-blocks `0..3`; Global Styles/Style Book `0..25` |
+| Unit warning | Closed `{ code, severity, message? }`; severity is `rejected`, `downgraded`, or `no_op`; message at most 240 |
+| Surface error | Closed `{ code, category, message, retryDisposition, reasonCode }`; `reasonCode` is a wire Code or null and message is at most 240 |
+| Surface readiness | `ready` requires `error: null`; `failed`/`unavailable` require a surface error |
+| Surface freshness signatures | Both declared fields are required `string|null`; any non-null value is exactly lowercase SHA-256 |
+| `resultRef` | Required and deterministic for every result, including `failed` and `unavailable` |
+
+The registered Ability schemas remain compatibility schemas and may be intentionally open or wider. They do not validate the protocol projection. `SurfaceInputAdapter`, `WorkspaceContextGuidance`, and `SurfaceResultAdapter` independently enforce every closed limit above before invocation, hashing, or persistence. For selected-block input, the adapter also honors the current narrower projection limits of 3 siblings, 6 structural items, and depth 2; a larger shared tree may feed only the bounded semantic summary.
 
 Limits are applied after normalization and before hashing or persistence. Detail level changes summary density inside these ceilings; it never raises them.
 
@@ -581,17 +932,17 @@ Surface adaptation maintains cumulative public/private byte and unit counts in c
 | `content` | `flavor-agent/recommend-content` | `content.mode` | `advisory` | `advisory` |
 | `pattern` | `flavor-agent/recommend-patterns` | Pattern ranking context | `ranked_choice` | `stage_only` until Spec 3 compiler proves a governed binding |
 | `navigation` | `flavor-agent/recommend-navigation` | Selected navigation scope | `advisory` | `advisory` |
-| `template` | `flavor-agent/recommend-template` | Exact template scope | `single_review` | `governed_apply` only when the current native result already contains all required exact target/freshness fields; otherwise `advisory` |
-| `template_part` | `flavor-agent/recommend-template-part` | Exact template-part scope | `single_multi_operation` | Same fail-closed governed rule |
-| `post_blocks` | `flavor-agent/recommend-post-blocks` | Exact post/page scope | `single_multi_operation` | Same fail-closed governed rule |
-| `global_styles` | `flavor-agent/recommend-style` | Closed Global Styles scope | `single_multi_operation` | Same fail-closed governed rule |
-| `style_book` | `flavor-agent/recommend-style` | Closed Style Book block scope | `single_multi_operation` | Same fail-closed governed rule |
+| `template` | `flavor-agent/recommend-template` | Exact template scope | `single_review` | Mutation-shaped units are `stage_only`; explanation-only units are `advisory` |
+| `template_part` | `flavor-agent/recommend-template-part` | Exact template-part scope | `single_multi_operation` | Mutation-shaped units are `stage_only`; explanation-only units are `advisory` |
+| `post_blocks` | `flavor-agent/recommend-post-blocks` | Exact post/page scope | `single_multi_operation` | Mutation-shaped units are `stage_only`; explanation-only units are `advisory` |
+| `global_styles` | `flavor-agent/recommend-style` | Closed Global Styles scope | `single_multi_operation` | Mutation-shaped units are `stage_only`; explanation-only units are `advisory` |
+| `style_book` | `flavor-agent/recommend-style` | Closed Style Book block scope | `single_multi_operation` | Mutation-shaped units are `stage_only`; explanation-only units are `advisory` |
 
 If both style surfaces are requested, the registry invokes `flavor-agent/recommend-style` twice with two independently validated scopes and emits two result entries.
 
 `post_blocks` is both a genuine generating surface and a future executor target. Requesting it invokes its Ability and produces its own result. A future governed pattern binding does not create an unrequested extra result.
 
-The initial governed lane identifiers are fixed now so an immutable Spec 1 run does not depend on display text or a later guess:
+The future governed lane identifiers are reserved now so Spec 3 does not depend on display text or a later guess:
 
 | Executor surface | Executor Ability | Operation schema version |
 |---|---|---|
@@ -601,7 +952,7 @@ The initial governed lane identifiers are fixed now so an immutable Spec 1 run d
 | `global_styles` | `flavor-agent/request-style-apply` | `style-v1` |
 | `style_book` | `flavor-agent/request-style-apply` | `style-v1` |
 
-Spec 3 defines the exact private binding envelope and operation digest for those version names. It does not rename them.
+Spec 1 never emits those identifiers in a public unit and never emits `governed_apply`. Spec 3 defines the exact private binding envelope and operation digest for those version names. It does not rename them.
 
 ### 12.2 Input adapters
 
@@ -614,7 +965,9 @@ Each registry entry owns a typed `SurfaceInputAdapter`. It receives only:
 
 It returns the existing Ability's registered input shape. It MUST NOT accept an Ability ID or free-form operation payload from the REST caller.
 
-The adapter builds `document`, scope, target, prompt, `clientRequest`, and surface fields from allowlisted context. `clientRequest.sessionId` uses the bounded `actorSessionId`, `abortId` uses the run ID, and `scopeKey` uses the validated editor scope. Diagnostic metadata is not authority.
+The adapter builds `document`, scope, target, prompt, `clientRequest`, `workspaceContext`, and surface fields from allowlisted context. It follows the signed-context consumption registry in section 10.3.1 and rejects an included value that has no declared destination. `clientRequest.sessionId` uses the bounded `actorSessionId`, `abortId` uses the run ID, and `scopeKey` uses the validated editor scope. Diagnostic metadata is not authority.
+
+The six preview Ability schemas derived from recommendation schemas explicitly remove `workspaceContext`; previews are not run consumers and must not advertise an input they ignore. Existing recommendation diagnostic activity also strips `semanticSummary`, `recentOutcomeSummary`, and docs items before persistence. It may retain only the workspace-context schema version plus query/content fingerprints and counts. The complete bounded projection remains only in the short-lived private run payload.
 
 `clientRequest.requestToken` uses the non-negative `baseWorkspaceRevision`. Ability and surface identity remain part of the existing server transient key, so two style invocations do not overwrite each other's result classification. A later workspace revision naturally produces a newer token.
 
@@ -623,14 +976,16 @@ The adapter builds `document`, scope, target, prompt, `clientRequest`, and surfa
 For each requested surface in canonical order, the service:
 
 1. validates target identity for that surface
-2. resolves the exact fixed Ability with `wp_get_ability()`
-3. classifies a missing Ability or failed prerequisite/permission preflight as `unavailable`
-4. calls `WP_Ability::execute()` with the adapted input
-5. classifies an attempted execution error as `failed`
-6. validates and bounds the successful output through the registered Ability output schema
-7. passes the result to the fixed `SurfaceResultAdapter`
+2. enforces the surface's freshness prerequisites, including the clean-editor predicate for `post_blocks`
+3. resolves the exact fixed Ability with `wp_get_ability()`
+4. validates the adapted input against the Ability's registered input schema
+5. classifies a missing Ability or failed prerequisite/permission preflight as `unavailable`
+6. calls `WP_Ability::execute()` with the adapted input
+7. classifies an attempted execution error as `failed`
+8. independently validates and bounds the successful output through the registered Ability output schema
+9. passes the result to the fixed `SurfaceResultAdapter`
 
-The workflow cannot bypass, weaken, or cache an Ability permission decision.
+The workflow cannot bypass, weaken, or cache an Ability permission decision. The explicit input and output validation around `execute()` is defense in depth for WordPress filters that can short-circuit Ability execution; it does not replace the registered `WP_Ability` path or make a direct callback valid.
 
 Recommendation execution is logically read-only with respect to the target document. Existing request-diagnostic activity logging remains governed by `RecommendationAbilityExecution`; Spec 1 does not relabel that existing diagnostic write as target mutation or suppress it to make a hint look read-only.
 
@@ -683,7 +1038,7 @@ The terminal public run contains exactly one result for every requested surface 
 - All results `ready` produces `ready`.
 - No result `ready` produces `failed`.
 
-Spec 1 may emit a `governed_apply` unit only when the existing surface result already proves a complete executor binding. It does not compute a plan or make that unit applicable. Pattern remains `stage_only` until Spec 3 runs its compiler before terminal finalization.
+Spec 1 emits only `advisory` and `stage_only` units. It does not possess the exact executor binding predicates or operation digest needed to classify any unit as `governed_apply`. Spec 3 may promote an eligible unit only before terminal finalization; a completed Spec 1 run is never retroactively modified.
 
 ### 12.6 Unit extraction
 
@@ -703,7 +1058,7 @@ Surface adapters extract public units deterministically:
 
 The adapter maps a safe native label to `title`, a safe description/reason to `summary`, known validation reasons to bounded warnings, and initializes `dependencies` to an empty list unless a registered adapter can prove a dependency from schema-valid native data. Surface-level explanation and diagnostics remain private unless the public protocol explicitly defines a bounded field for them.
 
-A public `governed_apply` unit includes only the executor surface, executor Ability, and operation schema version from the fixed table above. Native operations, targets, signatures, pattern content, and request fields remain in its private `SurfaceBinding`.
+Spec 1 public units contain no `executionBinding`. Native operations, targets, signatures, pattern content, and request fields remain in the private `SurfaceBinding` so Spec 3 can validate and compile them before a future run finalizes.
 
 ## 13. Server run model
 
@@ -901,12 +1256,13 @@ Reservation behavior is deterministic:
 |---|---|---|
 | None | Any valid request | Insert `building` row and acquire lease |
 | Terminal active | Same binding and editor scope | Return existing run with `deduplicated: true` without recapturing context |
-| Terminal expired/tombstone | Same binding and editor scope | Return `run_expired`; do not create another run |
+| Terminal or tombstone, `expiresAt <= now < tombstoneUntil` | Same binding and editor scope | Return `run_expired`; do not create another run |
+| Terminal or tombstone, `now >= tombstoneUntil` | Same binding and editor scope | Return `run_not_found`; do not create another run even if physical prune lags |
 | Building with active lease | Same binding and editor scope | Return `generation_in_progress` and bounded retry metadata |
 | Building with expired lease | Same binding and editor scope | Compare-and-swap a new fencing lease and regenerate under the same `runId` |
 | Any row | Different binding or editor scope | Return `idempotency_conflict` with zero Ability execution |
 
-A terminal/expired dedupe response still passes the GET route's current owner/scope authorization policy before returning any payload or tombstone metadata. Idempotency never bypasses revoked permissions.
+An active terminal dedupe response calls the same `authorize_run_read()` path as GET before returning: captured current-site storage context, exact owner match, current editor-scope authorization, public/private digest verification, and per-ready-result reauthorization from each retained input projection. It may not use a lighter reservation-time check. A terminal/physical-tombstone dedupe uses the same owner/scope authorization and availability projection as GET: the expiry window returns bounded `run_expired` metadata, and the tombstone deadline or later returns `run_not_found` even when physical cleanup lags. Stripped payloads have no ready-result projection to reauthorize. Idempotency never bypasses revoked permissions or corruption checks.
 
 A caller intending a fresh generation uses a fresh idempotency key.
 
@@ -986,20 +1342,21 @@ A request lost after terminal commit is recovered by the same idempotency key. A
 
 Request-level processing has this fixed order:
 
-1. validate the closed REST shape, protocol version, UUIDs, limits, and editor-scope syntax
+1. validate the raw and decoded closed REST shape, protocol version, UUIDs, limits, and editor-scope syntax
 2. resolve authenticated site/user state
 3. normalize configuration and verify the workspace-to-editor-scope request binding
-4. compute idempotency scope and generation binding
-5. return an existing terminal/expired result or conflict before new context work
-6. insert or acquire the fenced building lease
-7. build the final context envelope, receipt, and signature under that lease
-8. for each surface, validate target identity, then permission/prerequisites, then execute and adapt
-9. validate exact result completeness, payload caps, and public/private digests
-10. atomically finalize the terminal row under the lease token
-11. return the immutable public run
-12. let the page perform the independent workspace CAS installation
+4. completely validate the caller-owned context capture: collector/scope binding, unique client paths, declared source/path pairs, path-discriminated values, dispositions, timestamps, per-seam/cumulative caps, and requested/extra-path policy
+5. compute idempotency scope and generation binding
+6. return an existing terminal/expired result through `authorize_run_read()`, or return conflict, before new server context work
+7. insert or acquire the fenced building lease
+8. collect server-owned seams and build the final context envelope, receipt, and signature under that lease
+9. for each surface, validate target identity and freshness, then permission/prerequisites, execute, and adapt
+10. validate exact result completeness, payload caps, and public/private digests
+11. atomically finalize the terminal row under the lease token
+12. return the immutable public run
+13. let the page perform the independent workspace CAS installation
 
-Errors before step 6 create no run row and invoke no Ability. A surface error at step 8 becomes that surface's deterministic failed/unavailable result and does not erase other requested entries. An error after an Ability invocation may coexist with the existing bounded request-diagnostic activity write, but it cannot claim a terminal run unless step 10 commits. A failed page CAS at step 12 never rewrites or deletes the server run.
+Errors through step 4, including every `context_capture_invalid`, create no run row and invoke no Ability. Once step 7 reserves a row, server-source absence is represented by a receipt disposition and the manifest's exact consumer policy: a hard missing path yields deterministic affected-surface `unavailable` results, while a soft path—including docs grounding—uses its declared null/omission projection and continues. It is never relabeled as a caller capture error. A non-recoverable server envelope invariant/foundation failure may leave only the fenced `building` reservation for takeover/prune and cannot claim a terminal run. A surface error at step 9 becomes that surface's deterministic failed/unavailable result and does not erase other requested entries. An error after an Ability invocation may coexist with the existing bounded request-diagnostic activity write, but it cannot claim a terminal run unless step 11 commits. A failed page CAS at step 13 never rewrites or deletes the server run.
 
 ## 16. Internal REST contract
 
@@ -1066,9 +1423,10 @@ Internal HTTP status mapping is stable:
 | Closed-schema/configuration error | `400` |
 | Unauthenticated/authentication failure | Core `401`/`403` behavior |
 | Authorization denied | `403` |
-| Run not found | `404` |
+| Run not found, including `now >= tombstoneUntil` | `404` |
 | Idempotency/finalization conflict or generation in progress | `409` |
-| Run expired/tombstone | `410` |
+| Expiry window, `expiresAt <= now < tombstoneUntil` | `410` |
+| Stored run payload/digest mismatch | `500` |
 | Storage/provider foundation unavailable before a terminal run | `503` |
 
 ### 16.4 Read request
@@ -1089,16 +1447,35 @@ Error codes remain an open protocol set, but this foundation fixes generic handl
 
 | Code | Category | Retry disposition | Effects |
 |---|---|---|---|
+| `recommendation_request_invalid` | `validation` | `do_not_retry` | Zero reservation, Ability, run, or workspace writes for the unchanged request |
+| `context_configuration_invalid` | `validation` | `refresh_context` | Zero capture, Ability, run, or workspace writes |
 | `context_not_configured` | `validation` | `refresh_context` | Zero capture, Ability, run, or workspace writes |
-| `context_capture_invalid` | `validation` | `refresh_context` | Zero Ability or run writes |
+| `context_capture_invalid` | `validation` | `refresh_context` | Complete caller capture validation occurs before reservation; zero Ability or run writes |
 | `generation_in_progress` | `busy` | `wait` | Existing building reservation only |
 | `result_too_large` | `validation` | `regenerate` | One surface failure inside a terminal partial/failed run |
 | `run_payload_mismatch` | `recovery` | `manual_recovery` | No payload returned and no workspace install |
+| `recommendation_protocol_unavailable` | `unavailable` | `retry_same` | No capture, Ability execution, reservation, or claimed terminal run |
 | `run_storage_unavailable` | `unavailable` | `retry_same` | No claimed terminal run |
 | `run_finalization_conflict` | `conflict` | `retry_same` | Losing lease cannot commit or install |
+| `workspace_revision_exhausted` | `conflict` | `refresh_workspace` | Zero requested semantic mutation; page lifecycle must create a new workspace |
 | `workspace_changed_during_generation` | `conflict` | `refresh_workspace` | Retained run allowed; zero workspace semantic mutation |
 
 The canonical `run_expired`, `run_not_found`, `surface_unavailable`, `authorization_failed`, and `idempotency_conflict` codes retain their protocol meanings. Clients branch on code/category/retry disposition, never localized messages.
+
+Error `details` is a closed per-code union. A validation path is 1–512 characters and matches `^\$(?:\.[A-Za-z][A-Za-z0-9_]*|\[[0-9]+\])*$`. The foundation schemas are:
+
+| Code family | Exact `details` shape |
+|---|---|
+| `recommendation_request_invalid`, `context_configuration_invalid`, `context_capture_invalid` | `{ path: ValidationPath, reasonCode: Code }` |
+| `generation_in_progress` | `{ runId: RunId, retryAfterSeconds: integer 1..600 }` |
+| `run_expired` | `{ runId: RunId, expiresAt: ServerTimestamp, tombstoneUntil: ServerTimestamp }` |
+| `workspace_changed_during_generation` | `{ currentWorkspaceRevision: SafeInteger, runId: RunId | null }` |
+| `workspace_revision_exhausted` | `{ currentWorkspaceRevision: 9007199254740991 }` |
+| `result_too_large` | `{ surfaceId: SurfaceId }` |
+| `run_payload_mismatch`, `run_finalization_conflict`, `run_not_found`, `idempotency_conflict` | `{ runId: RunId }` |
+| `context_not_configured`, `recommendation_protocol_unavailable`, `run_storage_unavailable`, `authorization_failed` | `{}` |
+
+No code may add provider data, SQL, capability names, stack traces, arbitrary nested metadata, or an unregistered detail member.
 
 ## 17. Expiry, tombstones, and cleanup
 
@@ -1165,7 +1542,8 @@ Add checked-in fixtures consumed by Jest and PHPUnit for:
 - every invalid closed-object property and enum
 - UTF-8/string/array limits
 - canonical JSON and SHA-256 values
-- receipt exact partition and category metadata
+- receipt exact partition, category metadata, server-derived truncation limits/units, and one-path mixed docs surface aggregation
+- expanded hard/soft consumer policy and trusted-docs normalization/currentness cases
 - context-signature inclusion/exclusion rules
 - eight-Ability-to-nine-surface mapping
 - deterministic `resultRef` and `unitId`
@@ -1207,8 +1585,15 @@ Focused PHPUnit coverage includes:
 
 - manifest load/failure behavior
 - configuration and context canonicalization fixtures
+- JSON object/array identity, including nested `{}` versus `[]`
+- schema-keyword coverage for every live recommendation Ability input/output schema
 - exact receipt partition with included/summarized/truncated/omitted/unavailable
+- exact truncated-receipt `limit`, unit lookup, source count, and forbidden metadata
+- mixed docs receipt aggregation with one included, one unavailable, and two differently truncated surface results
 - context signature determinism and private binding inputs
+- exact seam-to-surface input consumption and legacy docs-collector fallback
+- trusted docs hostile-URL/currentness rejection and soft failure for every docs consumer
+- `post_blocks` unavailable while dirty/saving/autosaving, with zero Ability calls
 - target-identity-before-permission ordering
 - exact registered Ability resolution, permission denial, execution, and output validation
 - style invoked separately for Global Styles and Style Book
@@ -1223,7 +1608,7 @@ Focused PHPUnit coverage includes:
 - one-time terminal finalization and payload immutability
 - payload digest corruption failure
 - strict expiry boundary before/at/after `expiresAt`
-- tombstone boundary before/at/after `tombstoneUntil`
+- terminal and physical-tombstone dedupe before/at/after `tombstoneUntil`
 - read projection with zero writes
 - bounded idempotent prune and abandoned-reservation removal
 - deactivation/uninstall lifecycle registration
@@ -1248,6 +1633,10 @@ REST tests assert:
 - one-to-nine surface validation
 - same key/same generation binding returns the same run even after live editor context changes
 - same key/different configuration, expected revision, or editor scope returns `idempotency_conflict`
+- malformed or oversize complete client capture fails before any reservation write
+- active terminal dedupe uses the exact GET owner/scope/digest/per-ready reauthorization path
+- GET and POST dedupe map stored payload/digest corruption to the same bounded HTTP 500 response
+- terminal or physical-tombstone rows project `run_not_found` at/after `tombstoneUntil`, independent of prune lag
 - an expired building lease may adopt a fresh capture under a new fencing token, while an active or terminal first writer still wins
 - lost-response retry reads the committed run
 - GET never prunes or lazily expires
@@ -1258,7 +1647,7 @@ Integration tests stub registered `WP_Ability` objects rather than recommender i
 
 ### 19.5 Browser evidence
 
-The matching Playground and WordPress 7.0 harnesses must demonstrate:
+The matching Playground and Docker Site Editor Playwright harnesses must demonstrate the following at the versions pinned by their checked-in configuration. Both are currently pinned to WordPress 7.1; the `wp70` script/configuration name is historical and does not prove a WordPress 7.0 run.
 
 - two tabs on the same post receive independent workspace IDs/revisions
 - Site Editor navigation creates a new workspace
@@ -1277,10 +1666,12 @@ This work touches shared context, every recommendation surface, persistence, RES
 - JavaScript and PHP lint for touched source
 - `node scripts/verify.js --skip-e2e`
 - `npm run check:docs`
-- matching Playground and WordPress 7.0 Playwright evidence
+- matching Playground and Docker Site Editor Playwright evidence at their checked-in pinned versions, with the actual WordPress versions recorded
 - an explicit blocker or waiver for any unavailable browser harness
 
 Green focused unit tests alone are not completion.
+
+Evidence is tied to an immutable implementation candidate, not to a dirty working tree. After code, tests, stable documentation, and independent review fixes are committed, record that commit as `CANDIDATE_SHA`. Run every release gate from a fresh clean checkout of exactly `CANDIDATE_SHA`, record the archive SHA-256 and listing, and make no source, test, or stable-documentation changes during that run. Then create one evidence-only commit that updates only the validation ledger with the candidate SHA, commands, timestamps, versions, counts, archive digest, and classified blockers or waivers. The final handoff reports both `CANDIDATE_SHA` and `EVIDENCE_SHA`; the evidence commit is not misrepresented as the tested implementation SHA.
 
 ## 20. Acceptance criteria
 
@@ -1293,7 +1684,7 @@ Spec 1 is implemented only when all of the following are true:
 5. One normalized request can invoke any valid subset of the nine surfaces through the exact eight registered Abilities.
 6. Both style surfaces are independent invocations and `post_blocks` remains requestable.
 7. Every terminal run has one result per requested surface and a correct ready/partial/failed status.
-8. Every requested seam appears in exactly one final receipt category.
+8. Every requested seam appears in exactly one final receipt category with category-valid metadata, every included value has a declared consumer, and hard/soft absence follows the manifest without letting docs failure block a recommendation.
 9. The server, not the client, computes the context signature and authenticated bindings.
 10. Public and private run payloads are separated, immutable after finalization, bounded, and digest-checked.
 11. Idempotency, lease takeover, and fencing prevent two different terminal payloads for one run.
@@ -1302,7 +1693,7 @@ Spec 1 is implemented only when all of the following are true:
 14. Activation, upgrade, deactivation, prune, multisite storage context, and uninstall behavior have automated coverage.
 15. Existing recommendation UI, activity storage, apply/approval, and undo behavior remain unchanged.
 16. No WebMCP tools are registered and no partial protocol capability is advertised.
-17. All section 19 verification evidence is recorded with any unavailable harness explicitly classified.
+17. All section 19 verification evidence is recorded against one immutable implementation candidate, with any unavailable harness explicitly classified.
 
 ## 21. Handoff contracts to later specifications
 
@@ -1408,6 +1799,10 @@ Current WordPress documentation confirms that `wp_get_ability()` returns the reg
 - Server orchestration uses the registered `WP_Ability` execution path and never trusts client preflight as authorization.
 - Eight recommendation Abilities create nine wire results because style has two closed scopes.
 - `post_blocks` is a generating surface; pattern compiler output later targets it without inventing a result.
+- `post_blocks` consumes its existing server-saved context only when the editor capture is clean; unsaved, saving, or autosaving state makes that surface unavailable.
+- Every included signed seam has a fixed native, preflight, or `workspaceContext` consumer; precollected docs suppress a second internal lookup for run-based calls.
+- Mandatory docs capture is soft for invocation: unavailable or fully filtered docs are signed/receipted as unavailable, projected as null, and never block an otherwise valid surface.
+- Spec 1 emits no `governed_apply` unit or execution binding. Spec 3 may promote eligible units only before a future run finalizes.
 - Context receipts and context signatures are distinct. The server owns both final forms.
 - Public run data and private native bindings are stored separately and expire together.
 - Run reads project expiry without persistence; cron owns storage cleanup.

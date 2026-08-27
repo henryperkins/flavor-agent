@@ -559,7 +559,7 @@ A surface that succeeds with zero suggestions is still `ready` and returns an em
   "status": "ready",
   "resultRef": "opaque-server-reference",
   "interactionMode": "single_multi_operation",
-  "contextPaths": ["document.identity", "template_part.structure"],
+  "contextPaths": ["document.identity", "document.template_structure"],
   "freshness": {
     "resolvedContextSignature": "opaque-signature",
     "reviewContextSignature": "opaque-signature"
