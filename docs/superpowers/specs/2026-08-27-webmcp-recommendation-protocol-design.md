@@ -3,7 +3,7 @@
 - **Status:** Canonical design contract; runtime implementation is not part of this document
 - **Protocol version:** `1.0`
 - **Date:** 2026-08-27
-**Scope:** Flavor Agent recommendation context, selection, review, governed apply status, and governed undo projected into an editor page through imperative WebMCP tools
+- **Scope:** Flavor Agent recommendation context, selection, review, governed apply status, and governed undo projected into an editor page through imperative WebMCP tools
 
 ## 1. Purpose
 
@@ -145,7 +145,9 @@ Every later tool input MUST include the exact `protocolVersion` selected for the
 - Lifecycle enums, `SurfaceId`, `InteractionMode`, `ExecutionClass`, required fields, and field semantics are closed. Adding, removing, or changing them requires a new major protocol version.
 - A minor version MAY add optional fields whose absence preserves existing behavior.
 - `error.code`, `reason.code`, and `warning.code` are open string sets. Minor versions MAY add codes. Clients MUST tolerate unknown codes and use `category` plus `retryDisposition` for generic behavior.
-- Clients MUST ignore unknown optional object properties and MUST NOT infer permission from them.
+- `additionalProperties: false` applies to the exact negotiated-version input schema, not to an optimistic union of minor versions. A client that supports `1.1` but negotiates `1.0` MUST serialize the exact `1.0` input and strip every `1.1`-only field. A `1.0` server MUST reject those fields rather than silently accepting them.
+- When one page bundle registers more than one supported minor version, its public input schema MUST use version-discriminated `oneOf` branches (or semantically equivalent separate registrations). Every branch remains closed with `additionalProperties: false`; validation selects only the branch named by `protocolVersion`.
+- Clients MUST ignore unknown optional **response** properties allowed by a compatible minor version and MUST NOT infer permission from them. This output-tolerance rule does not weaken closed input validation.
 - Protocol 1.0 clients MUST reject an `applyBatchId` or a lifecycle value such as `compensated` as an incompatible major-version response.
 
 ## 8. Surface and interaction contract
@@ -166,6 +168,21 @@ style_book
 
 Current internal hyphenated keys such as `template-part`, `global-styles`, and `style-book` are adapter details. The wire values are normalized to snake case.
 
+`SurfaceId` identifies a wire result/editor scope; it is not required to map one-to-one to an Ability ID. The eight current recommendation Abilities map to the nine wire surfaces as follows:
+
+| Recommendation Ability | Wire surface result |
+|---|---|
+| `flavor-agent/recommend-block` | `block` |
+| `flavor-agent/recommend-content` | `content` |
+| `flavor-agent/recommend-patterns` | `pattern` |
+| `flavor-agent/recommend-navigation` | `navigation` |
+| `flavor-agent/recommend-style` | `global_styles` or `style_book`, selected by the invocation's closed style scope |
+| `flavor-agent/recommend-template` | `template` |
+| `flavor-agent/recommend-template-part` | `template_part` |
+| `flavor-agent/recommend-post-blocks` | `post_blocks` |
+
+If one run requests both `global_styles` and `style_book`, the workflow invokes `flavor-agent/recommend-style` separately for each scope and emits one result for each requested `SurfaceId`. `post_blocks` is a genuine generating surface as well as an executor surface; it MUST remain requestable and MUST receive its own result entry when requested.
+
 ### 8.2 Interaction modes
 
 ```text
@@ -176,11 +193,11 @@ advisory
 single_multi_operation
 ```
 
-| Surface | Interaction mode | Normal execution classes | Protocol 1.0 behavior |
+| Surface | Interaction mode | Typical unit execution classes | Protocol 1.0 behavior |
 |---|---|---|---|
 | `block` | `multi_select_batch` | `stage_only`, `advisory` | Multiple bounded suggestions may be selected; the existing human editor may stage safe local changes, but WebMCP cannot execute them |
 | `content` | `advisory` | `advisory` | Generated/editorial output only |
-| `pattern` | `ranked_choice` | `stage_only` | Select one ranked pattern; insertion remains a human/native Gutenberg action |
+| `pattern` | `ranked_choice` | `stage_only`, `governed_apply` | Select one ranked pattern; native insertion remains available, and a unit is governed only when the completed run retained a valid `post_blocks` executor binding |
 | `navigation` | `advisory` | `advisory` | Guidance only |
 | `template` | `single_review` | `governed_apply`, `advisory` | Select and review one bounded recommendation |
 | `template_part` | `single_multi_operation` | `governed_apply`, `advisory` | Select one recommendation containing an ordered bounded operation list |
@@ -189,6 +206,8 @@ single_multi_operation
 | `style_book` | `single_multi_operation` | `governed_apply`, `advisory` | Select one reviewed block-style recommendation |
 
 Pattern is part of the canonical shared surface contract even though it is absent from the current `SURFACE_INTERACTION_CONTRACT` object.
+
+The execution-class column is descriptive, not a per-surface capability gate. Section 8.3 and each immutable unit's validated execution binding are authoritative.
 
 ### 8.3 Execution classes
 
@@ -201,10 +220,19 @@ governed_apply
 ```
 
 - `advisory`: may be read or acknowledged; never enters an executable target group; apply status and undo status are `not_applicable`.
-- `stage_only`: has an existing editor-local/human execution path; may be selected and reviewed; `complete_recommendation_apply_request` returns `stage_only_not_webmcp_applicable` with zero writes.
+- `stage_only`: has an existing editor-local/human execution path; may be selected and reviewed; it is excluded from executable groups with reason `stage_only_not_webmcp_applicable`.
 - `governed_apply`: may enter an apply target group and can be requested only through the relevant Ability-backed governed lane.
 
 The legacy name `editor_mutation` MUST NOT appear on the wire.
+
+For a `pattern` unit, `governed_apply` has one narrow meaning:
+
+1. `flavor-agent/recommend-patterns` ranks an allowlisted pattern for the current context.
+2. Before the run becomes immutable, the server-side pattern executor compiler resolves one exact editable post/page target and one exact server-collected insertion anchor, creates a bounded `insert_pattern` operation, validates it through the post-blocks structural grammar, resolves the post-blocks freshness/baseline evidence, and retains the result in the same format required by `flavor-agent/request-post-blocks-apply`.
+3. Only a unit with that complete retained binding is emitted as `governed_apply`. Its `sourceSurfaceId` is `pattern`; its `executorSurfaceId` is `post_blocks`; and its executor Ability is `flavor-agent/request-post-blocks-apply`.
+4. If the target or insertion anchor is absent, ambiguous, stale, locked, unsupported, or invalid, the compiler performs no fallback inference and emits the pattern unit as `stage_only`.
+
+The compiler is not a second public result surface and does not accept caller-supplied operations. If `post_blocks` was not requested, its internal retained executor binding MUST NOT create an extra `results` entry; section 13.3 still requires exactly one entry only for each explicitly requested `SurfaceId`. A directly generated `post_blocks` unit has both `sourceSurfaceId` and `executorSurfaceId` equal to `post_blocks`.
 
 ## 9. Gutenberg seam policy
 
@@ -556,16 +584,24 @@ unavailable
 ```json
 {
   "unitId": "opaque-unit-id",
+  "sourceSurfaceId": "pattern",
   "title": "Add a compact utility row",
   "summary": "Adds a bounded utility row before the navigation block.",
   "executionClass": "governed_apply",
+  "executionBinding": {
+    "executorSurfaceId": "post_blocks",
+    "executorAbilityId": "flavor-agent/request-post-blocks-apply",
+    "operationSchemaVersion": "post-blocks-v1"
+  },
   "operationCount": 1,
   "dependencies": [],
   "warnings": []
 }
 ```
 
-Agent-facing unit text is bounded and untrusted. Full native operations remain behind `resultRef`; apply uses the retained payload and Ability schema rather than operations supplied by the caller.
+`sourceSurfaceId` MUST equal the containing result's `surfaceId`. `executionBinding` is required for `governed_apply` and absent for `advisory` and `stage_only`; it identifies the governed lane but does not reveal the retained result reference or operations. A run MUST NOT add, remove, or replace an execution binding after completion.
+
+Agent-facing unit text is bounded and untrusted. Full native operations and any internal executor-result reference remain behind `resultRef`; apply uses the retained payload and Ability schema rather than operations supplied by the caller.
 
 ## 14. Selection, review, and apply-plan derivation
 
@@ -607,8 +643,32 @@ Unknown, expired, superseded, failed-surface, or duplicate unit IDs cause the en
 - The owner MAY renew it through another successful owner review action.
 - A second agent receives `review_owned_by_other_actor` until the lease expires or the human takes over.
 - Direct human selection/review input wins: it cancels an agent lease, increments the workspace revision, and causes stale agent writes to receive `workspace_conflict`.
-- An agent MUST NOT mutate selection while the editor is in an internally detected composition, typing, drag, or unsafe transition. The tool returns `editor_busy` without exposing the underlying transient selector values.
+- An agent MUST NOT capture recommendation context or mutate selection/review while the editor interaction guard is busy. The tool returns `editor_busy` with one derived `busyReason`, never raw selector values.
 - Review ownership is coordination only. It does not authorize apply and is unrelated to the admin activity review claim.
+
+The protocol 1.0 editor interaction guard is codeable and fail-closed. One page-owned `EditorInteractionGuard` MUST:
+
+- attach `compositionstart`, `compositionend`, `beforeinput`, and `input` listeners to the editor shell document and each same-origin editor-canvas iframe document; only trusted human events update its state
+- remove every listener through the page registration `AbortSignal`
+- use a monotonic clock and a fixed 750 ms quiet window after the latest trusted `beforeinput` or `input`
+- take one synchronous registry snapshot of the supported Gutenberg selectors when evaluated
+- treat a missing selector/store, detached canvas, listener failure, or thrown selector as `guard_unavailable` rather than assuming idle
+
+After required guard inputs resolve, a primary scope-key mismatch returns `workspace_scope_changed` before busy classification. Otherwise the guard evaluates the following table from top to bottom and returns the first true `busyReason`, making simultaneous conditions deterministic:
+
+| `busyReason` | Exact predicate |
+|---|---|
+| `guard_unavailable` | Any required guard input cannot be observed reliably |
+| `editor_scope_transition` | The primary editor entity/scope key is temporarily unresolved during navigation |
+| `composition_active` | A tracked editor document received `compositionstart` without the matching `compositionend` or abort |
+| `entity_save_active` | The current post is saving/autosaving, the exact scoped entity is reported by core-data as saving, or non-post entity changes are currently saving |
+| `block_drag_active` | Gutenberg `isDraggingBlocks()` is true |
+| `multi_select_active` | Gutenberg `isMultiSelecting()` is true |
+| `recent_human_input` | The monotonic quiet-window deadline has not elapsed, or Gutenberg `isTyping()` is true while that trusted-input window is active |
+
+For `recent_human_input`, `details.retryAfterMs` is the remaining quiet-window duration rounded up and clamped to `0..750`; other reasons omit it. The guard is evaluated immediately before context capture in `complete_recommendation_request`, immediately before the page-state commit in `configure_recommendation_selection` and `start_recommendation_review`, and before apply-request preflight. A failed check performs zero workspace or activity mutation. Server target freshness, lock, permission, and baseline checks still run independently; this page guard is not authorization.
+
+`workspace_busy` is not a protocol 1.0 condition. Live human/editor transitions use `editor_busy`; same-page lost races use `workspace_conflict`; and review-lease contention uses `review_owned_by_other_actor`.
 
 ### 14.3 Apply plan
 
@@ -621,21 +681,36 @@ Unknown, expired, superseded, failed-surface, or duplicate unit IDs cause the en
   "groups": [
     {
       "targetGroupKey": "opaque-group-key",
-      "surfaceId": "template_part",
+      "sourceSurfaceIds": ["pattern"],
+      "executorSurfaceId": "post_blocks",
+      "executorAbilityId": "flavor-agent/request-post-blocks-apply",
+      "operationSchemaVersion": "post-blocks-v1",
       "unitIds": ["unit-a"],
-      "operationDigest": "sha256-hex",
+      "operationDigest": "64-lowercase-hex-characters",
       "blockingReasons": []
     }
   ],
-  "stageOnlyUnitIds": [],
-  "advisoryUnitIds": [],
-  "blockedUnitIds": []
+  "excludedUnits": [
+    {
+      "unitId": "unit-b",
+      "executionClass": "stage_only",
+      "reason": {
+        "code": "stage_only_not_webmcp_applicable",
+        "category": "validation",
+        "message": "This unit uses the existing human editor flow.",
+        "retryDisposition": "do_not_retry",
+        "details": {}
+      }
+    }
+  ],
+  "blockedUnits": []
 }
 ```
 
 A target group contains only units that:
 
 - use `governed_apply`
+- share one retained execution binding; `sourceSurfaceIds` are derived from its units while `executorSurfaceId` identifies the Ability-backed lane
 - resolve to one canonical persistent target
 - execute through one executor invocation
 - share one independently revalidatable baseline
@@ -643,6 +718,43 @@ A target group contains only units that:
 - have all dependencies satisfied
 
 Two operations against the same entity are separate groups when the second requires context produced by the first. A target that does not exist until an earlier operation completes can never be in the earlier group.
+
+`excludedUnits` contains selected advisory/stage-only units and one reason object per unit. `blockedUnits` uses the same shape plus the reasons that prevented a nominally governed unit from entering a group.
+
+If selection contains no executable group, plan derivation still succeeds and records advisory/stage-only exclusions. A later apply request returns the single deterministic top-level error `no_executable_group`. `advisory_not_applicable` and `stage_only_not_webmcp_applicable` are per-unit plan exclusion reason codes, never competing top-level errors.
+
+### 14.4 Operation digest
+
+`operationDigest` is a server-computed SHA-256 digest over this normalized envelope:
+
+```json
+{
+  "digestVersion": "operation-digest-v1",
+  "protocolVersion": "1.0",
+  "operationSchemaVersion": "post-blocks-v1",
+  "executorAbilityId": "flavor-agent/request-post-blocks-apply",
+  "executorSurfaceId": "post_blocks",
+  "canonicalTarget": {
+    "siteScopeId": "1",
+    "targetKind": "post",
+    "targetId": "42",
+    "scopeKey": "post:42",
+    "subtargetKey": null
+  },
+  "baselineSignatures": {},
+  "operations": []
+}
+```
+
+`canonicalTarget` is a closed normalized object. `siteScopeId` is the current server-owned site/blog binding; `targetKind` is one of `post`, `template`, `template_part`, `global_styles`, or `style_book`; `targetId` is the canonical string identity of the persistent entity; `scopeKey` is the exact activity/workspace target scope; and `subtargetKey` is `null` except for an executor-defined subtarget such as the Style Book block name. `baselineSignatures` is also closed per `operationSchemaVersion`: it contains every and only the resolved-context, review-context, target, and lock/version signature that the named request-apply Ability requires, using their schema-defined keys.
+
+The server MUST first validate and normalize `canonicalTarget`, `baselineSignatures`, and `operations` through the exact executor/Ability schemas named by `operationSchemaVersion`. It then serializes the envelope with the JSON Canonicalization Scheme defined by RFC 8785: object properties sorted per that scheme, list order preserved, UTF-8 strings and JSON numbers serialized canonically, and no insignificant whitespace. Duplicate object keys, invalid UTF-8, non-finite numbers, unsupported value types, or a value that cannot be represented by the selected operation schema fail plan derivation closed. The final wire value is the lowercase 64-character hexadecimal SHA-256 digest of those canonical JSON bytes.
+
+Display title/summary/rationale, confidence/ranking metadata, warnings, timestamps, random IDs, actor/session IDs, idempotency keys, lifecycle/decision state, `resultRef`, and `targetGroupKey` are excluded. Target identity, operation order, normalized operation values, operation schema version, executor identity, and every baseline/freshness signature required by that executor are included.
+
+The client never supplies or calculates authoritative digest input. The server computes the digest when deriving the plan, then dereferences the retained execution binding, normalizes it again, and recomputes the digest during apply-request validation. A mismatch returns `plan_stale` with zero writes. Live target-baseline comparison is a separate subsequent check; a mismatched live baseline returns `stale_context` even when the retained digest is internally consistent.
+
+Implementation MUST extract a shared canonical-JSON/digest utility rather than reuse an attestation-private helper by convention. The current `StatementBuilder::canonical_json()` key sorting and list-order behavior are useful grounding, but protocol conformance additionally requires the complete RFC 8785 number/string rules and the explicit envelope and exclusion list above.
 
 ## 15. Common tool result envelope
 
@@ -802,11 +914,14 @@ targetGroupKey
 Rules:
 
 - `expectedWorkspaceRevision`, `planRevision`, and the current workspace revision MUST be equal before any request row is created; otherwise the tool returns `plan_stale` with zero writes.
+- If the plan has zero executable groups, the tool returns `no_executable_group` and performs zero writes, regardless of whether the selected exclusions are advisory, stage-only, blocked, or mixed. This check takes precedence over optional `targetGroupKey` validation.
 - If the plan has one executable group, `targetGroupKey` MAY be omitted.
 - If the plan has more than one executable group, omitting it returns `multiple_target_groups` and performs zero writes.
-- The caller can name exactly one group. Arrays or comma-separated groups are invalid.
+- The caller can name exactly one group. Arrays or comma-separated groups are invalid; a supplied key that is not in the current plan returns `target_group_not_found`.
 - Advisory and stage-only units are never included.
-- The tool resolves retained operations from `resultRef`, revalidates the run, plan digest, exact target, current permissions, and request-time freshness, then invokes the matching request-apply Ability.
+- Before requiring an active run, the tool checks the authenticated durable idempotency/dedupe index for an already accepted exact request. An exact hit returns the existing `applyRequestId`, even if the source run has since expired; it creates no new row.
+- For a new request, the tool requires `now < run.expiresAt` when dereferencing the retained execution binding, resolves operations from `resultRef`, revalidates the run, recomputes `operationDigest`, checks the exact target, current permissions, and request-time freshness, then invokes the matching request-apply Ability.
+- Immediately before the pending-row insert, after all asynchronous validation and in the same commit boundary as the final workspace revision comparison, the server reads its authoritative clock again. If `now >= run.expiresAt`, it returns `run_expired` and creates no row. This second check is mandatory even if dereference passed, and MUST live inside the Ability/repository row-creation boundary rather than only in the page adapter before its request.
 - Success creates or deduplicates one pending activity row and returns `applyRequestId`, `applyStatus: pending`, `expiresAt`, `deduplicated`, and `attributionPreserved`.
 - It does not approve the request and does not mutate the target.
 
@@ -825,7 +940,7 @@ applyRequestId
 
 Returns the normalized apply lifecycle, decision metadata visible to the current user, failure/recovery reasons, normalized undo status, and blocked reasons. It remains usable after the source run expires, subject to activity retention and permission.
 
-This tool MUST be a no-write projection. Because the current activity repository can lazily persist pending expiry during reads, the WebMCP adapter MUST use/refactor a no-write read path and derive `expired` from `expiresAt`; cron or the admin decision path may persist that transition separately. Until that boundary exists, this tool cannot truthfully use `readOnlyHint: true`.
+This tool MUST be a no-write projection. The current admin feed already demonstrates a pure overdue projection, but the current get/list Ability path calls `ActivityRepository::maybe_expire_pending_apply()` and can persist expiry. Before either public `read_*` tool is registered, implementation MUST extract/reuse a pure status projector, remove mutating expiry from every WebMCP read dependency, and derive `expired` from `expiresAt`; cron or an authorized decision/action path may persist that transition separately. Until that prerequisite is complete, the eight-tool protocol surface MUST remain unregistered because this tool cannot truthfully use `readOnlyHint: true`.
 
 ### 16.8 `complete_recommendation_undo_request`
 
@@ -864,6 +979,8 @@ expected revision differs
 
 This protects human-versus-agent and agent-versus-agent changes in the same page. It does not claim cross-tab collaboration.
 
+For `complete_recommendation_apply_request`, the final workspace comparison and the final `run.expiresAt` comparison occur after validation and immediately before the pending-row insert. Neither an earlier workspace read nor an earlier run dereference satisfies these commit-time checks.
+
 The human UI MUST dispatch through the same workspace actions. Component-local checkbox state must move into the shared workspace before WebMCP selection is enabled.
 
 ## 18. Idempotency and attribution
@@ -891,6 +1008,8 @@ authenticated site/user
 + targetGroupKey
 + operationDigest
 ```
+
+`operationDigest` is the authoritative server value defined in section 14.4. Dedupe never hashes presentation text or caller-supplied operation JSON.
 
 `actorSessionId` is deliberately not part of that fingerprint. Two actors submitting the exact same plan/group get one `applyRequestId`.
 
@@ -1031,7 +1150,9 @@ To apply a similar change again, the user or agent creates a fresh recommendatio
 
 - Default active run TTL: 30 minutes from completion.
 - The server returns authoritative `expiresAt`; clients MUST NOT calculate eligibility from the default alone.
-- `resultRef` expires with the run for new apply requests.
+- `resultRef` expires with the run for new apply requests. A run is active only while the authoritative server time is strictly earlier than `expiresAt`.
+- A new apply request checks that condition both when dereferencing its retained binding and again in the commit boundary immediately before pending-row creation. Expiry at either check returns `run_expired` with zero new rows.
+- An exact retry/dedupe lookup for an apply request already accepted before expiry runs first and MAY return its existing `applyRequestId`; this is a read of existing durable state, not a new request created from an expired run.
 - An expired run retains a minimal tombstone for 24 hours after expiry. During that period, reads return `run_expired` and the original `runId` without result content.
 - After tombstone retention, reads return `run_not_found`.
 - Page selectors project an expired run's plan as empty/ineligible without mutating the workspace. A `read_recommendation_workspace` call MUST NOT dispatch expiry cleanup or increment the revision.
@@ -1039,7 +1160,7 @@ To apply a similar change again, the user or agent creates a fresh recommendatio
 ### 21.2 Apply request and activity
 
 - Pending apply TTL remains independent, defaulting to the existing 24 hours.
-- Creating an apply request copies the validated normalized operations, signatures, and target evidence required by the activity row. Later run expiry does not cancel the request.
+- Creating an apply request before the run deadline copies the validated normalized operations, signatures, digest envelope fields, and target evidence required by the activity row. Once that row commits, later run expiry does not cancel the request.
 - `read_recommendation_apply_status` is keyed by `applyRequestId`, so it continues to work after run expiry.
 - Activity retention remains independent, defaulting to the existing 90 days.
 
@@ -1084,7 +1205,6 @@ workspace_not_found
 workspace_scope_changed
 workspace_conflict
 workspace_changed_during_generation
-workspace_busy
 editor_busy
 review_owned_by_other_actor
 run_superseded
@@ -1094,10 +1214,9 @@ surface_unavailable
 partial_dependency_failed
 selection_invalid
 plan_stale
+no_executable_group
 multiple_target_groups
 target_group_not_found
-advisory_not_applicable
-stage_only_not_webmcp_applicable
 stale_context
 authorization_failed
 idempotency_conflict
@@ -1109,6 +1228,21 @@ recovery_required
 Error/reason codes are open. Clients MUST display the bounded message, preserve unknown code values for diagnostics, and follow the known `retryDisposition` instead of treating an unfamiliar code as success.
 
 Clients MUST NOT branch on localized `message` text.
+
+`no_executable_group` has category `validation` and retry disposition `do_not_retry` for the unchanged plan; its bounded details include only counts of governed, excluded, and blocked units. `editor_busy` has category `busy` and retry disposition `wait`. These mappings are stable for protocol 1.x.
+
+### 22.4 Plan exclusion reason codes
+
+These initial codes explain why a selected unit did not enter an executable group:
+
+```text
+advisory_not_applicable
+stage_only_not_webmcp_applicable
+dependency_not_satisfied
+execution_binding_unavailable
+```
+
+They are per-unit `reason.code` values in the plan, not top-level apply errors. If every selected unit is excluded or blocked, `complete_recommendation_apply_request` always returns `no_executable_group`.
 
 ## 23. Confirmation and authorization
 
@@ -1129,13 +1263,14 @@ None substitutes for another.
 
 This is sequential because the refinement target does not exist before insertion.
 
-1. Configure document/post-blocks context and request recommendations.
-2. Select the governed `insert_pattern` post-blocks unit.
-3. Call `complete_recommendation_apply_request` for its single post target group.
-4. Poll `read_recommendation_apply_status` until `applied`, `rejected`, `expired`, `failed_no_writes`, or `recovery_required`.
-5. After `applied`, refresh editor context and create a new run. Do not reuse the old signature or plan.
-6. Select the new refinement unit.
-7. If it is `governed_apply`, create a second apply request. If it is `stage_only`, WebMCP stops and the human may apply it through the existing editor UI.
+1. Configure the `pattern` surface for the current post/page and request recommendations.
+2. The completed pattern result includes a ranked unit whose immutable execution binding contains a validated `post_blocks` `insert_pattern` operation for one exact insertion anchor. If that binding could not be built, the unit is `stage_only` and this governed path stops.
+3. Select the governed pattern unit. The derived group has `sourceSurfaceIds: ["pattern"]`, `executorSurfaceId: "post_blocks"`, and executor Ability `flavor-agent/request-post-blocks-apply`.
+4. Call `complete_recommendation_apply_request` for that single post target group.
+5. Poll `read_recommendation_apply_status` until `applied`, `rejected`, `expired`, `failed_no_writes`, or `recovery_required`.
+6. After `applied`, refresh editor context and create a new run. Do not reuse the old signature or plan.
+7. Select the new refinement unit.
+8. If it is `governed_apply`, create a second apply request. If it is `stage_only`, WebMCP stops and the human may apply it through the existing editor UI.
 
 There is no batch ID, cross-step atomicity, or automatic compensation if the second step fails.
 
@@ -1144,7 +1279,7 @@ There is no batch ID, cross-step atomicity, or automatic compensation if the sec
 This mixes a block-local stage-only unit with a governed Global Styles unit.
 
 1. The run returns a `block` result and a `global_styles` result.
-2. Selection records both, but the plan puts the block unit in `stageOnlyUnitIds` and the Global Styles unit in one executable group.
+2. Selection records both, but the plan puts the block unit in `excludedUnits` with reason `stage_only_not_webmcp_applicable` and the Global Styles unit in one executable group.
 3. The human reviews/stages the block change in Gutenberg. WebMCP cannot report it as applied.
 4. The changed block context supersedes the old run. Generate a new run before requesting the Global Styles change.
 5. Select and request the fresh Global Styles target group.
@@ -1157,7 +1292,7 @@ One `complete_recommendation_apply_request` never claims both changes.
 2. The run status is `partial` and contains three result entries.
 3. The pattern result is `unavailable` with a reason and empty units.
 4. Content remains advisory. Block units remain stage-only in protocol 1.0.
-5. No governed apply group exists, so `complete_recommendation_apply_request` returns `advisory_not_applicable` or `stage_only_not_webmcp_applicable` with zero writes.
+5. No governed apply group exists, so `complete_recommendation_apply_request` deterministically returns `no_executable_group` with zero writes. The plan retains `advisory_not_applicable` and `stage_only_not_webmcp_applicable` only as unit exclusion reasons.
 
 If a ready governed surface had no dependency on the unavailable pattern result, its target group would remain requestable.
 
@@ -1203,25 +1338,52 @@ Client-only presentation values such as `idle`, `applying`, `success`, `error`, 
 - Errors are bounded and MUST NOT expose decision claim tokens, stack traces, credentials, provider payloads, or content the caller cannot read.
 - Registration failure, unsupported WebMCP, or a missing Ability causes tools to be absent or return unavailable. The bridge MUST NOT fall back to raw store dispatch or generic REST.
 
-## 27. Verification contract
+## 27. Hard implementation prerequisites and ordering
+
+These are required work items, not descriptive caveats. Protocol 1.0's eight-tool registration MUST remain absent until every P0 item below is implemented and its focused tests pass; a partially truthful subset MUST NOT advertise itself as this protocol version.
+
+| Order | Required work item | Completion gate |
+|---|---|---|
+| P0.1 | Extract pure `projectApplyLifecycle(entry, now)` and `projectRunAvailability(run, now)` functions. Route each WebMCP `read_*` tool and every read dependency through the applicable projector. Remove `maybe_expire_pending_apply()` from the WebMCP get/list path; keep persistent expiry only in cron and authorized action/decision paths. | Read tests assert zero database writes, zero store dispatches, and stable projected expiry before, at, and after the deadline. This item is a hard prerequisite for sections 16.1 and 16.7. |
+| P0.2 | Implement a shared `operation-digest-v1` canonicalizer and typed envelope builder as specified in section 14.4; do not leave it inside an attestation-specific class. | Cross-language fixtures cover key ordering, list ordering, Unicode, every supported numeric form, rejected non-finite/invalid input, operation-order sensitivity, exclusions, and all four governed executors. |
+| P0.3 | Implement the page-owned `EditorInteractionGuard` and iframe lifecycle from section 14.2. | Deterministic fake-clock and selector-failure tests cover every `busyReason`, the 750 ms boundary, abort cleanup, scope mismatch, and fail-closed unavailable state. |
+| P0.4 | Implement exact negotiated-version schema branches and downgrade serializers from section 7.2. | A `1.1`-capable client negotiating `1.0` emits no `1.1` fields; a `1.0` branch rejects every unknown input property while compatible clients tolerate optional response additions. |
+| P0.5 | Implement authenticated retained runs, tombstones, and the durable apply-request idempotency/dedupe index, including the double run-expiry check from sections 16.6 and 21. | Race tests pause between dereference and insert; a deadline reached before insert creates zero rows, while an exact already-created request remains readable/deduplicable after source-run expiry. |
+| P0.6 | Implement the pattern-to-post-blocks executor compiler from section 8.3. | A governed pattern unit exists only with one server-collected target/anchor, a grammar-valid `insert_pattern`, complete post-blocks signatures, and an immutable retained binding; every ambiguity yields `stage_only` and no hidden result-array entry. |
+| P0.7 | Move human checkbox selection/review into the sole workspace store, implement page-scope CAS, and derive target groups using source/executor bindings. | Human/agent races, nine-surface result completeness, style's two scoped invocations, pattern executor routing, and deterministic zero-group behavior pass before WebMCP registration. |
+
+After P0, implementation order is:
+
+1. register the eight closed-schema tools behind one protocol-capability gate
+2. connect them only to the completed workspace/run/projector/compiler primitives
+3. run the section 28 contract, repository, and browser evidence
+4. enable the capability only where every required Ability and editor dependency is available
+
+Missing a prerequisite fails closed by leaving protocol 1.0 unregistered; it does not fall back to raw Gutenberg dispatch, generic Ability execution, a mutating read, or stage-only execution.
+
+## 28. Verification contract
 
 Implementation is not conformant until the following evidence exists.
 
-### 27.1 Pure contract tests
+### 28.1 Pure contract tests
 
 - Protocol-version negotiation and mismatch with zero writes
 - Closed enum validation and unknown open reason/error-code tolerance
 - Receipt exact-partition invariant across all five categories
 - Context signature determinism and exclusion of timestamps/transient UI state
+- `operationDigest` canonical-envelope fixtures, exclusions, and recomputation mismatch
+- Exact negotiated-version downgrade with closed input branches
 - Surface/mode selection cardinality
 - Per-unit execution-class plan partitioning
+- Eight-Ability-to-nine-surface mapping, including separate style-scope results
+- Governed pattern source binding to a post-blocks executor without an extra result entry
 - Partial-run result completeness and dependency blocking
-- Target-group derivation and multi-group refusal
+- Target-group derivation, source/executor distinction, deterministic `no_executable_group`, and multi-group refusal
 - Storage-to-wire apply/undo projection
-- Run expiry/tombstone behavior
+- Run expiry/tombstone behavior and the dereference-to-insert expiry race
 - Observational read projections, including expiry, perform zero writes
 
-### 27.2 Workspace tests
+### 28.2 Workspace tests
 
 - Same-page human/agent and agent/agent compare-and-swap conflicts
 - Two tabs on the same entity remain independent workspaces
@@ -1229,10 +1391,11 @@ Implementation is not conformant until the following evidence exists.
 - Context changes supersede the current relationship and clear selection/review/plan
 - Generation completing after a workspace change cannot install itself
 - Human takeover cancels agent review ownership
-- Editor-busy guards fail closed
+- Every exact editor-busy predicate, quiet-window boundary, iframe cleanup, and unavailable dependency fails closed
+- `editor_busy`, `workspace_conflict`, and `review_owned_by_other_actor` remain non-overlapping conditions; `workspace_busy` never appears
 - Component checkbox state and WebMCP reads observe the same store owner
 
-### 27.3 Ability and activity tests
+### 28.3 Ability and activity tests
 
 - Every governed request reuses the existing Ability and exact permission callback
 - Request creation writes one pending row and performs no target mutation
@@ -1241,12 +1404,14 @@ Implementation is not conformant until the following evidence exists.
 - `failed_no_writes` requires explicit proof; ambiguous failures become `recovery_required`
 - First-writer attribution survives deduplication
 - Repeated exact request returns the same `applyRequestId`
+- A run expiring after dereference but before pending-row insert creates no row
+- An exact accepted apply request deduplicates after its source run expires
 - Reused idempotency key with different payload is rejected
 - Undo blocked reasons and retry dispositions are stable
 - Repeated completed undo returns `already_undone`
 - No undo-of-undo activity is created
 
-### 27.4 WebMCP tests
+### 28.4 WebMCP tests
 
 - Exactly eight tools register on supported editor pages
 - Tool names and schemas match this document
@@ -1257,7 +1422,7 @@ Implementation is not conformant until the following evidence exists.
 - Results are concise, JSON-serializable, and correctly annotated for read-only/untrusted behavior
 - No raw Gutenberg selector/action or generic Ability executor is exposed
 
-### 27.5 Repository gates
+### 28.5 Repository gates
 
 Because this crosses every recommendation surface plus shared context, freshness, apply, activity, and undo contracts, implementation triggers all applicable gates in `docs/reference/cross-surface-validation-gates.md`:
 
@@ -1267,7 +1432,7 @@ Because this crosses every recommendation surface plus shared context, freshness
 - Playground and WP 7.0 Playwright harnesses matching all touched surfaces
 - an explicit blocker or waiver for any unavailable browser harness
 
-## 28. Protocol 2.0 boundary
+## 29. Protocol 2.0 boundary
 
 Protocol 2.0 may introduce:
 
@@ -1282,9 +1447,26 @@ Protocol 2.0 may introduce:
 
 None of those semantics may be partially implemented under protocol 1.0 names.
 
-## 29. Source anchors
+## 30. Source anchors
 
-These anchors describe the repository snapshot used to ground the design:
+These anchors were verified locally on 2026-08-27 against immutable Git commit `b47a6a08e16336ace9f9fea8e841ca3323334b45`. Line 205 in `Registration.php` is the `external_apply_ability_classes()` declaration. The table supplies blob IDs so the reviewed bytes can be checked even when later line numbers drift.
+
+| File | Snapshot blob |
+|---|---|
+| `src/store/index.js` | `a4366e0b5b5fd9f413b333e1979a8f59a2035833` |
+| `src/inspector/BlockRecommendationsPanel.js` | `4676cd0b59414725ee2524da82dd0f5b9c02f168` |
+| `src/store/activity-history.js` | `349280a2dae62ea3023accc3f173ff60475d7bc3` |
+| `inc/Abilities/Registration.php` | `fa73c1ba44a1a08ff589b974a961d4168ea056b4` |
+| `inc/Abilities/StyleAbilities.php` | `c2225d792b4f99dbb48a2df6c9a64937317af2f8` |
+| `inc/Abilities/PostBlocksAbilities.php` | `f80c2857e7cdfe4e420d67f250de2f845933bf12` |
+| `inc/Attestation/StatementBuilder.php` | `f120990dda9b155c10b37be8c6e80dc20f7004f3` |
+| `inc/Activity/Repository.php` | `90ea756087019785e353a814a9b05ad8b7105cfe` |
+| `inc/Abilities/ApplyAbilities.php` | `7c93bc1f091a39ccb191bd5e2861ec554b1b85cd` |
+| `docs/reference/activity-state-machine.md` | `a3a4cd2835248f4fcf072757c4855ab643ce4efd` |
+| `docs/reference/abilities-and-routes.md` | `fcd157885048fe939ea1d87babe2e4a8a88687b9` |
+| `docs/reference/cross-surface-validation-gates.md` | `0b934609874af8b7785f65fa4aa993265aa57648` |
+
+Grounding details:
 
 - `src/store/index.js:1-6` — current recommendation state is per tab
 - `src/store/index.js:198-255` — current shared surface contract; pattern is missing
@@ -1293,24 +1475,40 @@ These anchors describe the repository snapshot used to ground the design:
 - `inc/Abilities/Registration.php:154-197` — eight recommendation Ability registrations
 - `inc/Abilities/Registration.php:205-243` — governed external apply/read/undo Ability registrations; line 200 is documentation and line 205 is the method declaration
 - `inc/Abilities/Registration.php:266-284` — current external-apply annotations
+- `inc/Abilities/StyleAbilities.php:81-103` — one recommendation Ability validates either Global Styles or Style Book scope
+- `inc/Abilities/PostBlocksAbilities.php:17-34` — post-blocks is a recommendation surface with the structural insertion grammar
+- `inc/Attestation/StatementBuilder.php:340-373` — existing deterministic key sorting/list-order behavior that informs, but does not complete, `operation-digest-v1`
+- `inc/Activity/Repository.php:551-560` — current admin-feed pure-read overdue guard
+- `inc/Activity/Repository.php:1265-1291` — current mutating lazy-expiry helper
+- `inc/Abilities/ApplyAbilities.php:830-870` — current activity get/list reads invoke the mutating helper and therefore require P0.1
 - `docs/reference/activity-state-machine.md:23-41` — current pending approval/decision claim lifecycle
 - `docs/reference/activity-state-machine.md:43-100` — current undo states, transitions, and ordered-undo behavior
 - `docs/reference/abilities-and-routes.md` — current Ability schemas, permissions, dedicated MCP exposure, and REST decision route
 - `docs/reference/cross-surface-validation-gates.md` — required multi-surface release evidence
 
-## 30. Design decisions resolved by this document
+The `docs/reference/abilities-and-routes.md` working-tree copy had unrelated local edits during this review, so the source table deliberately identifies its clean snapshot blob rather than claiming those uncommitted bytes as evidence.
+
+## 31. Design decisions resolved by this document
 
 - `RecommendationWorkspace` is page/editor-scope keyed; `workspaceRevision` is same-page CAS, not document-global CAS.
 - `RecommendationRun` contains both `contextSignature` and `contextReceipt`; `applyPlan` belongs to the workspace.
+- Eight recommendation Abilities produce nine wire surfaces because `recommend-style` is invoked independently for Global Styles and Style Book; `post_blocks` remains a genuine generator.
+- Execution class belongs to an immutable unit. A governed pattern unit uses a retained `post_blocks` executor binding; a pattern without that exact binding remains stage-only.
 - `applyRequestId` is the only durable protocol 1.0 apply identifier. `bundleId` and `applyPlanId` are retired.
+- `operationDigest` is a server-owned RFC 8785 canonical-envelope SHA-256 value with versioned inputs and exclusions.
 - Apply and undo have distinct state enums.
 - Rejection and expiry branch from `pending`, not `executing`.
 - Protocol 1.0 intentionally has no durable `approved` state.
 - `partial` is defined and conditionally applicable per dependency-complete target group.
+- A plan with zero executable groups always returns `no_executable_group`; advisory/stage-only codes are unit reasons only.
 - Undo `blocked` carries machine-readable open reason codes and retry dispositions.
 - Any semantic context-configuration change supersedes the current run relationship and clears its plan.
 - Apply-request attribution is first-writer-wins under actor-independent deduplication.
 - Error/reason codes are open sets; lifecycle and capability enums remain closed.
+- Exact negotiated-version input schemas stay closed; a newer client must fully down-convert after negotiating an older minor version.
+- `editor_busy` has an exact page guard; `workspace_busy` is not a protocol 1.0 response code.
+- Both `read_*` tools require pure expiry projection before registration.
+- New apply requests check run expiry at dereference and again immediately before row creation; exact pre-existing requests remain deduplicable after run expiry.
 - Mixed-surface examples are explicit sequential workflows, not cross-target atomic promises.
 - `editor_mutation` is replaced by `stage_only`, which is not WebMCP-applicable in protocol 1.0.
 - Compensation and cross-target sagas are absent from protocol 1.0.
