@@ -545,67 +545,6 @@ function removeExactInsertedBlocks(
 	);
 }
 
-function restoreRemovedBlocks(
-	operation,
-	blockEditorSelect,
-	blockEditorDispatch
-) {
-	const removedBlocks = cloneBlockTree( operation?.removedBlocksSnapshot );
-
-	if ( removedBlocks.length === 0 ) {
-		return false;
-	}
-
-	const rootClientId = resolveRootClientId( operation.rootLocator );
-
-	if (
-		! canInsertParsedBlocks(
-			removedBlocks,
-			rootClientId,
-			blockEditorSelect
-		)
-	) {
-		return false;
-	}
-
-	blockEditorDispatch.insertBlocks?.(
-		removedBlocks,
-		operation.index,
-		// Core keys the controlled top-level block list by '' and its
-		// insertBlocks reducer does not normalize a null root to it: dispatching
-		// null records the blocks in byClientId without adding them to the root
-		// order, so the restored block never renders. Normalize to '' (nested
-		// string roots are preserved by resolveRootClientId).
-		rootClientId ?? '',
-		true,
-		0
-	);
-
-	const restoredSlice = getBlockSlice(
-		blockEditorSelect,
-		operation.rootLocator,
-		operation.index,
-		removedBlocks.length
-	);
-	const expectedClientIds = getRequestedTopLevelClientIds( removedBlocks );
-
-	return (
-		expectedClientIds.length === removedBlocks.length &&
-		restoredSlice.length === removedBlocks.length &&
-		restoredSlice.every(
-			( block, index ) => block?.clientId === expectedClientIds[ index ]
-		) &&
-		blockSnapshotsMatch( restoredSlice, removedBlocks ) &&
-		expectedClientIds.every(
-			( clientId ) =>
-				Boolean( blockEditorSelect.getBlock?.( clientId ) ) &&
-				normalizeRootClientId(
-					blockEditorSelect.getBlockRootClientId?.( clientId )
-				) === normalizeRootClientId( rootClientId )
-		)
-	);
-}
-
 function applyInsertPatternOperation( {
 	operation,
 	liveBlock,
@@ -770,6 +709,7 @@ function applyReplaceBlockWithPatternOperation( {
 
 	if (
 		! insertion ||
+		typeof blockEditorDispatch?.replaceBlocks !== 'function' ||
 		typeof blockEditorSelect.canRemoveBlock !== 'function' ||
 		blockEditorSelect.canRemoveBlock( liveBlock.clientId ) !== true ||
 		! canInsertParsedBlocks(
@@ -806,52 +746,13 @@ function applyReplaceBlockWithPatternOperation( {
 		};
 	}
 
-	blockEditorDispatch.removeBlocks?.( [ liveBlock.clientId ], false );
+	const beforeRootBlocks = cloneBlockTree(
+		getRootBlocks( blockEditorSelect, location.rootClientId )
+	);
 
-	if ( blockEditorSelect.getBlock?.( liveBlock.clientId ) ) {
-		return {
-			ok: false,
-			code: 'operation_invalid',
-			error: __(
-				'The selected block could not be removed before replacement.',
-				'flavor-agent'
-			),
-		};
-	}
-
-	if (
-		! canInsertParsedBlocks(
-			parsed.blocks,
-			location.rootClientId,
-			blockEditorSelect
-		)
-	) {
-		if (
-			! restoreRemovedBlocks(
-				baseOperation,
-				blockEditorSelect,
-				blockEditorDispatch
-			)
-		) {
-			return {
-				ok: false,
-				code: 'restore_failed',
-				error: STRUCTURAL_RESTORE_ERROR,
-			};
-		}
-
-		return {
-			ok: false,
-			code: 'operation_invalid',
-			error: getBlockStructuralActionErrorMessage( 'operation_invalid' ),
-		};
-	}
-
-	blockEditorDispatch.insertBlocks?.(
+	blockEditorDispatch.replaceBlocks(
+		[ liveBlock.clientId ],
 		parsed.blocks,
-		location.index,
-		location.rootClientId,
-		true,
 		0
 	);
 
@@ -871,33 +772,29 @@ function applyReplaceBlockWithPatternOperation( {
 	const replacementBlocksAreRemovable =
 		replacementClientIds.length > 0 &&
 		blockEditorSelect.canRemoveBlocks( replacementClientIds ) === true;
+	const targetWasRemoved = ! blockEditorSelect.getBlock?.(
+		liveBlock.clientId
+	);
 
-	if ( ! replacementBlocksAreValid || ! replacementBlocksAreRemovable ) {
-		if (
-			! removeExactInsertedBlocks(
-				replacementClientIds,
-				blockEditorSelect,
-				blockEditorDispatch
-			)
-		) {
+	if (
+		! targetWasRemoved ||
+		! replacementBlocksAreValid ||
+		! replacementBlocksAreRemovable
+	) {
+		const rootIsUnchanged =
+			JSON.stringify(
+				getRootBlocks( blockEditorSelect, location.rootClientId )
+			) === JSON.stringify( beforeRootBlocks );
+
+		// Core's bound replaceBlocks dispatch either declines before mutation or
+		// applies one REPLACE_BLOCKS reducer action. A partial replacement can
+		// therefore only be produced by a dispatch that violates Core's contract;
+		// do not guess at cleanup targets in that unsupported state.
+		if ( ! rootIsUnchanged ) {
 			return {
 				ok: false,
 				code: 'rollback_failed',
 				error: STRUCTURAL_ROLLBACK_ERROR,
-			};
-		}
-
-		if (
-			! restoreRemovedBlocks(
-				baseOperation,
-				blockEditorSelect,
-				blockEditorDispatch
-			)
-		) {
-			return {
-				ok: false,
-				code: 'restore_failed',
-				error: STRUCTURAL_RESTORE_ERROR,
 			};
 		}
 
@@ -1240,6 +1137,19 @@ export function undoBlockStructuralSuggestionOperations( activity, registry ) {
 		return validation;
 	}
 
+	if (
+		operations.some(
+			( operation ) =>
+				operation.type === BLOCK_OPERATION_REPLACE_BLOCK_WITH_PATTERN
+		) &&
+		typeof blockEditorDispatch.replaceBlocks !== 'function'
+	) {
+		return {
+			ok: false,
+			error: STRUCTURAL_UNDO_INCOMPLETE_ERROR,
+		};
+	}
+
 	for ( const operation of [ ...operations ].reverse() ) {
 		const runtimeClientIds = getOperationRuntimeClientIds( operation );
 
@@ -1250,25 +1160,19 @@ export function undoBlockStructuralSuggestionOperations( activity, registry ) {
 			};
 		}
 
-		blockEditorDispatch.removeBlocks?.( runtimeClientIds, false );
-
-		if (
-			runtimeClientIds.some( ( clientId ) =>
-				Boolean( blockEditorSelect.getBlock( clientId ) )
-			)
-		) {
-			return {
-				ok: false,
-				error: STRUCTURAL_UNDO_INCOMPLETE_ERROR,
-			};
-		}
-
 		switch ( operation.type ) {
-			case BLOCK_OPERATION_REPLACE_BLOCK_WITH_PATTERN:
+			case BLOCK_OPERATION_REPLACE_BLOCK_WITH_PATTERN: {
+				const removedBlocks = cloneBlockTree(
+					operation.removedBlocksSnapshot
+				);
+				const rootClientId = resolveRootClientId(
+					operation.rootLocator
+				);
+
 				if (
 					! canInsertParsedBlocks(
-						cloneBlockTree( operation.removedBlocksSnapshot ),
-						resolveRootClientId( operation.rootLocator ),
+						removedBlocks,
+						rootClientId,
 						blockEditorSelect
 					)
 				) {
@@ -1278,11 +1182,43 @@ export function undoBlockStructuralSuggestionOperations( activity, registry ) {
 					};
 				}
 
+				blockEditorDispatch.replaceBlocks(
+					runtimeClientIds,
+					removedBlocks,
+					0
+				);
+
+				const restoredClientIds =
+					getRequestedTopLevelClientIds( removedBlocks );
+				const replacementWasRemoved = runtimeClientIds.every(
+					( clientId ) => ! blockEditorSelect.getBlock?.( clientId )
+				);
+				const originalWasRestored = insertedBlocksMatchRequest( {
+					blocks: removedBlocks,
+					clientIds: restoredClientIds,
+					index: operation.index,
+					rootClientId,
+					rootLocator: operation.rootLocator,
+					blockEditorSelect,
+				} );
+
+				// As on apply, Core's atomic reducer cannot expose a partial
+				// replacement. Fail closed without guessing if a test double or
+				// unsupported dispatch violates that contract.
+				if ( ! replacementWasRemoved || ! originalWasRestored ) {
+					return {
+						ok: false,
+						error: STRUCTURAL_UNDO_INCOMPLETE_ERROR,
+					};
+				}
+				break;
+			}
+			default:
+				blockEditorDispatch.removeBlocks?.( runtimeClientIds, false );
+
 				if (
-					! restoreRemovedBlocks(
-						operation,
-						blockEditorSelect,
-						blockEditorDispatch
+					runtimeClientIds.some( ( clientId ) =>
+						Boolean( blockEditorSelect.getBlock( clientId ) )
 					)
 				) {
 					return {
@@ -1290,7 +1226,6 @@ export function undoBlockStructuralSuggestionOperations( activity, registry ) {
 						error: STRUCTURAL_UNDO_INCOMPLETE_ERROR,
 					};
 				}
-				break;
 		}
 	}
 

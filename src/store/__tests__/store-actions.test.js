@@ -4545,6 +4545,16 @@ describe( 'store action thunks', () => {
 				}
 			}
 		} );
+		const replaceBlocks = jest.fn( ( clientIds, replacementBlocks ) => {
+			const index = blocks.findIndex( ( block ) =>
+				clientIds.includes( block.clientId )
+			);
+			blocks.splice(
+				index,
+				clientIds.length,
+				...JSON.parse( JSON.stringify( replacementBlocks ) )
+			);
+		} );
 		const blockEditorSelect = {
 			getBlock: jest.fn( ( clientId ) =>
 				blocks.find( ( block ) => block.clientId === clientId )
@@ -4594,6 +4604,7 @@ describe( 'store action thunks', () => {
 			dispatch: jest.fn().mockReturnValue( {
 				insertBlocks,
 				removeBlocks,
+				replaceBlocks,
 				selectBlock: jest.fn(),
 			} ),
 		};
@@ -4648,6 +4659,18 @@ describe( 'store action thunks', () => {
 			replacementClientId,
 			'block-2',
 		] );
+		expect( replaceBlocks ).toHaveBeenCalledWith(
+			[ 'block-1' ],
+			[
+				expect.objectContaining( {
+					clientId: replacementClientId,
+					name: 'core/paragraph',
+				} ),
+			],
+			0
+		);
+		expect( removeBlocks ).not.toHaveBeenCalled();
+		expect( insertBlocks ).not.toHaveBeenCalled();
 		expect( blockEditorSelect.canRemoveBlock ).toHaveBeenCalledWith(
 			'block-1'
 		);
