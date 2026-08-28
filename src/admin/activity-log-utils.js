@@ -2146,8 +2146,10 @@ function isLikelyCssColor( value ) {
 
 	return (
 		/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test( value ) ||
-		/^(?:rgb|hsl)a?\(/i.test( value ) ||
-		/^color-mix\(/i.test( value )
+		/^(?:rgb|hsl)a?\([^;{}()]*\)$/i.test( value ) ||
+		/^color-mix\((?:[^;{}()]|(?:rgba?|hsla?)\([^;{}()]*\))*\)$/i.test(
+			value
+		)
 	);
 }
 

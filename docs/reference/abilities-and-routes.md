@@ -391,6 +391,8 @@ The request-side `syncStatus` filter accepts `synced`, `partial`, `unsynced`, or
 }
 ```
 
+Normalized recommendation `preview` metadata is optional. When present, it is a lowercase hexadecimal color with exactly 3, 4, 6, or 8 digits: `#rgb`, `#rgba`, `#rrggbb`, or `#rrggbbaa`. The server and client normalize every other value to `null`. This display-only field is never an arbitrary CSS expression.
+
 ### Block Recommendation Structural Operation Shape
 
 ```json

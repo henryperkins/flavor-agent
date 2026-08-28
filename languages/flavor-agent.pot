@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-08-24T13:16:58+00:00\n"
+"POT-Creation-Date: 2026-08-26T23:00:59+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: flavor-agent\n"
@@ -90,6 +90,7 @@ msgid "Pattern request failed"
 msgstr ""
 
 #: inc/Abilities/RecommendationAbilityExecution.php:1191
+#: src/store/index.js:1180
 msgid "Block request failed"
 msgstr ""
 
@@ -610,7 +611,7 @@ msgstr ""
 #: inc/Admin/ActivityPage.php:331
 #: src/admin/activity-log-utils.js:532
 #: src/admin/activity-log-utils.js:1528
-#: src/admin/activity-log-utils.js:2543
+#: src/admin/activity-log-utils.js:2545
 #, php-format,js-format
 msgid "Global Styles %s"
 msgstr ""
@@ -631,7 +632,7 @@ msgstr ""
 
 #: inc/Admin/ActivityPage.php:337
 #: src/admin/activity-log-utils.js:1078
-#: src/admin/activity-log-utils.js:2535
+#: src/admin/activity-log-utils.js:2537
 #: src/style-book/StyleBookRecommender.js:136
 #: src/style-book/StyleBookRecommender.js:160
 #: src/style-book/StyleBookRecommender.js:169
@@ -850,7 +851,7 @@ msgid "WordPress AI Client"
 msgstr ""
 
 #: inc/Admin/Settings/Page.php:302
-#: src/admin/activity-log-utils.js:3086
+#: src/admin/activity-log-utils.js:3088
 msgid "Not available"
 msgstr ""
 
@@ -1574,7 +1575,7 @@ msgstr ""
 #. translators: %s: template identifier.
 #: src/admin/activity-log-utils.js:516
 #: src/admin/activity-log-utils.js:1492
-#: src/admin/activity-log-utils.js:2483
+#: src/admin/activity-log-utils.js:2485
 #, js-format
 msgid "Template %s"
 msgstr ""
@@ -1582,7 +1583,7 @@ msgstr ""
 #. translators: %s: template part identifier.
 #: src/admin/activity-log-utils.js:524
 #: src/admin/activity-log-utils.js:1512
-#: src/admin/activity-log-utils.js:2504
+#: src/admin/activity-log-utils.js:2506
 #, js-format
 msgid "Template part %s"
 msgstr ""
@@ -1715,7 +1716,8 @@ msgstr ""
 
 #: src/admin/activity-log-utils.js:1068
 #: src/admin/activity-log-utils.js:1506
-#: src/inspector/BlockRecommendationsPanel.js:1368
+#: src/inspector/BlockRecommendationsPanel.js:1415
+#: src/inspector/BlockRecommendationsPanel.js:1661
 msgid "Pattern"
 msgstr ""
 
@@ -1767,7 +1769,7 @@ msgid "Undo not applicable"
 msgstr ""
 
 #: src/admin/activity-log-utils.js:1427
-#: src/components/AIActivitySection.js:163
+#: src/components/AIActivitySection.js:174
 msgid "Undo available"
 msgstr ""
 
@@ -1803,7 +1805,7 @@ msgstr ""
 
 #. translators: %s: post title or ID.
 #: src/admin/activity-log-utils.js:1520
-#: src/admin/activity-log-utils.js:2512
+#: src/admin/activity-log-utils.js:2514
 #, js-format
 msgid "Post %s"
 msgstr ""
@@ -1822,26 +1824,27 @@ msgstr ""
 
 #: src/admin/activity-log-utils.js:1659
 #: src/admin/activity-log.js:3373
-#: src/components/AIActivitySection.js:100
+#: src/components/AIActivitySection.js:111
 #: src/content/ContentRecommender.js:607
+#: src/inspector/BlockRecommendationsPanel.js:1506
 #: src/style-surfaces/presentation.js:118
 msgid "Review"
 msgstr ""
 
 #: src/admin/activity-log-utils.js:1662
-#: src/components/AIActivitySection.js:108
+#: src/components/AIActivitySection.js:119
 msgid "Request failed"
 msgstr ""
 
 #: src/admin/activity-log-utils.js:1666
 #: src/admin/activity-log-utils.js:1851
-#: src/components/AIActivitySection.js:125
+#: src/components/AIActivitySection.js:136
 msgid "Apply failed"
 msgstr ""
 
 #: src/admin/activity-log-utils.js:1669
-#: src/components/AIActivitySection.js:153
-#: src/components/AIActivitySection.js:170
+#: src/components/AIActivitySection.js:164
+#: src/components/AIActivitySection.js:181
 msgid "Undo unavailable"
 msgstr ""
 
@@ -1850,26 +1853,26 @@ msgstr ""
 #: src/admin/activity-log.js:161
 #: src/admin/activity-log.js:1634
 #: src/admin/activity-log.js:3374
-#: src/components/AIActivitySection.js:144
+#: src/components/AIActivitySection.js:155
 msgid "Undone"
 msgstr ""
 
 #: src/admin/activity-log-utils.js:1673
 #: src/admin/activity-log-utils.js:1855
-#: src/admin/activity-log-utils.js:2892
+#: src/admin/activity-log-utils.js:2894
 #: src/admin/activity-log.js:191
 #: src/admin/activity-log.js:1636
 #: src/admin/activity-log.js:3377
-#: src/components/AIActivitySection.js:148
+#: src/components/AIActivitySection.js:159
 msgid "Undo blocked"
 msgstr ""
 
 #: src/admin/activity-log-utils.js:1675
-#: src/admin/activity-log-utils.js:2851
-#: src/admin/activity-log-utils.js:3221
+#: src/admin/activity-log-utils.js:2853
+#: src/admin/activity-log-utils.js:3223
 #: src/admin/activity-log.js:173
 #: src/admin/activity-log.js:3363
-#: src/components/AIActivitySection.js:116
+#: src/components/AIActivitySection.js:127
 msgid "Pending approval"
 msgstr ""
 
@@ -1877,7 +1880,7 @@ msgstr ""
 #: src/admin/activity-log-utils.js:1847
 #: src/admin/activity-log.js:179
 #: src/admin/activity-log.js:3367
-#: src/components/AIActivitySection.js:120
+#: src/components/AIActivitySection.js:131
 msgid "Rejected"
 msgstr ""
 
@@ -1885,7 +1888,7 @@ msgstr ""
 #: src/admin/activity-log-utils.js:1849
 #: src/admin/activity-log.js:185
 #: src/admin/activity-log.js:3371
-#: src/components/AIActivitySection.js:122
+#: src/components/AIActivitySection.js:133
 msgid "Expired"
 msgstr ""
 
@@ -1893,8 +1896,8 @@ msgstr ""
 #: src/admin/activity-log-utils.js:1857
 #: src/admin/activity-log.js:1640
 #: src/admin/activity-log.js:3359
-#: src/components/AIActivitySection.js:175
-#: src/inspector/SuggestionChips.js:277
+#: src/components/AIActivitySection.js:186
+#: src/inspector/SuggestionChips.js:281
 #: src/template-parts/TemplatePartRecommender.js:1152
 #: src/templates/TemplateRecommender.js:1067
 msgid "Applied"
@@ -1956,88 +1959,88 @@ msgstr ""
 
 #. translators: %s: user ID.
 #: src/admin/activity-log-utils.js:1867
-#: src/admin/activity-log-utils.js:3551
+#: src/admin/activity-log-utils.js:3553
 #, js-format
 msgid "User #%s"
 msgstr ""
 
 #: src/admin/activity-log-utils.js:2105
-#: src/admin/activity-log-utils.js:2358
+#: src/admin/activity-log-utils.js:2360
 msgid "Baseline unavailable"
 msgstr ""
 
 #: src/admin/activity-log-utils.js:2106
-#: src/admin/activity-log-utils.js:2340
+#: src/admin/activity-log-utils.js:2342
 msgid "After unavailable"
 msgstr ""
 
 #: src/admin/activity-log-utils.js:2107
-#: src/admin/activity-log-utils.js:2300
-#: src/admin/activity-log-utils.js:2312
-#: src/admin/activity-log-utils.js:2342
+#: src/admin/activity-log-utils.js:2302
+#: src/admin/activity-log-utils.js:2314
+#: src/admin/activity-log-utils.js:2344
 msgid "Not applied"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2307
+#: src/admin/activity-log-utils.js:2309
 msgid "Theme variation"
 msgstr ""
 
 #. translators: 1: template part slug, 2: template part area.
-#: src/admin/activity-log-utils.js:2496
+#: src/admin/activity-log-utils.js:2498
 #, js-format
 msgid "Template part %1$s · %2$s"
 msgstr ""
 
 #. translators: 1: block title, 2: global styles ID.
-#: src/admin/activity-log-utils.js:2528
+#: src/admin/activity-log-utils.js:2530
 #, js-format
 msgid "Style Book %1$s · Global Styles %2$s"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2579
+#: src/admin/activity-log-utils.js:2581
 msgid "An external agent requested this bounded template apply. Review the operation, provenance, and freshness evidence before deciding."
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2583
+#: src/admin/activity-log-utils.js:2585
 msgid "This external template apply row is retained for approval, provenance, freshness, and undo review."
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2587
-#: src/admin/activity-log-utils.js:2604
-#: src/admin/activity-log-utils.js:2621
+#: src/admin/activity-log-utils.js:2589
+#: src/admin/activity-log-utils.js:2606
+#: src/admin/activity-log-utils.js:2623
 msgid "AI proposes; WordPress approves. Approving applies this bounded structural change from WordPress; rejecting keeps the site unchanged."
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2596
+#: src/admin/activity-log-utils.js:2598
 msgid "An external agent requested this bounded template-part apply. Review the operation, provenance, and freshness evidence before deciding."
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2600
+#: src/admin/activity-log-utils.js:2602
 msgid "This external template-part apply row is retained for approval, provenance, freshness, and undo review."
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2613
+#: src/admin/activity-log-utils.js:2615
 msgid "An external agent requested this bounded post-content apply. Review the operation, provenance, and freshness evidence before deciding."
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2617
+#: src/admin/activity-log-utils.js:2619
 msgid "This external post-content apply row is retained for approval, provenance, freshness, and undo review."
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2629
+#: src/admin/activity-log-utils.js:2631
 msgid "An external agent requested this bounded style apply. Review the operation, provenance, and freshness evidence before deciding."
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2633
+#: src/admin/activity-log-utils.js:2635
 msgid "This external style apply row is retained for approval, provenance, freshness, and undo review."
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2637
+#: src/admin/activity-log-utils.js:2639
 msgid "AI proposes; WordPress approves. Approving applies this bounded style change from WordPress; rejecting keeps the site unchanged."
 msgstr ""
 
 #. translators: 1: number of changes, 2: change target, e.g. "Global Styles 17".
-#: src/admin/activity-log-utils.js:2766
+#: src/admin/activity-log-utils.js:2768
 #, js-format
 msgid "%1$d change applied to %2$s"
 msgid_plural "%1$d changes applied to %2$s"
@@ -2045,7 +2048,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of changes.
-#: src/admin/activity-log-utils.js:2777
+#: src/admin/activity-log-utils.js:2779
 #, js-format
 msgid "%d change applied"
 msgid_plural "%d changes applied"
@@ -2053,7 +2056,7 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: 1: number of changes, 2: change target, e.g. "Global Styles 17".
-#: src/admin/activity-log-utils.js:2789
+#: src/admin/activity-log-utils.js:2791
 #, js-format
 msgid "%1$d change proposed to %2$s"
 msgid_plural "%1$d changes proposed to %2$s"
@@ -2061,176 +2064,176 @@ msgstr[0] ""
 msgstr[1] ""
 
 #. translators: %d: number of changes.
-#: src/admin/activity-log-utils.js:2800
+#: src/admin/activity-log-utils.js:2802
 #, js-format
 msgid "%d change proposed"
 msgid_plural "%d changes proposed"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/admin/activity-log-utils.js:2827
-#: src/admin/activity-log-utils.js:2876
+#: src/admin/activity-log-utils.js:2829
+#: src/admin/activity-log-utils.js:2878
 msgid "Yes — confirmed current when applied"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2833
+#: src/admin/activity-log-utils.js:2835
 msgid "Yes — was current when applied, later undone"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2839
+#: src/admin/activity-log-utils.js:2841
 msgid "Yes — was current when applied"
 msgstr ""
 
 #. translators: %s: expiry timestamp.
-#: src/admin/activity-log-utils.js:2848
+#: src/admin/activity-log-utils.js:2850
 #, js-format
 msgid "Pending approval — expires %s"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2854
+#: src/admin/activity-log-utils.js:2856
 msgid "No — the request lapsed before approval"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2860
+#: src/admin/activity-log-utils.js:2862
 msgid "Not applied — rejected before approval"
 msgstr ""
 
 #. translators: %s: failure reason.
-#: src/admin/activity-log-utils.js:2869
+#: src/admin/activity-log-utils.js:2871
 #, js-format
 msgid "No — apply blocked: %s"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2872
+#: src/admin/activity-log-utils.js:2874
 msgid "No — apply did not complete"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2882
+#: src/admin/activity-log-utils.js:2884
 msgid "Yes — this apply can be undone"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2884
+#: src/admin/activity-log-utils.js:2886
 msgid "Already undone"
 msgstr ""
 
 #. translators: %s: reason the undo is blocked.
-#: src/admin/activity-log-utils.js:2889
+#: src/admin/activity-log-utils.js:2891
 #, js-format
 msgid "Undo blocked — %s"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2894
+#: src/admin/activity-log-utils.js:2896
 msgid "Not yet — awaiting approval"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2899
+#: src/admin/activity-log-utils.js:2901
 msgid "Nothing to undo — never applied"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2901
+#: src/admin/activity-log-utils.js:2903
 msgid "Nothing to undo — apply did not complete"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2907
+#: src/admin/activity-log-utils.js:2909
 msgid "Not reversible"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2911
+#: src/admin/activity-log-utils.js:2913
 msgid "What changed"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2912
+#: src/admin/activity-log-utils.js:2914
 #: src/admin/activity-log.js:2547
 msgid "Requested"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2914
+#: src/admin/activity-log-utils.js:2916
 msgid "Current when applied"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2917
+#: src/admin/activity-log-utils.js:2919
 msgid "Reversible"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:2991
+#: src/admin/activity-log-utils.js:2993
 msgid "You’re reviewing this."
 msgstr ""
 
 #. translators: 1: user label e.g. "User #5"; 2: relative time e.g. "3 minutes".
-#: src/admin/activity-log-utils.js:3006
+#: src/admin/activity-log-utils.js:3008
 #, js-format
 msgid "%1$s is reviewing · %2$s"
 msgstr ""
 
 #. translators: %s: user label e.g. "User #5".
-#: src/admin/activity-log-utils.js:3012
+#: src/admin/activity-log-utils.js:3014
 #, js-format
 msgid "%s is reviewing"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:3027
+#: src/admin/activity-log-utils.js:3029
 msgid "Open template"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:3040
+#: src/admin/activity-log-utils.js:3042
 msgid "Open template part"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:3050
-#: src/admin/activity-log-utils.js:3060
+#: src/admin/activity-log-utils.js:3052
+#: src/admin/activity-log-utils.js:3062
 msgid "Open Styles"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:3070
-#: src/admin/activity-log-utils.js:3080
+#: src/admin/activity-log-utils.js:3072
+#: src/admin/activity-log-utils.js:3082
 msgid "Open post"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:3157
+#: src/admin/activity-log-utils.js:3159
 msgid "Open target"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:3168
+#: src/admin/activity-log-utils.js:3170
 msgid "Open focused view"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:3177
+#: src/admin/activity-log-utils.js:3179
 msgid "Same surface"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:3185
+#: src/admin/activity-log-utils.js:3187
 msgid "Same user"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:3193
+#: src/admin/activity-log-utils.js:3195
 msgid "Same entity"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:3200
+#: src/admin/activity-log-utils.js:3202
 msgid "Same block path"
 msgstr ""
 
 #. translators: %s: expiry timestamp.
-#: src/admin/activity-log-utils.js:3225
+#: src/admin/activity-log-utils.js:3227
 #, js-format
 msgid "Expires %s"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:3249
+#: src/admin/activity-log-utils.js:3251
 msgid "AI request"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:3261
+#: src/admin/activity-log-utils.js:3263
 #: src/admin/activity-log.js:2384
 msgid "Attestation"
 msgstr ""
 
-#: src/admin/activity-log-utils.js:3567
+#: src/admin/activity-log-utils.js:3569
 msgid "No fallback"
 msgstr ""
 
 #. translators: %s: selected provider name.
-#: src/admin/activity-log-utils.js:3574
+#: src/admin/activity-log-utils.js:3576
 #, js-format
 msgid "Fallback from selected %s."
 msgstr ""
@@ -2930,7 +2933,7 @@ msgid "Raw governance diagnostics"
 msgstr ""
 
 #: src/admin/activity-log.js:2545
-#: src/inspector/BlockRecommendationsPanel.js:1372
+#: src/inspector/BlockRecommendationsPanel.js:1419
 msgid "Target"
 msgstr ""
 
@@ -3249,77 +3252,77 @@ msgstr ""
 msgid "Global Styles action"
 msgstr ""
 
-#: src/components/AIActivitySection.js:137
+#: src/components/AIActivitySection.js:148
 msgid "Undo pending sync"
 msgstr ""
 
-#: src/components/AIActivitySection.js:138
+#: src/components/AIActivitySection.js:149
 msgid "Audit sync pending"
 msgstr ""
 
-#: src/components/AIActivitySection.js:183
+#: src/components/AIActivitySection.js:194
 msgid "External apply awaiting admin approval."
 msgstr ""
 
 #. translators: %s: reviewer-supplied rejection note.
-#: src/components/AIActivitySection.js:193
+#: src/components/AIActivitySection.js:204
 #, js-format
 msgid "External apply rejected: %s"
 msgstr ""
 
-#: src/components/AIActivitySection.js:196
+#: src/components/AIActivitySection.js:207
 msgid "External apply request was rejected."
 msgstr ""
 
-#: src/components/AIActivitySection.js:199
+#: src/components/AIActivitySection.js:210
 msgid "External apply request expired before approval."
 msgstr ""
 
-#: src/components/AIActivitySection.js:208
+#: src/components/AIActivitySection.js:219
 msgid "External apply request failed."
 msgstr ""
 
 #. translators: %s: block name, with the core/ prefix removed.
-#: src/components/AIActivitySection.js:228
+#: src/components/AIActivitySection.js:239
 #, js-format
 msgid "Block request diagnostic · %s"
 msgstr ""
 
-#: src/components/AIActivitySection.js:231
+#: src/components/AIActivitySection.js:242
 msgid "Block request diagnostic"
 msgstr ""
 
 #. translators: %s: Style Book block title.
-#: src/components/AIActivitySection.js:244
+#: src/components/AIActivitySection.js:255
 #, js-format
 msgid "Style Book action · %s"
 msgstr ""
 
-#: src/components/AIActivitySection.js:247
+#: src/components/AIActivitySection.js:258
 msgid "Style Book action"
 msgstr ""
 
-#: src/components/AIActivitySection.js:254
+#: src/components/AIActivitySection.js:265
 msgid "Block action"
 msgstr ""
 
-#: src/components/AIActivitySection.js:405
+#: src/components/AIActivitySection.js:416
 msgid "AI action"
 msgstr ""
 
-#: src/components/AIActivitySection.js:421
+#: src/components/AIActivitySection.js:432
 msgid "Activity audit sync pending."
 msgstr ""
 
-#: src/components/AIActivitySection.js:454
+#: src/components/AIActivitySection.js:465
 msgid "View activity"
 msgstr ""
 
-#: src/components/AIActivitySection.js:470
+#: src/components/AIActivitySection.js:481
 msgid "Undoing…"
 msgstr ""
 
-#: src/components/AIActivitySection.js:471
+#: src/components/AIActivitySection.js:482
 #: src/components/UndoToast.js:38
 #: src/store/toasts.js:49
 msgid "Undo"
@@ -3327,7 +3330,7 @@ msgstr ""
 
 #. translators: %d: number of additional activity rows revealed by the control.
 #. translators: %d: number of additional items revealed by the control.
-#: src/components/AIActivitySection.js:488
+#: src/components/AIActivitySection.js:499
 #: src/components/AIAdvisorySection.js:153
 #, js-format
 msgid "Show %d more"
@@ -3607,7 +3610,7 @@ msgid "Global Styles suggestions stay theme-backed and keep the review-before-ap
 msgstr ""
 
 #: src/global-styles/GlobalStylesRecommender.js:186
-#: src/inspector/BlockRecommendationsPanel.js:1077
+#: src/inspector/BlockRecommendationsPanel.js:1112
 #: src/inspector/NavigationRecommendations.js:882
 #: src/style-book/StyleBookRecommender.js:209
 #: src/template-parts/TemplatePartRecommender.js:940
@@ -3662,101 +3665,273 @@ msgstr ""
 msgid "Undo is only available while the current Global Styles state still matches the applied AI change."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1132
+#: src/inspector/BlockRecommendationsPanel.js:69
+msgid "One-click apply stays limited to safe local block changes."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:73
+msgid "Content-only mode avoids style and settings changes."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:77
+msgid "This block is content-restricted. Flavor Agent will stay within editable content and may keep broader block ideas as manual guidance only."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:82
+msgid "Improve clarity"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:83
+msgid "More editorial"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:84
+msgid "Simplify layout"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:87
+msgid "Tighten the copy"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:88
+msgid "Clarify the message"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:89
+msgid "More concise"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:91
+msgid "Selected Block"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:92
+msgid "Ask for a specific outcome or fetch recommendations based on the current block context."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:661
+msgid "No recommendations were returned for the current prompt."
+msgstr ""
+
+#. translators: %s: recommendation label.
+#: src/inspector/BlockRecommendationsPanel.js:669
+#, js-format
+msgid "Applied %s."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:671
+#: src/inspector/BlockRecommendationsPanel.js:679
+#: src/style-surfaces/presentation.js:120
+msgid "suggestion"
+msgstr ""
+
+#. translators: %s: recommendation label.
+#: src/inspector/BlockRecommendationsPanel.js:677
+#, js-format
+msgid "Undid %s."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:850
+#: src/store/update-helpers.js:2332
+msgid "No block-lane suggestions returned"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:916
+msgid "Recent request diagnostics and applied actions for this block."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:920
+msgid "Newest valid block action can be undone here."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1029
+msgid "What do you want to improve about this content?"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1033
+msgid "What do you want to improve about this block?"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1035
+msgid "Describe the content change you want for this block."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1039
+msgid "Describe the outcome you want for this block."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1053
+msgid "Server apply context is missing. Refresh before applying the previous result."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1058
+msgid "Server apply context changed. Refresh before applying the previous result."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1063
+msgid "Block or prompt changed. Refresh before applying the previous result."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1156
+msgid "Inline-safe changes can apply directly."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1170
 msgid "AI block suggestions"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1182
+#: src/inspector/BlockRecommendationsPanel.js:1189
+msgid "Review required before structural apply."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1223
 msgid "Settings suggestions"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1189
+#: src/inspector/BlockRecommendationsPanel.js:1230
 msgid "Settings changes apply here only."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1198
+#: src/inspector/BlockRecommendationsPanel.js:1239
 msgid "AI settings suggestions"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1217
+#: src/inspector/BlockRecommendationsPanel.js:1258
 msgid "Style suggestions"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1224
+#: src/inspector/BlockRecommendationsPanel.js:1265
 msgid "Style changes apply here only."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1233
+#: src/inspector/BlockRecommendationsPanel.js:1274
 msgid "AI style suggestions"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1253
-#: src/inspector/BlockRecommendationsPanel.js:1259
+#: src/inspector/BlockRecommendationsPanel.js:1294
+#: src/inspector/BlockRecommendationsPanel.js:1300
 msgid "Recommended together"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1278
+#: src/inspector/BlockRecommendationsPanel.js:1319
 msgid "Select all"
 msgstr ""
 
 #. translators: %d: number of selected suggestions to apply.
-#: src/inspector/BlockRecommendationsPanel.js:1291
+#: src/inspector/BlockRecommendationsPanel.js:1332
 #, js-format
 msgid "Apply selected (%d)"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1337
+#: src/inspector/BlockRecommendationsPanel.js:1347
+msgid "These ideas are shown for reference from the last request. Refresh before acting on them against the current block."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1351
+msgid "Manual follow-through only."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1384
 msgid "Insert pattern before the selected block."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1338
+#: src/inspector/BlockRecommendationsPanel.js:1385
 msgid "Insert pattern after the selected block."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1342
+#: src/inspector/BlockRecommendationsPanel.js:1389
 msgid "Replace the selected block with a pattern."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1348
+#: src/inspector/BlockRecommendationsPanel.js:1395
 msgid "Review structural operation."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1353
+#: src/inspector/BlockRecommendationsPanel.js:1400
 msgid "Before this block"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1357
+#: src/inspector/BlockRecommendationsPanel.js:1404
 msgid "After this block"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1376
+#: src/inspector/BlockRecommendationsPanel.js:1423
 #: src/inspector/panel-delegation.js:67
 msgid "Position"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1431
-#: src/inspector/BlockRecommendationsPanel.js:1540
+#: src/inspector/BlockRecommendationsPanel.js:1461
+#: src/inspector/BlockRecommendationsPanel.js:1594
+#: src/inspector/SuggestionChips.js:31
+msgid "Suggestion"
+msgstr ""
+
+#. translators: %s: recommendation label.
+#: src/inspector/BlockRecommendationsPanel.js:1466
+#, js-format
+msgid "Refresh to review %s"
+msgstr ""
+
+#. translators: %s: recommendation label.
+#: src/inspector/BlockRecommendationsPanel.js:1471
+#, js-format
+msgctxt "recommendation action label"
+msgid "Review %s"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1490
+#: src/inspector/BlockRecommendationsPanel.js:1605
 msgid "Validator computed"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1483
+#: src/inspector/BlockRecommendationsPanel.js:1505
+msgid "Refresh to review"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1544
 msgid "Selected structural review"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1489
+#: src/inspector/BlockRecommendationsPanel.js:1550
 msgid "This review is scoped to the current block, request token, and request signature."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1603
-#: src/inspector/BlockRecommendationsPanel.js:1647
+#: src/inspector/BlockRecommendationsPanel.js:1565
+msgid "Applying structure"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1566
+msgid "Apply reviewed structure"
+msgstr ""
+
+#. translators: %s: comma-separated eligibility blocker labels.
+#: src/inspector/BlockRecommendationsPanel.js:1622
+#, js-format
+msgid "Eligibility blockers: %s."
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1659
+msgid "Structure"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1663
+msgid "Style variation"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1665
+msgid "Manual idea"
+msgstr ""
+
+#: src/inspector/BlockRecommendationsPanel.js:1672
+#: src/inspector/BlockRecommendationsPanel.js:1716
 msgid "AI Recommendations"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1651
+#: src/inspector/BlockRecommendationsPanel.js:1720
 msgid "Last Selected Block"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1652
+#: src/inspector/BlockRecommendationsPanel.js:1721
 msgid "Using the last selected block until selection returns."
 msgstr ""
 
@@ -3935,15 +4110,11 @@ msgstr ""
 msgid "List View"
 msgstr ""
 
-#: src/inspector/SuggestionChips.js:30
-msgid "Suggestion"
-msgstr ""
-
-#: src/inspector/SuggestionChips.js:159
+#: src/inspector/SuggestionChips.js:160
 msgid "These hints mirror the latest AI Recommendations result. Apply them from that main panel."
 msgstr ""
 
-#: src/inspector/SuggestionChips.js:174
+#: src/inspector/SuggestionChips.js:175
 msgid "These suggestions reflect the last AI Recommendations request. Refresh that main panel to update them for the current block."
 msgstr ""
 
@@ -4254,6 +4425,8 @@ msgid "The activity entry is unavailable."
 msgstr ""
 
 #: src/store/activity-session.js:139
+#: src/store/index.js:1139
+#: src/store/index.js:1885
 msgid "Request failed."
 msgstr ""
 
@@ -4335,84 +4508,114 @@ msgstr ""
 msgid "Style Book apply failed unexpectedly."
 msgstr ""
 
-#: src/store/index.js:582
+#: src/store/index.js:256
+msgid "The block recommendation endpoint returned a non-JSON response."
+msgstr ""
+
+#: src/store/index.js:260
+msgid "WordPress REST returned a response the editor could not parse as JSON. Check the HTTP response body and PHP debug log for warning output, a fatal error page, or a proxy/auth HTML response."
+msgstr ""
+
+#: src/store/index.js:586
 msgid "This template result is stale. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:587
+#: src/store/index.js:591
 msgid "This template-part result is stale. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:592
+#: src/store/index.js:596
 msgid "This Global Styles result is stale. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:597
+#: src/store/index.js:601
 msgid "This Style Book result is stale. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:602
+#: src/store/index.js:606
 msgid "This result is stale. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:612
+#: src/store/index.js:616
 msgid "This template result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:617
+#: src/store/index.js:621
 msgid "This template-part result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:622
+#: src/store/index.js:626
 msgid "This Global Styles result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:627
+#: src/store/index.js:631
 msgid "This Style Book result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:632
+#: src/store/index.js:636
 msgid "This result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:642
+#: src/store/index.js:646
 msgid "This template result is missing the server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:647
+#: src/store/index.js:651
 msgid "This template-part result is missing the server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:652
+#: src/store/index.js:656
 msgid "This Global Styles result is missing the server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:657
+#: src/store/index.js:661
 msgid "This Style Book result is missing the server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:662
+#: src/store/index.js:666
 msgid "This result is missing the server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:672
+#: src/store/index.js:676
 msgid "Flavor Agent could not revalidate this template result against the current server apply context. Try again or refresh recommendations."
 msgstr ""
 
-#: src/store/index.js:677
+#: src/store/index.js:681
 msgid "Flavor Agent could not revalidate this template-part result against the current server apply context. Try again or refresh recommendations."
 msgstr ""
 
-#: src/store/index.js:682
+#: src/store/index.js:686
 msgid "Flavor Agent could not revalidate this Global Styles result against the current server apply context. Try again or refresh recommendations."
 msgstr ""
 
-#: src/store/index.js:687
+#: src/store/index.js:691
 msgid "Flavor Agent could not revalidate this Style Book result against the current server apply context. Try again or refresh recommendations."
 msgstr ""
 
-#: src/store/index.js:692
+#: src/store/index.js:696
 msgid "Flavor Agent could not revalidate this result against the current server apply context. Try again or refresh recommendations."
+msgstr ""
+
+#. translators: %s: transport error detail returned by the connector.
+#: src/store/index.js:1158
+#, js-format
+msgid "Transport detail: %s"
+msgstr ""
+
+#. translators: %s: original parser error message.
+#: src/store/index.js:1171
+#, js-format
+msgid "Original parser message: %s"
+msgstr ""
+
+#: src/store/index.js:2262
+msgid "This suggestion is advisory and requires manual follow-through or a broader preview/apply flow."
+msgstr ""
+
+#: src/store/index.js:2335
+#: src/store/index.js:2416
+#: src/store/index.js:2744
+msgid "This suggestion includes unsupported or unsafe attribute changes and could not be applied."
 msgstr ""
 
 #: src/store/recommendation-outcomes.js:35
@@ -4535,10 +4738,6 @@ msgstr ""
 msgid "The block context exposed no mapped inspector panels for this request."
 msgstr ""
 
-#: src/store/update-helpers.js:2332
-msgid "No block-lane suggestions returned"
-msgstr ""
-
 #: src/store/update-helpers.js:2333
 msgid "Block-lane suggestions were filtered out"
 msgstr ""
@@ -4605,10 +4804,6 @@ msgstr ""
 
 #: src/style-surfaces/presentation.js:117
 msgid "Reviewing"
-msgstr ""
-
-#: src/style-surfaces/presentation.js:120
-msgid "suggestion"
 msgstr ""
 
 #: src/style-surfaces/presentation.js:151
@@ -4789,45 +4984,81 @@ msgstr ""
 msgid "Template Parts"
 msgstr ""
 
-#: src/utils/block-structural-actions.js:15
+#: src/utils/block-structural-actions.js:16
 msgid "The block structure changed after Flavor Agent applied this suggestion and cannot be undone automatically."
 msgstr ""
 
-#: src/utils/block-structural-actions.js:266
+#: src/utils/block-structural-actions.js:20
+msgid "Flavor Agent could not safely roll back the structural change. Review the block structure before continuing."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:24
+msgid "Flavor Agent could not restore the replaced block after the structural change failed. Review the block structure before continuing."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:28
+msgid "The current editor constraints do not allow this structural action to be undone automatically."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:32
+msgid "The structural action could not be undone completely. Review the block structure before continuing."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:36
+msgid "The recorded blocks are no longer available in this editor session, so this structural action cannot be undone automatically."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:40
+msgid "This block structural action is missing its recorded structure and cannot be undone automatically."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:305
 msgid "The selected block is no longer available. Refresh recommendations and try again."
 msgstr ""
 
-#: src/utils/block-structural-actions.js:270
+#: src/utils/block-structural-actions.js:309
 msgid "The selected block no longer matches the reviewed operation. Refresh recommendations and try again."
 msgstr ""
 
-#: src/utils/block-structural-actions.js:274
+#: src/utils/block-structural-actions.js:313
 msgid "The recommended pattern is no longer available. Refresh recommendations and try again."
 msgstr ""
 
-#: src/utils/block-structural-actions.js:278
+#: src/utils/block-structural-actions.js:317
 msgid "The selected block is locked and cannot be structurally changed."
 msgstr ""
 
-#: src/utils/block-structural-actions.js:282
+#: src/utils/block-structural-actions.js:321
 msgid "The selected block is content-only and cannot be structurally changed."
 msgstr ""
 
-#: src/utils/block-structural-actions.js:286
+#: src/utils/block-structural-actions.js:325
 msgid "Block structural actions are disabled for this environment."
 msgstr ""
 
-#: src/utils/block-structural-actions.js:290
+#: src/utils/block-structural-actions.js:329
 msgid "The structural operation is no longer valid. Refresh recommendations and try again."
 msgstr ""
 
-#: src/utils/block-structural-actions.js:574
+#. translators: %s: block pattern name.
+#: src/utils/block-structural-actions.js:717
+#, js-format
+msgid "Pattern “%s” could not be inserted for the selected block."
+msgstr ""
+
+#: src/utils/block-structural-actions.js:721
+#: src/utils/block-structural-actions.js:913
+msgid "unknown"
+msgstr ""
+
+#: src/utils/block-structural-actions.js:815
 msgid "The selected block could not be removed before replacement."
 msgstr ""
 
-#: src/utils/block-structural-actions.js:745
-#: src/utils/block-structural-actions.js:790
-msgid "This block structural action is missing its recorded structure and cannot be undone automatically."
+#. translators: %s: block pattern name.
+#: src/utils/block-structural-actions.js:909
+#, js-format
+msgid "Pattern “%s” could not replace the selected block."
 msgstr ""
 
 #: src/utils/capability-flags.js:133
@@ -5047,6 +5278,18 @@ msgid "%d viewport constraint"
 msgid_plural "%d viewport constraints"
 msgstr[0] ""
 msgstr[1] ""
+
+#: src/utils/recommendation-actionability.js:40
+msgid "Inline-safe"
+msgstr ""
+
+#: src/utils/recommendation-actionability.js:41
+msgid "Review-safe"
+msgstr ""
+
+#: src/utils/recommendation-actionability.js:42
+msgid "Advisory"
+msgstr ""
 
 #: src/utils/recommendation-actionability.js:46
 msgid "Safe local attribute update"

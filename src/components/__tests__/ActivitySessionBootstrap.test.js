@@ -4,10 +4,20 @@ const mockLoadActivitySession = jest.fn();
 const mockGetStyleBookUiState = jest.fn();
 const mockSubscribeToStyleBookUi = jest.fn();
 
-jest.mock( '@wordpress/data', () => ( {
-	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
-	useSelect: ( ...args ) => mockUseSelect( ...args ),
-} ) );
+jest.mock( '@wordpress/data', () => {
+	const actual = jest.requireActual( '@wordpress/data' );
+
+	return Object.create( actual, {
+		useDispatch: {
+			enumerable: true,
+			value: ( ...args ) => mockUseDispatch( ...args ),
+		},
+		useSelect: {
+			enumerable: true,
+			value: ( ...args ) => mockUseSelect( ...args ),
+		},
+	} );
+} );
 
 jest.mock( '../../store', () => ( {
 	STORE_NAME: 'flavor-agent',

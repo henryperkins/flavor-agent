@@ -7,6 +7,7 @@ namespace FlavorAgent\Tests;
 use FlavorAgent\Abilities\RecommendationAbilityExecution;
 use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Activity\RequestLoggingBridge;
+use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Support\FlavorAgentRequestTag;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -68,6 +69,35 @@ final class RecommendationAbilityExecutionTest extends TestCase {
 		$this->assertSame(
 			'flavor-agent/recommend-template',
 			$request['ai']['ability'] ?? null
+		);
+	}
+
+	public function test_execute_does_not_inherit_unconsumed_runtime_diagnostics(): void {
+		Provider::record_runtime_chat_diagnostics(
+			[
+				'transport' => [
+					'host'           => 'wordpress-ai-client',
+					'path'           => '/generate-text',
+					'timeoutSeconds' => 90,
+				],
+			]
+		);
+
+		WordPressTestState::reset();
+
+		$result = RecommendationAbilityExecution::execute(
+			'template',
+			'flavor-agent/recommend-template',
+			[ 'templateRef' => 'theme//home' ],
+			static fn(): array => [
+				'suggestions' => [ [ 'label' => 'Clarify header hierarchy' ] ],
+				'requestMeta' => [ 'transport' => [ 'provider' => 'test' ] ],
+			]
+		);
+
+		$this->assertSame(
+			[ 'provider' => 'test' ],
+			$result['requestMeta']['transport'] ?? null
 		);
 	}
 

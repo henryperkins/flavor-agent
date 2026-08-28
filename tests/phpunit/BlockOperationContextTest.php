@@ -51,7 +51,6 @@ final class BlockOperationContextTest extends TestCase {
 						'targetClientId'   => 'paragraph-1',
 						'targetBlockName'  => 'core/paragraph',
 						'targetSignature'  => 'signature-123',
-						'isTargetLocked'   => true,
 						'isContentOnly'    => false,
 						'editingMode'      => 'default',
 						'allowedPatterns'  => [
@@ -79,7 +78,6 @@ final class BlockOperationContextTest extends TestCase {
 				'targetClientId'  => 'paragraph-1',
 				'targetBlockName' => 'core/paragraph',
 				'targetSignature' => 'signature-123',
-				'isTargetLocked'  => true,
 				'isContentOnly'   => false,
 				'editingMode'     => 'default',
 				'allowedPatterns' => [

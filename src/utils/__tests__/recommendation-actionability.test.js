@@ -13,6 +13,7 @@ import {
 	ACTIONABILITY_TIER_REVIEW_SAFE,
 	classifyBlockSuggestionActionability,
 	classifyOperationActionability,
+	getActionabilityLabel,
 	summarizeActionability,
 } from '../recommendation-actionability';
 import {
@@ -30,6 +31,15 @@ import {
 } from '../block-operation-catalog';
 
 describe( 'recommendation actionability', () => {
+	test.each( [
+		[ ACTIONABILITY_TIER_INLINE_SAFE, 'Inline-safe' ],
+		[ ACTIONABILITY_TIER_REVIEW_SAFE, 'Review-safe' ],
+		[ ACTIONABILITY_TIER_ADVISORY, 'Advisory' ],
+		[ 'unknown-tier', 'Advisory' ],
+	] )( 'labels the %s tier for source-locale output', ( tier, expected ) => {
+		expect( getActionabilityLabel( tier ) ).toBe( expected );
+	} );
+
 	test( 'computes block eligibility from validator state instead of model-provided metadata', () => {
 		expect(
 			classifyBlockSuggestionActionability( {

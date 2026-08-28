@@ -454,6 +454,15 @@ namespace FlavorAgent\Tests\Support {
 
 		public static function reset(): void
 		{
+			// Provider caches runtime chat configuration/metrics/diagnostics in
+			// one-shot private statics that are cleared only when a consumer
+			// reads them. Recording null drains all three so diagnostics
+			// recorded by one test cannot leak into the next test's
+			// active_chat_request_meta() call.
+			\FlavorAgent\OpenAI\Provider::record_runtime_chat_configuration(null);
+			\FlavorAgent\OpenAI\Provider::record_runtime_chat_metrics(null);
+			\FlavorAgent\OpenAI\Provider::record_runtime_chat_diagnostics(null);
+
 			self::$global_settings             = [];
 			self::$global_styles               = [];
 			self::$active_theme                = [];

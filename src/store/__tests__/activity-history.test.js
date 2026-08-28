@@ -699,6 +699,7 @@ describe( 'activity history helpers', () => {
 					rootClientId: null,
 				},
 				index: 1,
+				insertedClientIds: [ 'pattern-1' ],
 				insertedBlocksSnapshot: [
 					{
 						name: 'core/paragraph',
@@ -728,6 +729,13 @@ describe( 'activity history helpers', () => {
 		];
 		const blockEditorSelect = {
 			getBlocks: () => appliedBlocks,
+			getBlock: ( clientId ) =>
+				appliedBlocks.find(
+					( block ) => block.clientId === clientId
+				) || null,
+			getBlockRootClientId: () => null,
+			canRemoveBlocks: () => true,
+			canInsertBlockType: () => true,
 		};
 		const entry = createActivityEntry( {
 			type: 'apply_block_structural_suggestion',
@@ -767,6 +775,83 @@ describe( 'activity history helpers', () => {
 				canUndo: false,
 				status: 'failed',
 				error: 'The block structure changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+			} )
+		);
+	} );
+
+	test( 'structurally identical reloaded block activity is non-undoable when recorded runtime IDs no longer resolve', () => {
+		const operations = [
+			{
+				type: 'insert_pattern',
+				patternName: 'theme/hero',
+				rootLocator: {
+					type: 'root',
+					rootClientId: null,
+				},
+				index: 1,
+				insertedClientIds: [ 'old-pattern-group' ],
+				insertedBlocksSnapshot: [
+					{
+						name: 'core/group',
+						attributes: { className: 'pattern-group' },
+						innerBlocks: [
+							{
+								name: 'core/paragraph',
+								attributes: { content: 'Nested copy' },
+								innerBlocks: [],
+							},
+						],
+					},
+				],
+			},
+		];
+		const reloadedBlocks = [
+			{
+				clientId: 'reloaded-target',
+				name: 'core/group',
+				attributes: {},
+				innerBlocks: [],
+			},
+			{
+				clientId: 'reloaded-pattern-group',
+				name: 'core/group',
+				attributes: { className: 'pattern-group' },
+				innerBlocks: [
+					{
+						clientId: 'reloaded-pattern-inner',
+						name: 'core/paragraph',
+						attributes: { content: 'Nested copy' },
+						innerBlocks: [],
+					},
+				],
+			},
+		];
+		const blockEditorSelect = {
+			getBlocks: () => reloadedBlocks,
+			getBlock: ( clientId ) =>
+				reloadedBlocks.find(
+					( block ) => block.clientId === clientId
+				) || null,
+			getBlockRootClientId: () => null,
+			canRemoveBlocks: () => true,
+			canInsertBlockType: () => true,
+		};
+		const structuralSignature = getBlockStructuralActivitySignature(
+			{ after: { operations } },
+			blockEditorSelect
+		);
+		const entry = createActivityEntry( {
+			type: 'apply_block_structural_suggestion',
+			surface: 'block',
+			before: { structuralSignature: 'before-signature' },
+			after: { operations, structuralSignature },
+		} );
+
+		expect( getBlockActivityUndoState( entry, blockEditorSelect ) ).toEqual(
+			expect.objectContaining( {
+				canUndo: false,
+				status: 'failed',
+				error: 'The recorded blocks are no longer available in this editor session, so this structural action cannot be undone automatically.',
 			} )
 		);
 	} );

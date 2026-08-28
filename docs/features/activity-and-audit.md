@@ -69,6 +69,8 @@ Enforced by `inc/Activity/RequestLoggingBridge.php`. Settings-screen copy lives 
 
 Undo is tail-ordered and state-validated before a stored action can be reverted. The canonical state model, terminal transitions, per-surface undo inputs, and blocked/unavailable projections live in `docs/reference/activity-state-machine.md`.
 
+Structural activity rows remain persisted audit history, but editor-side structural undo depends on the exact `insertedClientIds` or `replacementClientIds` recorded by the active editor runtime. Reloading the editor regenerates Gutenberg client IDs, so a hydrated structural row whose recorded IDs no longer resolve projects as non-undoable. Flavor Agent does not infer replacement identities from block position, path, or stored snapshots.
+
 ## Primary Functions And Handlers
 
 | Layer | Function / class | Role |

@@ -493,6 +493,139 @@ final class PromptRulesTest extends TestCase {
 		$this->assertSame( 0.858, $result['settings'][0]['ranking']['score'] );
 	}
 
+	public function test_parse_response_canonicalizes_hex_preview_colors_in_every_suggestion_lane(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'settings' => [
+						[
+							'label'            => 'Use accent setting',
+							'panel'            => 'color',
+							'attributeUpdates' => [ 'backgroundColor' => 'accent' ],
+							'preview'          => ' #ABC ',
+						],
+					],
+					'styles'   => [
+						[
+							'label'            => 'Use accent style',
+							'panel'            => 'color',
+							'attributeUpdates' => [ 'style' => [ 'color' => [ 'text' => '#abcdef' ] ] ],
+							'preview'          => ' #ABCD ',
+						],
+					],
+					'block'    => [
+						[
+							'label'   => 'Use accent block treatment',
+							'type'    => 'structural_recommendation',
+							'preview' => ' #AABBCCDD ',
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame(
+			[
+				'settings' => '#abc',
+				'styles'   => '#abcd',
+				'block'    => '#aabbccdd',
+			],
+			[
+				'settings' => $result['settings'][0]['preview'],
+				'styles'   => $result['styles'][0]['preview'],
+				'block'    => $result['block'][0]['preview'],
+			]
+		);
+	}
+
+	/**
+	 * @dataProvider invalid_preview_values_provider
+	 */
+	public function test_parse_response_rejects_non_hex_preview_values_in_every_suggestion_lane( string $preview ): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'settings' => [
+						[
+							'label'            => 'Unsafe setting preview',
+							'panel'            => 'color',
+							'attributeUpdates' => [ 'backgroundColor' => 'accent' ],
+							'preview'          => $preview,
+						],
+					],
+					'styles'   => [
+						[
+							'label'            => 'Unsafe style preview',
+							'panel'            => 'color',
+							'attributeUpdates' => [ 'style' => [ 'color' => [ 'text' => '#abcdef' ] ] ],
+							'preview'          => $preview,
+						],
+					],
+					'block'    => [
+						[
+							'label'   => 'Unsafe block preview',
+							'type'    => 'structural_recommendation',
+							'preview' => $preview,
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertNull( $result['settings'][0]['preview'] );
+		$this->assertNull( $result['styles'][0]['preview'] );
+		$this->assertNull( $result['block'][0]['preview'] );
+	}
+
+	/**
+	 * @return array<string, array{string}>
+	 */
+	public static function invalid_preview_values_provider(): array {
+		return [
+			'url'             => [ 'url(https://preview-probe.invalid/pixel)' ],
+			'gradient'        => [ 'linear-gradient(#fff, #000)' ],
+			'named color'     => [ 'red' ],
+			'custom property' => [ 'var(--wp--preset--color--contrast)' ],
+			'two digits'      => [ '#12' ],
+			'five digits'     => [ '#12345' ],
+			'nine digits'     => [ '#123456789' ],
+			'nonhex'          => [ '#ggg' ],
+			'declaration'     => [ '#fff; background-image: url(https://preview-probe.invalid/pixel)' ],
+		];
+	}
+
+	public function test_parse_response_does_not_rank_invalid_preview_above_absent_preview(): void {
+		$result = Prompt::parse_response(
+			wp_json_encode(
+				[
+					'block' => [
+						[
+							'label'       => 'Invalid preview',
+							'description' => 'Otherwise identical recommendation.',
+							'type'        => 'structural_recommendation',
+							'preview'     => 'url(https://preview-probe.invalid/pixel)',
+						],
+						[
+							'label'       => 'Absent preview',
+							'description' => 'Otherwise identical recommendation.',
+							'type'        => 'structural_recommendation',
+						],
+					],
+				]
+			)
+		);
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'Invalid preview', $result['block'][0]['label'] );
+		$this->assertNull( $result['block'][0]['preview'] );
+		$this->assertSame(
+			$result['block'][1]['ranking']['score'],
+			$result['block'][0]['ranking']['score']
+		);
+	}
+
 	public function test_parse_response_extracts_json_object_from_surrounding_text(): void {
 		$result = Prompt::parse_response(
 			<<<'TEXT'

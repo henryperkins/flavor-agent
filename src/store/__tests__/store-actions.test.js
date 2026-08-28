@@ -1,8 +1,11 @@
+jest.mock( '@wordpress/i18n', () =>
+	require( '../../test-utils/i18n-mock' ).createI18nMock()
+);
 jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 jest.mock( '../../context/collector', () => ( {
 	getLiveBlockContextData: jest.fn( () => ( {
 		context: { block: { name: 'core/group' } },
-		signature: 'live-block-context-signature',
+		signature: 'client-sig',
 	} ) ),
 } ) );
 jest.mock( '../../utils/template-actions', () => ( {
@@ -25,12 +28,18 @@ jest.mock( '../../utils/style-operations', () => ( {
 	undoGlobalStyleSuggestionOperations: jest.fn(),
 } ) );
 const mockRawHandler = jest.fn();
-jest.mock( '@wordpress/blocks', () => ( {
-	rawHandler: ( ...args ) => mockRawHandler( ...args ),
-} ) );
+jest.mock( '@wordpress/blocks', () => {
+	const { cloneBlock } = jest.requireActual( '@wordpress/blocks' );
+
+	return {
+		cloneBlock,
+		rawHandler: ( ...args ) => mockRawHandler( ...args ),
+	};
+} );
 
 import apiFetch from '@wordpress/api-fetch';
 import { normalizeAbilityExecutionResult } from '../../../assets/ability-execution-utils';
+import { getLiveBlockContextData } from '../../context/collector';
 
 import {
 	applyGlobalStyleSuggestionOperations,
@@ -71,6 +80,8 @@ import {
 import { getClientRequestSessionId } from '../client-request-identity';
 import { CONNECTOR_NOT_APPROVED_CODE } from '../request-error-details';
 import { resetRecommendationOutcomeDedupeForTests } from '../recommendation-outcomes';
+
+const i18n = require( '@wordpress/i18n' );
 
 const TEMPLATE_PROMPT =
 	'Make this template read more like an editorial front page.';
@@ -170,6 +181,45 @@ function installAbilitiesBridge() {
 	};
 }
 
+function createDeferred() {
+	let resolve;
+	let reject;
+	const promise = new Promise( ( promiseResolve, promiseReject ) => {
+		resolve = promiseResolve;
+		reject = promiseReject;
+	} );
+
+	return { promise, reject, resolve };
+}
+
+const BLOCK_APPLY_STALE_FORBIDDEN_ACTION_TYPES = [
+	'LOG_ACTIVITY',
+	'FLAVOR_AGENT_TOAST_ENQUEUE',
+	'SET_BLOCK_CLIENT_CONTEXT_BASELINE',
+	'SET_BLOCK_RESOLVED_REBASELINE_PENDING',
+	'ADOPT_BLOCK_RESOLVED_CONTEXT_BASELINE',
+	'SET_ACTIVITY_SESSION',
+];
+
+function expectNoBlockApplyStaleSideEffects( dispatch ) {
+	const actionTypes = dispatch.mock.calls
+		.map( ( [ action ] ) => action?.type )
+		.filter( Boolean );
+
+	for ( const actionType of BLOCK_APPLY_STALE_FORBIDDEN_ACTION_TYPES ) {
+		expect( actionTypes ).not.toContain( actionType );
+	}
+}
+
+function getScopedEditorSelectors( storeName ) {
+	return storeName === 'core/editor'
+		? {
+				getCurrentPostType: () => 'post',
+				getCurrentPostId: () => 42,
+		  }
+		: {};
+}
+
 function createSelectorsForState( getState ) {
 	return Object.fromEntries(
 		Object.entries( selectors ).map( ( [ key, selector ] ) => [
@@ -266,9 +316,39 @@ function createBlockApplyRegistry( {
 	};
 }
 
+function createStructuralCoreSelectors( {
+	getLiveBlocks,
+	insertableBlockNames,
+	rootClientId = null,
+} ) {
+	const hasLiveBlock = ( clientId ) =>
+		getLiveBlocks().some( ( block ) => block.clientId === clientId );
+
+	return {
+		canInsertBlockType: jest.fn(
+			( blockName, destinationRootClientId ) =>
+				insertableBlockNames.includes( blockName ) &&
+				( destinationRootClientId || null ) === ( rootClientId || null )
+		),
+		canRemoveBlock: jest.fn( ( clientId ) => hasLiveBlock( clientId ) ),
+		canRemoveBlocks: jest.fn(
+			( clientIds ) =>
+				Array.isArray( clientIds ) &&
+				clientIds.length > 0 &&
+				clientIds.every( ( clientId ) => hasLiveBlock( clientId ) )
+		),
+	};
+}
+
 describe( 'store action thunks', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
+		i18n.__.mockImplementation( ( text ) => text );
+		getLiveBlockContextData.mockReset();
+		getLiveBlockContextData.mockReturnValue( {
+			context: { block: { name: 'core/group' } },
+			signature: 'client-sig',
+		} );
 		resetRecommendationOutcomeDedupeForTests();
 		jest.useFakeTimers();
 		window.sessionStorage.clear();
@@ -307,6 +387,8 @@ describe( 'store action thunks', () => {
 	} );
 
 	afterEach( () => {
+		jest.restoreAllMocks();
+
 		if ( actions._activitySessionRetryTimer ) {
 			window.clearTimeout( actions._activitySessionRetryTimer );
 			actions._activitySessionRetryTimer = null;
@@ -601,6 +683,50 @@ describe( 'store action thunks', () => {
 		);
 	} );
 
+	test( 'fetchBlockRecommendations preserves source-locale fallback and transport diagnostics', async () => {
+		apiFetch.mockRejectedValue( {
+			data: {
+				requestMeta: {
+					errorSummary: {
+						wrappedMessage:
+							'cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
+					},
+				},
+			},
+		} );
+
+		const dispatch = jest.fn();
+		const select = {
+			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
+		};
+
+		await actions.fetchBlockRecommendations(
+			'block-1',
+			{ block: { name: 'core/paragraph' } },
+			'Tighten this copy.'
+		)( {
+			dispatch,
+			registry: {
+				select: jest.fn( getScopedEditorSelectors ),
+			},
+			select,
+		} );
+
+		const diagnostics = dispatch.mock.calls.find(
+			( [ action ] ) => action?.type === 'SET_BLOCK_RECS'
+		)?.[ 0 ].diagnostics;
+
+		expect( diagnostics ).toEqual(
+			expect.objectContaining( {
+				title: 'Block request failed',
+				errorMessage: 'Request failed.',
+				detailLines: [
+					'Transport detail: cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
+				],
+			} )
+		);
+	} );
+
 	test( 'fetchBlockRecommendations keeps connector approval details on request state only', async () => {
 		const connectorApprovalError = {
 			code: CONNECTOR_NOT_APPROVED_CODE,
@@ -739,6 +865,14 @@ describe( 'store action thunks', () => {
 		apiFetch.mockRejectedValue( {
 			code: 'invalid_json',
 			message: 'The response is not a valid JSON response.',
+			data: {
+				requestMeta: {
+					errorSummary: {
+						wrappedMessage:
+							'cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
+					},
+				},
+			},
 		} );
 
 		const dispatch = jest.fn();
@@ -795,11 +929,68 @@ describe( 'store action thunks', () => {
 					errorMessage:
 						'The block recommendation endpoint returned a non-JSON response.',
 					detailLines: expect.arrayContaining( [
+						'Transport detail: cURL error 28: Operation timed out after 180001 milliseconds with 0 bytes received',
 						'WordPress REST returned a response the editor could not parse as JSON. Check the HTTP response body and PHP debug log for warning output, a fatal error page, or a proxy/auth HTML response.',
 						'Original parser message: The response is not a valid JSON response.',
 					] ),
 				} ),
 			} )
+		);
+	} );
+
+	test( 'formats translated diagnostic labels without translating connector or parser messages', async () => {
+		i18n.__.mockImplementation( ( text ) => {
+			const translations = {
+				'Transport detail: %s': 'Translated transport: %s',
+				'Original parser message: %s': 'Translated parser: %s',
+				'Connector-owned detail':
+					'Incorrectly translated connector detail',
+				'Parser-owned detail': 'Incorrectly translated parser detail',
+			};
+
+			return translations[ text ] || text;
+		} );
+		apiFetch.mockRejectedValue( {
+			code: 'invalid_json',
+			message: 'Parser-owned detail',
+			data: {
+				requestMeta: {
+					errorSummary: {
+						wrappedMessage: 'Connector-owned detail',
+					},
+				},
+			},
+		} );
+		const dispatch = jest.fn();
+
+		await actions.fetchBlockRecommendations(
+			'block-1',
+			{ block: { name: 'core/paragraph' } },
+			'Tighten this copy.'
+		)( {
+			dispatch,
+			registry: {
+				select: jest.fn( getScopedEditorSelectors ),
+			},
+			select: {
+				getBlockRequestToken: jest.fn().mockReturnValue( 7 ),
+			},
+		} );
+
+		const detailLines = dispatch.mock.calls.find(
+			( [ action ] ) => action?.type === 'SET_BLOCK_RECS'
+		)?.[ 0 ].diagnostics.detailLines;
+
+		expect( detailLines ).toEqual( [
+			'Translated transport: Connector-owned detail',
+			'WordPress REST returned a response the editor could not parse as JSON. Check the HTTP response body and PHP debug log for warning output, a fatal error page, or a proxy/auth HTML response.',
+			'Translated parser: Parser-owned detail',
+		] );
+		expect( i18n.__.mock.calls.map( ( [ text ] ) => text ) ).toEqual(
+			expect.not.arrayContaining( [
+				'Connector-owned detail',
+				'Parser-owned detail',
+			] )
 		);
 	} );
 
@@ -3647,6 +3838,7 @@ describe( 'store action thunks', () => {
 			null,
 			{
 				clientId: 'block-1',
+				contextSignature: 'client-sig',
 				editorContext: {
 					block: {
 						name: 'core/paragraph',
@@ -3752,6 +3944,7 @@ describe( 'store action thunks', () => {
 			null,
 			{
 				clientId: 'block-1',
+				contextSignature: 'client-sig',
 				editorContext: {
 					block: {
 						name: 'core/paragraph',
@@ -3827,6 +4020,10 @@ describe( 'store action thunks', () => {
 					},
 				],
 			} ) ),
+			...createStructuralCoreSelectors( {
+				getLiveBlocks: () => blocks,
+				insertableBlockNames: [ 'core/paragraph' ],
+			} ),
 		};
 		const dispatch = jest.fn();
 		const select = {
@@ -3877,6 +4074,7 @@ describe( 'store action thunks', () => {
 		};
 		const liveRequestInput = {
 			clientId: 'block-1',
+			contextSignature: 'context-sig',
 			editorContext: {
 				block: {
 					name: 'core/group',
@@ -3901,6 +4099,10 @@ describe( 'store action thunks', () => {
 			},
 			prompt: 'Add a hero.',
 		};
+		getLiveBlockContextData.mockReturnValue( {
+			context: liveRequestInput.editorContext,
+			signature: 'context-sig',
+		} );
 
 		const result = await actions.applyBlockStructuralSuggestion(
 			'block-1',
@@ -3912,12 +4114,14 @@ describe( 'store action thunks', () => {
 			registry,
 			select,
 		} );
+		const insertedClientId = blocks[ 1 ].clientId;
 
 		expect( result ).toBe( true );
+		expect( insertedClientId ).not.toBe( 'pattern-1' );
 		expect( insertBlocks ).toHaveBeenCalledWith(
 			[
 				expect.objectContaining( {
-					clientId: 'pattern-1',
+					clientId: insertedClientId,
 					name: 'core/paragraph',
 				} ),
 			],
@@ -3928,7 +4132,14 @@ describe( 'store action thunks', () => {
 		);
 		expect( blocks.map( ( block ) => block.clientId ) ).toEqual( [
 			'block-1',
-			'pattern-1',
+			insertedClientId,
+		] );
+		expect( blockEditorSelect.canInsertBlockType ).toHaveBeenCalledWith(
+			'core/paragraph',
+			null
+		);
+		expect( blockEditorSelect.canRemoveBlocks ).toHaveBeenCalledWith( [
+			insertedClientId,
 		] );
 		expect( dispatch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
@@ -3949,6 +4160,7 @@ describe( 'store action thunks', () => {
 							expect.objectContaining( {
 								type: 'insert_pattern',
 								patternName: 'theme/hero',
+								insertedClientIds: [ insertedClientId ],
 							} ),
 						],
 					} ),
@@ -4007,6 +4219,10 @@ describe( 'store action thunks', () => {
 					},
 				],
 			} ) ),
+			...createStructuralCoreSelectors( {
+				getLiveBlocks: () => blocks,
+				insertableBlockNames: [ 'core/paragraph' ],
+			} ),
 		};
 		const dispatch = jest.fn();
 		const select = {
@@ -4055,6 +4271,32 @@ describe( 'store action thunks', () => {
 				],
 			},
 		};
+		const liveEditorContext = {
+			block: {
+				name: 'core/group',
+			},
+			blockOperationContext: {
+				enableBlockStructuralActions: true,
+				targetClientId: 'block-1',
+				targetBlockName: 'core/paragraph',
+				targetSignature: 'target-sig',
+				allowedPatterns: [
+					{
+						name: 'theme/hero',
+						title: 'Hero',
+						allowedActions: [
+							'insert_before',
+							'insert_after',
+							'replace',
+						],
+					},
+				],
+			},
+		};
+		getLiveBlockContextData.mockReturnValue( {
+			context: liveEditorContext,
+			signature: 'context-sig',
+		} );
 
 		const result = await actions.applyBlockStructuralSuggestion(
 			'panel-block',
@@ -4062,28 +4304,8 @@ describe( 'store action thunks', () => {
 			null,
 			{
 				clientId: 'panel-block',
-				editorContext: {
-					block: {
-						name: 'core/group',
-					},
-					blockOperationContext: {
-						enableBlockStructuralActions: true,
-						targetClientId: 'block-1',
-						targetBlockName: 'core/paragraph',
-						targetSignature: 'target-sig',
-						allowedPatterns: [
-							{
-								name: 'theme/hero',
-								title: 'Hero',
-								allowedActions: [
-									'insert_before',
-									'insert_after',
-									'replace',
-								],
-							},
-						],
-					},
-				},
+				contextSignature: 'context-sig',
+				editorContext: liveEditorContext,
 				prompt: 'Add a hero.',
 			}
 		)( {
@@ -4091,8 +4313,17 @@ describe( 'store action thunks', () => {
 			registry,
 			select,
 		} );
+		const insertedClientId = blocks[ 2 ].clientId;
 
 		expect( result ).toBe( true );
+		expect( insertedClientId ).not.toBe( 'pattern-1' );
+		expect( blockEditorSelect.canInsertBlockType ).toHaveBeenCalledWith(
+			'core/paragraph',
+			null
+		);
+		expect( blockEditorSelect.canRemoveBlocks ).toHaveBeenCalledWith( [
+			insertedClientId,
+		] );
 		expect( dispatch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
 				type: 'LOG_ACTIVITY',
@@ -4102,6 +4333,13 @@ describe( 'store action thunks', () => {
 						clientId: 'block-1',
 						blockName: 'core/paragraph',
 						blockPath: [ 1 ],
+					} ),
+					after: expect.objectContaining( {
+						operations: [
+							expect.objectContaining( {
+								insertedClientIds: [ insertedClientId ],
+							} ),
+						],
 					} ),
 				} ),
 			} )
@@ -4157,7 +4395,9 @@ describe( 'store action thunks', () => {
 				rootClientId === 'root-1' ? childBlocks : [ rootBlock ]
 			),
 			getBlockRootClientId: jest.fn( ( clientId ) =>
-				clientId === 'block-1' ? 'root-1' : null
+				childBlocks.some( ( block ) => block.clientId === clientId )
+					? 'root-1'
+					: null
 			),
 			getBlockIndex: jest.fn( ( clientId ) =>
 				childBlocks.findIndex(
@@ -4169,6 +4409,11 @@ describe( 'store action thunks', () => {
 				__experimentalAdditionalBlockPatterns: [],
 			} ) ),
 			__experimentalGetAllowedPatterns: experimentalAllowedPatterns,
+			...createStructuralCoreSelectors( {
+				getLiveBlocks: () => childBlocks,
+				insertableBlockNames: [ 'core/paragraph' ],
+				rootClientId: 'root-1',
+			} ),
 		};
 		const dispatch = jest.fn();
 		const select = {
@@ -4207,6 +4452,13 @@ describe( 'store action thunks', () => {
 				],
 			},
 		};
+		getLiveBlockContextData.mockReturnValue( {
+			context: {
+				block: { name: 'core/group' },
+				blockOperationContext: BASE_BLOCK_OPERATION_CONTEXT,
+			},
+			signature: 'context-sig',
+		} );
 
 		const result = await actions.applyBlockStructuralSuggestion(
 			'block-1',
@@ -4214,6 +4466,7 @@ describe( 'store action thunks', () => {
 			null,
 			{
 				clientId: 'block-1',
+				contextSignature: 'context-sig',
 				editorContext: {
 					block: {
 						name: 'core/group',
@@ -4227,13 +4480,15 @@ describe( 'store action thunks', () => {
 			registry,
 			select,
 		} );
+		const insertedClientId = childBlocks[ 1 ].clientId;
 
 		expect( result ).toBe( true );
 		expect( experimentalAllowedPatterns ).toHaveBeenCalledWith( 'root-1' );
+		expect( insertedClientId ).not.toBe( 'pattern-1' );
 		expect( insertBlocks ).toHaveBeenCalledWith(
 			[
 				expect.objectContaining( {
-					clientId: 'pattern-1',
+					clientId: insertedClientId,
 					name: 'core/paragraph',
 				} ),
 			],
@@ -4244,7 +4499,14 @@ describe( 'store action thunks', () => {
 		);
 		expect( childBlocks.map( ( block ) => block.clientId ) ).toEqual( [
 			'block-1',
-			'pattern-1',
+			insertedClientId,
+		] );
+		expect( blockEditorSelect.canInsertBlockType ).toHaveBeenCalledWith(
+			'core/paragraph',
+			'root-1'
+		);
+		expect( blockEditorSelect.canRemoveBlocks ).toHaveBeenCalledWith( [
+			insertedClientId,
 		] );
 	} );
 
@@ -4283,6 +4545,16 @@ describe( 'store action thunks', () => {
 				}
 			}
 		} );
+		const replaceBlocks = jest.fn( ( clientIds, replacementBlocks ) => {
+			const index = blocks.findIndex( ( block ) =>
+				clientIds.includes( block.clientId )
+			);
+			blocks.splice(
+				index,
+				clientIds.length,
+				...JSON.parse( JSON.stringify( replacementBlocks ) )
+			);
+		} );
 		const blockEditorSelect = {
 			getBlock: jest.fn( ( clientId ) =>
 				blocks.find( ( block ) => block.clientId === clientId )
@@ -4303,6 +4575,10 @@ describe( 'store action thunks', () => {
 					},
 				],
 			} ) ),
+			...createStructuralCoreSelectors( {
+				getLiveBlocks: () => blocks,
+				insertableBlockNames: [ 'core/group', 'core/paragraph' ],
+			} ),
 		};
 		const dispatch = jest.fn();
 		const select = {
@@ -4328,6 +4604,7 @@ describe( 'store action thunks', () => {
 			dispatch: jest.fn().mockReturnValue( {
 				insertBlocks,
 				removeBlocks,
+				replaceBlocks,
 				selectBlock: jest.fn(),
 			} ),
 		};
@@ -4346,6 +4623,13 @@ describe( 'store action thunks', () => {
 				],
 			},
 		};
+		getLiveBlockContextData.mockReturnValue( {
+			context: {
+				block: { name: 'core/group' },
+				blockOperationContext: BASE_BLOCK_OPERATION_CONTEXT,
+			},
+			signature: 'context-sig',
+		} );
 
 		const result = await actions.applyBlockStructuralSuggestion(
 			'block-1',
@@ -4353,6 +4637,7 @@ describe( 'store action thunks', () => {
 			null,
 			{
 				clientId: 'block-1',
+				contextSignature: 'context-sig',
 				editorContext: {
 					block: {
 						name: 'core/group',
@@ -4366,11 +4651,39 @@ describe( 'store action thunks', () => {
 			registry,
 			select,
 		} );
+		const replacementClientId = blocks[ 0 ].clientId;
 
 		expect( result ).toBe( true );
+		expect( replacementClientId ).not.toBe( 'pattern-1' );
 		expect( blocks.map( ( block ) => block.clientId ) ).toEqual( [
-			'pattern-1',
+			replacementClientId,
 			'block-2',
+		] );
+		expect( replaceBlocks ).toHaveBeenCalledWith(
+			[ 'block-1' ],
+			[
+				expect.objectContaining( {
+					clientId: replacementClientId,
+					name: 'core/paragraph',
+				} ),
+			],
+			0
+		);
+		expect( removeBlocks ).not.toHaveBeenCalled();
+		expect( insertBlocks ).not.toHaveBeenCalled();
+		expect( blockEditorSelect.canRemoveBlock ).toHaveBeenCalledWith(
+			'block-1'
+		);
+		expect( blockEditorSelect.canInsertBlockType ).toHaveBeenCalledWith(
+			'core/group',
+			null
+		);
+		expect( blockEditorSelect.canInsertBlockType ).toHaveBeenCalledWith(
+			'core/paragraph',
+			null
+		);
+		expect( blockEditorSelect.canRemoveBlocks ).toHaveBeenCalledWith( [
+			replacementClientId,
 		] );
 		expect( dispatch ).toHaveBeenCalledWith(
 			expect.objectContaining( {
@@ -4381,6 +4694,13 @@ describe( 'store action thunks', () => {
 						clientId: 'block-1',
 						blockName: 'core/group',
 						blockPath: [ 0 ],
+					} ),
+					after: expect.objectContaining( {
+						operations: [
+							expect.objectContaining( {
+								replacementClientIds: [ replacementClientId ],
+							} ),
+						],
 					} ),
 				} ),
 			} )
@@ -4497,6 +4817,7 @@ describe( 'store action thunks', () => {
 			null,
 			{
 				clientId: 'block-1',
+				contextSignature: 'client-sig',
 				editorContext: {
 					blockOperationContext: BASE_BLOCK_OPERATION_CONTEXT,
 				},
@@ -4616,6 +4937,7 @@ describe( 'store action thunks', () => {
 			null,
 			{
 				clientId: 'block-1',
+				contextSignature: 'client-sig',
 				editorContext: {
 					block: {
 						name: 'core/paragraph',
@@ -4734,6 +5056,7 @@ describe( 'store action thunks', () => {
 				null,
 				{
 					clientId: 'block-1',
+					contextSignature: 'client-sig',
 					editorContext: { block: { name: 'core/paragraph' } },
 				}
 			)( { dispatch, registry, select } )
@@ -4804,6 +5127,7 @@ describe( 'store action thunks', () => {
 			null,
 			{
 				clientId: 'block-1',
+				contextSignature: 'client-sig',
 				editorContext: {
 					block: PARAGRAPH_BLOCK_CONTEXT,
 				},
@@ -4881,6 +5205,7 @@ describe( 'store action thunks', () => {
 			null,
 			{
 				clientId: 'block-1',
+				contextSignature: 'client-sig',
 				editorContext: {
 					block: {
 						name: 'core/paragraph',
@@ -4952,6 +5277,7 @@ describe( 'store action thunks', () => {
 			null,
 			{
 				clientId: 'block-1',
+				contextSignature: 'client-sig',
 				editorContext: {
 					block: {
 						name: 'core/paragraph',
@@ -5030,6 +5356,7 @@ describe( 'store action thunks', () => {
 			null,
 			{
 				clientId: 'block-1',
+				contextSignature: 'client-sig',
 				editorContext: {
 					block: {
 						name: 'core/paragraph',
@@ -5113,6 +5440,10 @@ describe( 'store action thunks', () => {
 	} );
 
 	test( 'applySuggestion blocks server-stale block results after resolveSignatureOnly drift', async () => {
+		getLiveBlockContextData.mockReturnValue( {
+			context: { block: PARAGRAPH_BLOCK_CONTEXT },
+			signature: 'shared-context',
+		} );
 		apiFetch.mockResolvedValue( {
 			payload: {
 				resolvedContextSignature: 'resolved-block-next',
@@ -7451,6 +7782,7 @@ describe( 'store action thunks', () => {
 			{
 				type: 'insert_pattern',
 				patternName: 'theme/hero',
+				insertedClientIds: [ 'pattern-1' ],
 				rootLocator: {
 					type: 'root',
 					rootClientId: null,
@@ -7469,6 +7801,22 @@ describe( 'store action thunks', () => {
 		];
 		const blockEditorSelect = {
 			getBlocks: jest.fn( () => blocks ),
+			getBlock: jest.fn( ( clientId ) =>
+				blocks.find( ( block ) => block.clientId === clientId )
+			),
+			getBlockRootClientId: jest.fn( ( clientId ) =>
+				blocks.some( ( block ) => block.clientId === clientId )
+					? null
+					: undefined
+			),
+			canRemoveBlocks: jest.fn(
+				( clientIds ) =>
+					Array.isArray( clientIds ) &&
+					clientIds.length > 0 &&
+					clientIds.every( ( clientId ) =>
+						blocks.some( ( block ) => block.clientId === clientId )
+					)
+			),
 		};
 		const removeBlocks = jest.fn( ( clientIds ) => {
 			for ( let index = blocks.length - 1; index >= 0; index-- ) {
@@ -7528,6 +7876,15 @@ describe( 'store action thunks', () => {
 		} );
 
 		expect( removeBlocks ).toHaveBeenCalledWith( [ 'pattern-1' ], false );
+		expect( blockEditorSelect.getBlock ).toHaveBeenCalledWith(
+			'pattern-1'
+		);
+		expect( blockEditorSelect.getBlockRootClientId ).toHaveBeenCalledWith(
+			'pattern-1'
+		);
+		expect( blockEditorSelect.canRemoveBlocks ).toHaveBeenCalledWith( [
+			'pattern-1',
+		] );
 		expect( blocks.map( ( block ) => block.clientId ) ).toEqual( [
 			'block-1',
 		] );
@@ -8640,6 +8997,735 @@ describe( 'store action thunks', () => {
 					} ),
 				} ),
 			] )
+		);
+	} );
+
+	test( 'live context changes during block apply revalidation for a single suggestion', async () => {
+		const deferred = createDeferred();
+		apiFetch.mockReturnValueOnce( deferred.promise );
+		let liveSignature = 'live-before';
+		let currentAttributes = { content: 'Original copy' };
+		getLiveBlockContextData.mockImplementation( () => ( {
+			context: { block: PARAGRAPH_BLOCK_CONTEXT },
+			signature: liveSignature,
+		} ) );
+
+		const updateBlockAttributes = jest.fn( ( clientId, updates ) => {
+			currentAttributes = { ...currentAttributes, ...updates };
+		} );
+		const blockEditorSelect = {
+			getBlockAttributes: jest.fn( () => currentAttributes ),
+			getBlocks: jest.fn( () => [
+				{
+					clientId: 'block-1',
+					name: 'core/paragraph',
+					attributes: currentAttributes,
+					innerBlocks: [],
+				},
+			] ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? blockEditorSelect
+					: getScopedEditorSelectors( storeName )
+			),
+			dispatch: jest.fn( () => ( { updateBlockAttributes } ) ),
+		};
+		const select = createStoreSelectWithState( {
+			blockRequestState: {
+				'block-1': {
+					status: 'ready',
+					requestToken: 1,
+					contextSignature: 'live-before',
+					resolvedContextSignature: 'server-sig',
+				},
+			},
+			blockRecommendations: {
+				'block-1': {
+					prompt: 'Refresh content.',
+					blockContext: PARAGRAPH_BLOCK_CONTEXT,
+					executionContract: {
+						allowedPanels: [ 'content' ],
+						contentAttributeKeys: [ 'content' ],
+					},
+				},
+			},
+		} );
+		const dispatch = jest.fn();
+		const outcomeSpy = jest
+			.spyOn( actions, 'recordRecommendationOutcome' )
+			.mockImplementation( ( outcome ) => ( {
+				type: 'TEST_RECOMMENDATION_OUTCOME',
+				outcome,
+			} ) );
+		const suggestion = {
+			label: 'Refresh content',
+			panel: 'content',
+			type: 'attribute_change',
+			attributeUpdates: { content: 'AI copy' },
+			suggestionKey: 'block:settings:1',
+		};
+		const applyPromise = actions.applySuggestion(
+			'block-1',
+			suggestion,
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Refresh content.',
+				contextSignature: 'live-before',
+			} ),
+			{
+				clientId: 'block-1',
+				contextSignature: 'live-before',
+				editorContext: { block: PARAGRAPH_BLOCK_CONTEXT },
+				prompt: 'Refresh content.',
+			}
+		)( { dispatch, registry, select } );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		currentAttributes = { content: 'User edit during validation' };
+		liveSignature = 'live-after';
+		deferred.resolve( {
+			result: { resolvedContextSignature: 'server-sig' },
+		} );
+
+		await expect( applyPromise ).resolves.toBe( false );
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( currentAttributes ).toEqual( {
+			content: 'User edit during validation',
+		} );
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockApplyState(
+				'block-1',
+				'error',
+				'This result is stale. Refresh recommendations before applying it.',
+				null,
+				'client'
+			)
+		);
+		expect( outcomeSpy ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'stale_blocked',
+				reason: 'client',
+				suggestion,
+			} )
+		);
+		expectNoBlockApplyStaleSideEffects( dispatch );
+	} );
+
+	test( 'live context changes during block apply revalidation for a batch', async () => {
+		const deferred = createDeferred();
+		apiFetch.mockReturnValueOnce( deferred.promise );
+		let liveSignature = 'live-before';
+		let currentAttributes = { align: '' };
+		getLiveBlockContextData.mockImplementation( () => ( {
+			context: { block: { name: 'core/group' } },
+			signature: liveSignature,
+		} ) );
+		const updateBlockAttributes = jest.fn( ( clientId, updates ) => {
+			currentAttributes = { ...currentAttributes, ...updates };
+		} );
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? {
+							getBlockAttributes: () => currentAttributes,
+							getBlocks: () => [
+								{
+									clientId: 'block-1',
+									name: 'core/group',
+									attributes: currentAttributes,
+									innerBlocks: [],
+								},
+							],
+					  }
+					: getScopedEditorSelectors( storeName )
+			),
+			dispatch: jest.fn( () => ( { updateBlockAttributes } ) ),
+		};
+		const select = createStoreSelectWithState( {
+			blockRequestState: {
+				'block-1': {
+					status: 'ready',
+					requestToken: 2,
+					contextSignature: 'live-before',
+					resolvedContextSignature: 'server-sig',
+				},
+			},
+			blockRecommendations: {
+				'block-1': {
+					prompt: 'Improve layout.',
+					blockContext: { name: 'core/group' },
+					executionContract: {
+						allowedPanels: [ 'layout' ],
+						configAttributeKeys: [ 'align' ],
+					},
+				},
+			},
+		} );
+		const dispatch = jest.fn();
+		const outcomeSpy = jest
+			.spyOn( actions, 'recordRecommendationOutcome' )
+			.mockImplementation( ( outcome ) => ( {
+				type: 'TEST_RECOMMENDATION_OUTCOME',
+				outcome,
+			} ) );
+		const suggestions = [
+			{
+				label: 'Wide layout',
+				panel: 'layout',
+				type: 'attribute_change',
+				attributeUpdates: { align: 'wide' },
+				suggestionKey: 'block:settings:batch-1',
+				recommendationOutcome: {
+					recommendationSetId: 'block:set:1',
+				},
+			},
+		];
+		const applyPromise = actions.applySelectedSuggestions(
+			'block-1',
+			suggestions,
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Improve layout.',
+				contextSignature: 'live-before',
+			} ),
+			{
+				clientId: 'block-1',
+				contextSignature: 'live-before',
+				editorContext: { block: { name: 'core/group' } },
+				prompt: 'Improve layout.',
+			}
+		)( { dispatch, registry, select } );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		currentAttributes = { align: 'full' };
+		liveSignature = 'live-after';
+		deferred.resolve( {
+			result: { resolvedContextSignature: 'server-sig' },
+		} );
+
+		await expect( applyPromise ).resolves.toBe( false );
+		expect( updateBlockAttributes ).not.toHaveBeenCalled();
+		expect( currentAttributes ).toEqual( { align: 'full' } );
+		const staleAction = dispatch.mock.calls
+			.map( ( [ action ] ) => action )
+			.find(
+				( action ) =>
+					action?.type === 'SET_BLOCK_APPLY_STATE' &&
+					action.status === 'error'
+			);
+		expect( staleAction ).toEqual(
+			expect.objectContaining( {
+				clientId: 'block-1',
+				staleReason: 'client',
+				suggestionKey: expect.stringMatching(
+					/^block-batch:block:set:1:/
+				),
+			} )
+		);
+		expect( outcomeSpy ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'stale_blocked',
+				reason: 'client',
+				suggestion: expect.objectContaining( {
+					suggestionKey: staleAction.suggestionKey,
+				} ),
+			} )
+		);
+		expectNoBlockApplyStaleSideEffects( dispatch );
+	} );
+
+	test( 'live context changes during block apply revalidation for a structural suggestion', async () => {
+		const deferred = createDeferred();
+		apiFetch.mockReturnValueOnce( deferred.promise );
+		let liveSignature = 'live-before';
+		let liveOperationContext = { ...BASE_BLOCK_OPERATION_CONTEXT };
+		getLiveBlockContextData.mockImplementation( () => ( {
+			context: {
+				block: { name: 'core/group' },
+				blockOperationContext: liveOperationContext,
+			},
+			signature: liveSignature,
+		} ) );
+		const blocks = [
+			{
+				clientId: 'block-1',
+				name: 'core/group',
+				attributes: {},
+				innerBlocks: [],
+			},
+		];
+		const insertBlocks = jest.fn( ( blocksToInsert, index ) => {
+			blocks.splice( index, 0, ...blocksToInsert );
+		} );
+		const removeBlocks = jest.fn( ( clientIds ) => {
+			for ( let index = blocks.length - 1; index >= 0; index-- ) {
+				if ( clientIds.includes( blocks[ index ]?.clientId ) ) {
+					blocks.splice( index, 1 );
+				}
+			}
+		} );
+		const blockEditorSelect = {
+			canInsertBlockType: jest.fn( () => true ),
+			canRemoveBlocks: jest.fn( () => true ),
+			getBlock: jest.fn( ( clientId ) =>
+				blocks.find( ( block ) => block.clientId === clientId )
+			),
+			getBlocks: jest.fn( () => blocks ),
+			getBlockEditingMode: jest.fn( () => 'default' ),
+			getBlockIndex: jest.fn( ( clientId ) =>
+				blocks.findIndex( ( block ) => block.clientId === clientId )
+			),
+			getBlockRootClientId: jest.fn( () => null ),
+			getSettings: jest.fn( () => ( {
+				blockPatterns: [
+					{
+						name: 'theme/hero',
+						content: '<!-- wp:paragraph /-->',
+					},
+				],
+			} ) ),
+		};
+		const registry = {
+			select: jest.fn( ( storeName ) =>
+				storeName === 'core/block-editor'
+					? blockEditorSelect
+					: getScopedEditorSelectors( storeName )
+			),
+			dispatch: jest.fn( () => ( {
+				insertBlocks,
+				removeBlocks,
+				selectBlock: jest.fn(),
+			} ) ),
+		};
+		const select = createStoreSelectWithState( {
+			blockRequestState: {
+				'block-1': {
+					status: 'ready',
+					requestToken: 3,
+					contextSignature: 'live-before',
+					resolvedContextSignature: 'server-sig',
+				},
+			},
+			blockRecommendations: {
+				'block-1': {
+					prompt: 'Add a hero.',
+					blockContext: { name: 'core/group' },
+				},
+			},
+		} );
+		const dispatch = jest.fn();
+		const outcomeSpy = jest
+			.spyOn( actions, 'recordRecommendationOutcome' )
+			.mockImplementation( ( outcome ) => ( {
+				type: 'TEST_RECOMMENDATION_OUTCOME',
+				outcome,
+			} ) );
+		const suggestion = {
+			label: 'Add hero pattern',
+			suggestionKey: 'block:structural:1',
+			actionability: {
+				tier: 'review-safe',
+				executableOperations: [
+					{ ...BASE_BLOCK_STRUCTURAL_OPERATION },
+				],
+			},
+		};
+		const applyPromise = actions.applyBlockStructuralSuggestion(
+			'block-1',
+			suggestion,
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Add a hero.',
+				contextSignature: 'live-before',
+			} ),
+			{
+				clientId: 'block-1',
+				contextSignature: 'live-before',
+				editorContext: {
+					block: { name: 'core/group' },
+					blockOperationContext: BASE_BLOCK_OPERATION_CONTEXT,
+				},
+				prompt: 'Add a hero.',
+			}
+		)( { dispatch, registry, select } );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		blocks.push( {
+			clientId: 'user-block',
+			name: 'core/paragraph',
+			attributes: { content: 'User tree edit during validation' },
+			innerBlocks: [],
+		} );
+		const expectedTree = JSON.parse( JSON.stringify( blocks ) );
+		liveSignature = 'live-after';
+		liveOperationContext = {
+			...BASE_BLOCK_OPERATION_CONTEXT,
+			targetSignature: 'visibly-different-target-signature',
+		};
+		deferred.resolve( {
+			result: { resolvedContextSignature: 'server-sig' },
+		} );
+
+		await expect( applyPromise ).resolves.toBe( false );
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockApplyState(
+				'block-1',
+				'error',
+				'This result is stale. Refresh recommendations before applying it.',
+				null,
+				'client'
+			)
+		);
+		expect( blocks ).toEqual( expectedTree );
+		expect( insertBlocks ).not.toHaveBeenCalled();
+		expect( removeBlocks ).not.toHaveBeenCalled();
+		expect( mockRawHandler ).not.toHaveBeenCalled();
+		expect( outcomeSpy ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'stale_blocked',
+				reason: 'client',
+				suggestion,
+			} )
+		);
+		expectNoBlockApplyStaleSideEffects( dispatch );
+	} );
+
+	test.each( [
+		[
+			'collector signature differs from the request signature',
+			{
+				collectorSignature: 'different-live-signature',
+				requestClientId: 'block-1',
+			},
+		],
+		[
+			'request clientId differs from the thunk target',
+			{
+				collectorSignature: 'live-before',
+				requestClientId: 'block-2',
+			},
+		],
+		[
+			'raw non-empty signatures differ only by whitespace',
+			{
+				collectorSignature: 'sig',
+				requestClientId: 'block-1',
+				requestContextSignature: ' sig ',
+			},
+		],
+	] )(
+		'block apply preflight blocks when %s',
+		async (
+			label,
+			{
+				collectorSignature,
+				requestClientId,
+				requestContextSignature = 'live-before',
+			}
+		) => {
+			getLiveBlockContextData.mockReturnValue( {
+				context: { block: { name: 'core/group' } },
+				signature: collectorSignature,
+			} );
+			const updateBlockAttributes = jest.fn();
+			const registry = createBlockApplyRegistry( {
+				attributes: { align: '' },
+				updateBlockAttributes,
+			} );
+			const select = createStoreSelectWithState( {
+				blockRequestState: {
+					'block-1': {
+						status: 'ready',
+						requestToken: 1,
+						contextSignature: 'live-before',
+						resolvedContextSignature: 'server-sig',
+					},
+				},
+				blockRecommendations: {
+					'block-1': {
+						prompt: 'Improve this block.',
+						blockContext: { name: 'core/group' },
+						executionContract: {
+							allowedPanels: [ 'layout' ],
+							configAttributeKeys: [ 'align' ],
+						},
+					},
+				},
+			} );
+			const dispatch = jest.fn();
+			const outcomeSpy = jest
+				.spyOn( actions, 'recordRecommendationOutcome' )
+				.mockImplementation( ( outcome ) => ( {
+					type: 'TEST_RECOMMENDATION_OUTCOME',
+					outcome,
+				} ) );
+
+			const result = await actions.applySuggestion(
+				'block-1',
+				{
+					label: 'Wide layout',
+					panel: 'layout',
+					type: 'attribute_change',
+					attributeUpdates: { align: 'wide' },
+					suggestionKey: 'block:settings:1',
+				},
+				buildBlockRecommendationRequestSignature( {
+					clientId: 'block-1',
+					prompt: 'Improve this block.',
+					contextSignature: 'live-before',
+				} ),
+				{
+					clientId: requestClientId,
+					contextSignature: requestContextSignature,
+					editorContext: { block: { name: 'core/group' } },
+					prompt: 'Improve this block.',
+				}
+			)( { dispatch, registry, select } );
+
+			expect( result ).toBe( false );
+			expect( apiFetch ).not.toHaveBeenCalled();
+			expect( updateBlockAttributes ).not.toHaveBeenCalled();
+			expect( outcomeSpy ).toHaveBeenCalledWith(
+				expect.objectContaining( {
+					event: 'stale_blocked',
+					reason: 'client',
+				} )
+			);
+			expectNoBlockApplyStaleSideEffects( dispatch );
+		}
+	);
+
+	test( 'block apply skip preserves state owned by a newer request token', async () => {
+		const deferred = createDeferred();
+		apiFetch.mockReturnValueOnce( deferred.promise );
+		getLiveBlockContextData.mockReturnValue( {
+			context: { block: { name: 'core/group' } },
+			signature: 'live-before',
+		} );
+		let state = reducer( undefined, {} );
+		state = reducer(
+			state,
+			actions.setBlockRequestState( 'block-1', 'loading', null, 1 )
+		);
+		state = reducer(
+			state,
+			actions.setBlockRecommendations(
+				'block-1',
+				{
+					prompt: 'Improve this block.',
+					blockContext: { name: 'core/group' },
+					executionContract: {
+						allowedPanels: [ 'layout' ],
+						configAttributeKeys: [ 'align' ],
+					},
+				},
+				1,
+				'live-before',
+				null,
+				'server-sig'
+			)
+		);
+		const dispatch = jest.fn( ( action ) => {
+			state = reducer( state, action );
+		} );
+		const select = createSelectorsForState( () => state );
+		const applyPromise = actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Wide layout',
+				panel: 'layout',
+				type: 'attribute_change',
+				attributeUpdates: { align: 'wide' },
+				suggestionKey: 'block:settings:1',
+			},
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Improve this block.',
+				contextSignature: 'live-before',
+			} ),
+			{
+				clientId: 'block-1',
+				contextSignature: 'live-before',
+				editorContext: { block: { name: 'core/group' } },
+				prompt: 'Improve this block.',
+			}
+		)( {
+			dispatch,
+			registry: createBlockApplyRegistry( { attributes: { align: '' } } ),
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		dispatch(
+			actions.setBlockRequestState( 'block-1', 'loading', null, 2 )
+		);
+		const callsAfterNewRequest = dispatch.mock.calls.length;
+		deferred.resolve( {
+			result: { resolvedContextSignature: 'server-sig' },
+		} );
+
+		await expect( applyPromise ).resolves.toBe( false );
+		expect( dispatch.mock.calls.slice( callsAfterNewRequest ) ).toEqual(
+			[]
+		);
+		expect( selectors.getBlockRequestToken( state, 'block-1' ) ).toBe( 2 );
+		expect( selectors.getBlockApplyStatus( state, 'block-1' ) ).toBe(
+			'idle'
+		);
+	} );
+
+	test( 'same-token abort-controller skip returns block apply state to idle', async () => {
+		const deferred = createDeferred();
+		apiFetch.mockReturnValueOnce( deferred.promise );
+		getLiveBlockContextData.mockReturnValue( {
+			context: { block: { name: 'core/group' } },
+			signature: 'live-before',
+		} );
+		let state = reducer( undefined, {} );
+		state = reducer(
+			state,
+			actions.setBlockRequestState( 'block-1', 'loading', null, 1 )
+		);
+		state = reducer(
+			state,
+			actions.setBlockRecommendations(
+				'block-1',
+				{
+					prompt: 'Improve this block.',
+					blockContext: { name: 'core/group' },
+					executionContract: {
+						allowedPanels: [ 'layout' ],
+						configAttributeKeys: [ 'align' ],
+					},
+				},
+				1,
+				'live-before',
+				null,
+				'server-sig'
+			)
+		);
+		const dispatch = jest.fn( ( action ) => {
+			state = reducer( state, action );
+		} );
+		const select = createSelectorsForState( () => state );
+		const applyPromise = actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Wide layout',
+				panel: 'layout',
+				type: 'attribute_change',
+				attributeUpdates: { align: 'wide' },
+				suggestionKey: 'block:settings:1',
+			},
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Improve this block.',
+				contextSignature: 'live-before',
+			} ),
+			{
+				clientId: 'block-1',
+				contextSignature: 'live-before',
+				editorContext: { block: { name: 'core/group' } },
+				prompt: 'Improve this block.',
+			}
+		)( {
+			dispatch,
+			registry: createBlockApplyRegistry( { attributes: { align: '' } } ),
+			select,
+		} );
+
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		actions._applyResolvedFreshnessAbort[ 'block:block-1' ] =
+			new AbortController();
+		deferred.resolve( {
+			result: { resolvedContextSignature: 'server-sig' },
+		} );
+
+		await expect( applyPromise ).resolves.toBe( false );
+		expect( selectors.getBlockRequestToken( state, 'block-1' ) ).toBe( 1 );
+		expect( selectors.getBlockApplyStatus( state, 'block-1' ) ).toBe(
+			'idle'
+		);
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.setBlockApplyState( 'block-1', 'idle' )
+		);
+	} );
+
+	test( 'stable live context adopts a pending resolved rebaseline before mutation', async () => {
+		getLiveBlockContextData.mockReturnValue( {
+			context: { block: { name: 'core/group' } },
+			signature: 'live-before',
+		} );
+		apiFetch.mockResolvedValueOnce( {
+			result: { resolvedContextSignature: 'new-server-sig' },
+		} );
+		const order = [];
+		const updateBlockAttributes = jest.fn( () => {
+			order.push( 'mutation' );
+		} );
+		const registry = createBlockApplyRegistry( {
+			attributes: { align: '' },
+			nextAttributes: { align: 'wide' },
+			updateBlockAttributes,
+		} );
+		const select = createStoreSelectWithState( {
+			blockRequestState: {
+				'block-1': {
+					status: 'ready',
+					requestToken: 1,
+					contextSignature: 'live-before',
+					resolvedContextSignature: 'old-server-sig',
+					resolvedRebaselinePending: true,
+				},
+			},
+			blockRecommendations: {
+				'block-1': {
+					prompt: 'Improve this block.',
+					blockContext: { name: 'core/group' },
+					executionContract: {
+						allowedPanels: [ 'layout' ],
+						configAttributeKeys: [ 'align' ],
+					},
+				},
+			},
+		} );
+		const dispatch = jest.fn( ( action ) => {
+			if ( action?.type === 'ADOPT_BLOCK_RESOLVED_CONTEXT_BASELINE' ) {
+				order.push( 'adoption' );
+			}
+		} );
+
+		const result = await actions.applySuggestion(
+			'block-1',
+			{
+				label: 'Wide layout',
+				panel: 'layout',
+				type: 'attribute_change',
+				attributeUpdates: { align: 'wide' },
+				suggestionKey: 'block:settings:1',
+			},
+			buildBlockRecommendationRequestSignature( {
+				clientId: 'block-1',
+				prompt: 'Improve this block.',
+				contextSignature: 'live-before',
+			} ),
+			{
+				clientId: 'block-1',
+				contextSignature: 'live-before',
+				editorContext: { block: { name: 'core/group' } },
+				prompt: 'Improve this block.',
+			}
+		)( { dispatch, registry, select } );
+
+		expect( result ).toBe( true );
+		expect( order.slice( 0, 2 ) ).toEqual( [ 'adoption', 'mutation' ] );
+		expect( dispatch ).toHaveBeenCalledWith(
+			actions.adoptBlockResolvedContextBaseline(
+				'block-1',
+				'new-server-sig'
+			)
 		);
 	} );
 

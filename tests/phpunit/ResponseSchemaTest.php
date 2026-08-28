@@ -70,6 +70,19 @@ final class ResponseSchemaTest extends TestCase {
 		$this->assertSame( 'number', $block_confidence['type'] ?? null );
 	}
 
+	public function test_block_schema_describes_hex_preview_contract_in_every_lane(): void {
+		$schema = ResponseSchema::get( 'block' );
+
+		foreach ( [ 'settings', 'styles', 'block' ] as $lane ) {
+			$preview_schema = $schema['properties'][ $lane ]['items']['properties']['preview'] ?? null;
+
+			$this->assertIsArray( $preview_schema, "Block {$lane} items should declare preview." );
+			$this->assertSame( 'string', $preview_schema['type'] ?? null );
+			$this->assertStringContainsString( '#RGB', $preview_schema['description'] ?? '' );
+			$this->assertArrayNotHasKey( 'pattern', $preview_schema );
+		}
+	}
+
 	public function test_strict_llm_schemas_accept_nullable_ranking_objects(): void {
 		$cases = [
 			'template'      => [ 'suggestions' ],

@@ -9,10 +9,20 @@ jest.mock( '@wordpress/components', () =>
 	require( '../../test-utils/wp-components' ).mockWpComponents()
 );
 
-jest.mock( '@wordpress/data', () => ( {
-	useDispatch: ( ...args ) => mockUseDispatch( ...args ),
-	useSelect: ( ...args ) => mockUseSelect( ...args ),
-} ) );
+jest.mock( '@wordpress/data', () => {
+	const actual = jest.requireActual( '@wordpress/data' );
+
+	return Object.create( actual, {
+		useDispatch: {
+			enumerable: true,
+			value: ( ...args ) => mockUseDispatch( ...args ),
+		},
+		useSelect: {
+			enumerable: true,
+			value: ( ...args ) => mockUseSelect( ...args ),
+		},
+	} );
+} );
 
 jest.mock( '@wordpress/editor', () => {
 	const { createElement } = require( '@wordpress/element' );

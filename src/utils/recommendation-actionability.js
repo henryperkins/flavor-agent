@@ -37,9 +37,9 @@ export const ACTIONABILITY_REASON_MULTI_TARGET_STRUCTURAL_CHANGE =
 export const ACTIONABILITY_REASON_MANUAL_COPY_ONLY = 'manual-copy-only';
 
 const TIER_LABELS = Object.freeze( {
-	[ ACTIONABILITY_TIER_INLINE_SAFE ]: 'Inline-safe',
-	[ ACTIONABILITY_TIER_REVIEW_SAFE ]: 'Review-safe',
-	[ ACTIONABILITY_TIER_ADVISORY ]: 'Advisory',
+	[ ACTIONABILITY_TIER_INLINE_SAFE ]: __( 'Inline-safe', 'flavor-agent' ),
+	[ ACTIONABILITY_TIER_REVIEW_SAFE ]: __( 'Review-safe', 'flavor-agent' ),
+	[ ACTIONABILITY_TIER_ADVISORY ]: __( 'Advisory', 'flavor-agent' ),
 } );
 
 const REASON_LABELS = Object.freeze( {

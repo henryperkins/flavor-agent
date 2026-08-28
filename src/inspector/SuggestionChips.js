@@ -23,6 +23,7 @@ import {
 import { buildBlockRecommendationRequestData } from './block-recommendation-request';
 import { getSuggestionKey } from './suggestion-keys';
 import useSuggestionApplyFeedback from './use-suggestion-apply-feedback';
+import { normalizeSuggestionPreviewColor } from '../utils/suggestion-preview-color';
 
 function buildChipFeedback( suggestion, key ) {
 	return {
@@ -186,6 +187,9 @@ export default function SuggestionChips( {
 			>
 				{ suggestions.map( ( s ) => {
 					const key = getSuggestionKey( s );
+					const previewColor = normalizeSuggestionPreviewColor(
+						s.preview
+					);
 					const wasApplied = appliedKey === key;
 					const isPending = pendingKey === key;
 					const isChipDisabled =
@@ -205,10 +209,10 @@ export default function SuggestionChips( {
 								}` }
 								title={ s.description || s.label }
 								style={
-									s.preview && ! isStale
+									previewColor && ! isStale
 										? {
 												'--flavor-agent-chip-preview':
-													s.preview,
+													previewColor,
 										  }
 										: undefined
 								}
@@ -216,7 +220,7 @@ export default function SuggestionChips( {
 								<span className="flavor-agent-chip__label">
 									{ s.label }
 								</span>
-								{ s.preview && (
+								{ previewColor && (
 									<span
 										className="flavor-agent-chip__preview"
 										aria-hidden="true"
@@ -243,10 +247,10 @@ export default function SuggestionChips( {
 									isApplied ? ' is-applied' : ''
 								}` }
 								style={
-									s.preview
+									previewColor
 										? {
 												'--flavor-agent-chip-preview':
-													s.preview,
+													previewColor,
 										  }
 										: undefined
 								}
@@ -266,7 +270,7 @@ export default function SuggestionChips( {
 									} }
 								/>
 								<div className="flavor-agent-chip-row__meta">
-									{ s.preview && ! isApplied && (
+									{ previewColor && ! isApplied && (
 										<span
 											className="flavor-agent-chip__preview"
 											aria-hidden="true"
@@ -307,10 +311,10 @@ export default function SuggestionChips( {
 								wasApplied ? ' is-applied' : ''
 							}` }
 							style={
-								s.preview
+								previewColor
 									? {
 											'--flavor-agent-chip-preview':
-												s.preview,
+												previewColor,
 									  }
 									: undefined
 							}
@@ -321,7 +325,7 @@ export default function SuggestionChips( {
 							{ ! wasApplied &&
 								! isChipDisabled &&
 								! isStale &&
-								s.preview && (
+								previewColor && (
 									<span
 										className="flavor-agent-chip__preview"
 										aria-hidden="true"

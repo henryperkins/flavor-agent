@@ -14,6 +14,7 @@ import {
 	summarizeTree,
 } from './block-inspector';
 import { getAllowedPatterns } from '../patterns/pattern-settings';
+import { resolvePatternBlocks } from '../patterns/pattern-insertability';
 import {
 	annotateStructuralIdentity,
 	findBranchRoot,
@@ -118,34 +119,6 @@ function extractVisualHints( attributes, allowlist ) {
 	} );
 
 	return hints;
-}
-
-function hasStructuralLock( lock ) {
-	if ( lock === true ) {
-		return true;
-	}
-
-	if ( typeof lock === 'string' ) {
-		return lock.trim() !== '';
-	}
-
-	if ( ! lock || typeof lock !== 'object' ) {
-		return false;
-	}
-
-	return [ 'move', 'remove', 'edit', 'insert' ].some(
-		( key ) => lock[ key ] === true
-	);
-}
-
-function isTargetLocked( block = {} ) {
-	const attributes = block.currentAttributes || {};
-
-	return (
-		hasStructuralLock( attributes.lock ) ||
-		hasStructuralLock( attributes.templateLock ) ||
-		hasStructuralLock( block.lock )
-	);
 }
 
 /**
@@ -692,13 +665,30 @@ export function collectBlockContext( clientId ) {
 
 	if ( isBlockStructuralActionsEnabled() ) {
 		const rootClientId =
-			blockEditor?.getBlockRootClientId?.( clientId ) || null;
-		const targetLocked = isTargetLocked( context.block );
+			blockEditor?.getBlockRootClientId?.( clientId ) ?? null;
 		const targetSignature = buildBlockOperationTargetSignature( {
 			clientId,
 			...context.block,
-			isTargetLocked: targetLocked,
 		} );
+		const canInsertPattern = ( pattern ) => {
+			if ( typeof blockEditor?.canInsertBlockType !== 'function' ) {
+				return false;
+			}
+
+			const blocks = resolvePatternBlocks( pattern );
+
+			return (
+				blocks.length > 0 &&
+				blocks.every(
+					( block ) =>
+						Boolean( block?.name ) &&
+						blockEditor.canInsertBlockType(
+							block.name,
+							rootClientId
+						) === true
+				)
+			);
+		};
 
 		context.blockOperationContext = buildAllowedPatternContext(
 			getAllowedPatterns( rootClientId, blockEditor ),
@@ -708,7 +698,11 @@ export function collectBlockContext( clientId ) {
 				targetSignature,
 				editingMode: context.block.editingMode,
 				isInsideContentOnly: context.block.isInsideContentOnly,
-				isTargetLocked: targetLocked,
+			},
+			{
+				canInsertPattern,
+				canRemoveTarget:
+					blockEditor?.canRemoveBlock?.( clientId ) === true,
 			}
 		);
 	}
@@ -750,7 +744,19 @@ function subscribeToBlockContextSources( registrySelect, clientId ) {
 	editor.getSettings?.();
 
 	if ( isBlockStructuralActionsEnabled() ) {
-		getAllowedPatterns( rootId || null, editor );
+		const allowedPatterns = getAllowedPatterns( rootId || null, editor );
+
+		if ( typeof editor.canInsertBlockType === 'function' ) {
+			allowedPatterns.forEach( ( pattern ) => {
+				resolvePatternBlocks( pattern ).forEach( ( patternBlock ) => {
+					if ( patternBlock?.name ) {
+						editor.canInsertBlockType( patternBlock.name, rootId );
+					}
+				} );
+			} );
+		}
+
+		editor.canRemoveBlock?.( clientId );
 	}
 
 	if ( rootId ) {

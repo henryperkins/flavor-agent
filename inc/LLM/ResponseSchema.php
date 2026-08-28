@@ -339,7 +339,10 @@ final class ResponseSchema {
 			'isRecommended'  => [ 'type' => 'boolean' ],
 			'confidence'     => [ 'type' => 'number' ],
 			'ranking'        => self::nullable_ranking_schema(),
-			'preview'        => [ 'type' => 'string' ],
+			'preview'        => [
+				'type'        => 'string',
+				'description' => 'Hex color in #RGB, #RGBA, #RRGGBB, or #RRGGBBAA form for the visual preview swatch, or empty string',
+			],
 			'presetSlug'     => [ 'type' => 'string' ],
 			'cssVar'         => [ 'type' => 'string' ],
 			'groupId'        => [ 'type' => 'string' ],

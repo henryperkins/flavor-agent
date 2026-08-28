@@ -22,6 +22,7 @@ jest.mock( '@wordpress/api-fetch', () => jest.fn() );
 import {
 	buildBlockActivityEntry,
 	buildBlockBatchActivityEntry,
+	buildBlockStructuralActivityEntry,
 	buildGlobalStylesActivityEntry,
 	buildStyleBookActivityEntry,
 	createUndoActivityAction,
@@ -179,6 +180,49 @@ describe( 'buildStyleBookActivityEntry', () => {
 } );
 
 describe( 'buildBlockActivityEntry', () => {
+	test( 'preserves structural runtime IDs in the activity after-state', () => {
+		const operations = [
+			{
+				type: 'insert_pattern',
+				insertedClientIds: [ 'inserted-1', 'inserted-2' ],
+				rootLocator: { type: 'root', rootClientId: null },
+				index: 1,
+				insertedBlocksSnapshot: [],
+			},
+			{
+				type: 'replace_block_with_pattern',
+				replacementClientIds: [ 'replacement-1' ],
+				rootLocator: { type: 'root', rootClientId: null },
+				index: 2,
+				insertedBlocksSnapshot: [],
+				removedBlocksSnapshot: [],
+			},
+		];
+
+		const entry = buildBlockStructuralActivityEntry( {
+			blockContext: { name: 'core/group' },
+			clientId: 'block-1',
+			result: {
+				operations,
+				beforeSignature: 'before-signature',
+				afterSignature: 'after-signature',
+			},
+			suggestion: {
+				label: 'Apply a pattern',
+				suggestionKey: 'structural-1',
+			},
+		} );
+
+		expect( entry.after.operations ).toEqual( operations );
+		expect( entry.after.operations[ 0 ].insertedClientIds ).toEqual( [
+			'inserted-1',
+			'inserted-2',
+		] );
+		expect( entry.after.operations[ 1 ].replacementClientIds ).toEqual( [
+			'replacement-1',
+		] );
+	} );
+
 	test( 'preserves learning attribution on apply activity requests', () => {
 		const entry = buildBlockActivityEntry( {
 			afterAttributes: { align: 'wide' },

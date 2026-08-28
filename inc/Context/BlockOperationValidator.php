@@ -47,7 +47,6 @@ final class BlockOperationValidator {
 			'targetClientId'               => self::normalize_string( $block_operation_context['targetClientId'] ?? '' ),
 			'targetBlockName'              => self::normalize_string( $block_operation_context['targetBlockName'] ?? '' ),
 			'targetSignature'              => self::normalize_string( $block_operation_context['targetSignature'] ?? '' ),
-			'isTargetLocked'               => true === ( $block_operation_context['isTargetLocked'] ?? false ),
 			'isContentOnly'                => true === ( $block_operation_context['isContentOnly'] ?? false ) || 'contentOnly' === $editing_mode,
 			'editingMode'                  => '' !== $editing_mode ? $editing_mode : 'default',
 			'allowedPatterns'              => self::normalize_allowed_patterns( $block_operation_context['allowedPatterns'] ?? [] ),
@@ -208,17 +207,6 @@ final class BlockOperationValidator {
 					$raw_operation,
 					self::ERROR_STALE_TARGET,
 					'Block operations must match the recommendation-time target signature.'
-				),
-			];
-		}
-
-		if ( true === ( $context['isTargetLocked'] ?? false ) ) {
-			return [
-				'ok'        => false,
-				'rejection' => self::reject_operation(
-					$raw_operation,
-					self::ERROR_LOCKED_TARGET,
-					'Block operations cannot mutate a locked target.'
 				),
 			];
 		}
