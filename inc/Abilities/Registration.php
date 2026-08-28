@@ -285,6 +285,11 @@ final class Registration {
 
 		$meta = [
 			'show_in_rest' => true,
+			// Explicit mcp.public = false — see recommendation_meta(). External
+			// apply abilities are curated onto the dedicated flavor-agent MCP
+			// server only; they must never reach the universal default server by
+			// inheriting meta.public.
+			'mcp'          => [ 'public' => false ],
 			'annotations'  => $annotations,
 		];
 
@@ -2121,12 +2126,19 @@ final class Registration {
 	public static function recommendation_meta(): array {
 		return [
 			'show_in_rest' => true,
-			// No mcp key: write-side recommend-* are curated onto the dedicated
-			// flavor-agent MCP server (ServerBootstrap's explicit tool list) and
-			// the Abilities API, deliberately NOT the universal default server —
-			// whose recommend surface is the read-only preview siblings. Mirrors
-			// external_apply_meta(); request_diagnostic rows can carry prompts, so
-			// generic discover/execute exposure stays curated.
+			// Explicit mcp.public = false: write-side recommend-* are curated onto
+			// the dedicated flavor-agent MCP server (ServerBootstrap's explicit tool
+			// list) and the Abilities API, deliberately NOT the universal default
+			// server — whose recommend surface is the read-only preview siblings.
+			// Mirrors external_apply_meta(); request_diagnostic rows can carry
+			// prompts, so generic discover/execute exposure stays curated.
+			//
+			// The flag must be explicit, not merely absent. Since mcp-adapter 0.6.0
+			// (WP\MCP\Abilities\McpAbilityExposure, upstream #254) default-server
+			// exposure resolves meta.mcp.public when set and otherwise INHERITS the
+			// high-level meta.public flag that WordPress 7.1 resolves on every
+			// ability. Omitting the key would delegate this decision to meta.public.
+			'mcp'          => [ 'public' => false ],
 			'annotations'  => [
 				'destructive' => false,
 				'idempotent'  => false,
@@ -2169,6 +2181,13 @@ final class Registration {
 		return [
 			'show_in_rest' => true,
 			'readonly'     => true,
+			// Explicit mcp.public = false — see recommendation_meta(). This is the
+			// base for the editor-internal read helpers (list-synced-patterns and
+			// get-synced-pattern can return draft wp_block content; check-status
+			// exposes backend-config inventory), which stay Abilities-API-only.
+			// mcp_public_readonly_rest_meta() replaces this key wholesale for the
+			// externally-useful read helpers.
+			'mcp'          => [ 'public' => false ],
 			'annotations'  => [
 				'readonly'    => true,
 				'destructive' => false,

@@ -142,7 +142,19 @@ docker compose exec -T wordpress wp plugin install \
 	--allow-root
 ```
 
-Install the MCP Adapter from GitHub. The upstream README at v0.5.0 (2026-04-15) treats Composer as the primary install method and the plugin form as an alternative, and does not mention WP.org. The 22 Apr 2026 AI contributor summary recorded an intent to add WP.org as the primary distribution, but no WP.org listing is live as of 2026-05-26 and the README has not been updated. Representative local setup clones from `WordPress/mcp-adapter` into `wp-content/plugins` and installs its Composer dependencies; if WP.org publication lands, swap the clone-and-composer block below for `wp plugin install mcp-adapter --activate --allow-root`.
+Install the MCP Adapter from GitHub, pinned to `v0.6.1` (2026-08-13). As of that release the upstream README recommends the WordPress-plugin form installed from the GitHub Releases ZIP and documents Composer as the plugin-developer library path; the git-clone development-version section was removed upstream, reversing the Composer-primary framing that held at v0.5.0. Upstream also ships a WP.org-format `readme.txt` (`Stable tag: 0.6.1`, `Contributors: wordpressdotorg`) for Plugin Check compliance, but its Installation section still points at GitHub releases and no live `wordpress.org/plugins` listing is referenced anywhere in the v0.6.1 tree.
+
+Representative local setup keeps the clone-and-composer block below, pinned to a tag for reproducibility, because the clone needs `composer install` to generate the adapter's autoloader. Re-run `composer install` after every version change — `includes/Autoloader.php` requires `vendor/autoload_packages.php` (Jetpack Autoloader, adopted in upstream #233) with no fallback to `vendor/autoload.php`, so a stale vendor tree makes the plugin bail out silently before `mcp_adapter_init` fires.
+
+The upstream-recommended alternative is a one-liner:
+
+```bash
+docker compose exec -T wordpress wp plugin install \
+	https://github.com/WordPress/mcp-adapter/releases/latest/download/mcp-adapter.zip \
+	--activate --force --allow-root
+```
+
+Any ZIP install must be **>= 0.6.1**. The published v0.6.0 ZIP omitted `tests/` while its Jetpack Autoloader manifest still referenced those paths, shipping dangling classmap entries — including `WP_CLI` / `WP_CLI_Command` stubs — that can fatal a site on a bare `class_exists( 'WP_CLI' )`. Upstream fixed this in `23cb53e` (#284) by adding `exclude-from-classmap`. Note that PR #284's description claims it also added a release-ZIP verifier, but no such verifier shipped in the tag, so this defect class remains unguarded upstream.
 
 ```bash
 docker compose exec -T wordpress bash -lc 'set -e
@@ -152,7 +164,8 @@ if [ ! -d mcp-adapter/.git ]; then
 	git clone https://github.com/WordPress/mcp-adapter.git mcp-adapter
 fi
 cd mcp-adapter
-git pull --ff-only
+git fetch --tags origin
+git checkout v0.6.1
 composer install --no-interaction --prefer-dist
 wp plugin activate mcp-adapter --allow-root'
 ```
@@ -336,4 +349,4 @@ Run `npm run check:docs` whenever contributor-facing setup guidance changes. The
 
 - WordPress Beta Tester supports nightly, beta, and release-candidate update channels and a bleeding-edge trunk channel: https://wordpress.org/plugins/wordpress-beta-tester/
 - WP-CLI `wp core update` accepts `--version=nightly`: https://developer.wordpress.org/cli/commands/core/update/
-- MCP Adapter source repo (currently the active local-setup path): https://github.com/WordPress/mcp-adapter. The upstream README at v0.5.0 (2026-04-15) treats Composer as the primary install method and the plugin form as an alternative, and does not mention WP.org. The 22 Apr 2026 AI contributor summary recorded an intent to add WP.org as the primary distribution, but no WP.org listing is live as of 2026-05-26 and the README has not been updated.
+- MCP Adapter source repo (currently the active local-setup path, pinned to `v0.6.1`): https://github.com/WordPress/mcp-adapter. As of the upstream README at v0.6.1 (2026-08-13) the recommended install is the WordPress-plugin form from the GitHub Releases ZIP, with Composer documented as the plugin-developer library path; upstream removed its git-clone development-version section. A WP.org-format `readme.txt` exists for Plugin Check compliance, but there is still no live `wordpress.org/plugins` listing. Adapter requires WordPress 6.9+ (Abilities API is core from 6.9), below Flavor Agent's own 7.0 floor.

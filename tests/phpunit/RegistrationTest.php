@@ -158,6 +158,7 @@ final class RegistrationTest extends TestCase {
 			'flavor-agent/recommend-patterns',
 			'flavor-agent/recommend-template',
 			'flavor-agent/recommend-template-part',
+			'flavor-agent/recommend-post-blocks',
 			'flavor-agent/recommend-navigation',
 			'flavor-agent/recommend-style',
 		] as $ability_id ) {
@@ -168,11 +169,16 @@ final class RegistrationTest extends TestCase {
 			// Write-side recommend-* are curated onto the dedicated flavor-agent
 			// MCP server + the Abilities API, never the universal default server
 			// (whose recommend surface is the read-only preview siblings). Mirrors
-			// the external-apply abilities: no mcp key at all.
-			$this->assertArrayNotHasKey(
-				'mcp',
-				$ability['meta'],
+			// the external-apply abilities: an explicit mcp.public = false, which
+			// beats the meta.public inheritance mcp-adapter 0.6.0+ falls back to.
+			$this->assertFalse(
+				self::resolves_mcp_public( $ability['meta'] ),
 				"{$ability_id} must stay off the universal MCP server."
+			);
+			$this->assertSame(
+				false,
+				$ability['meta']['mcp']['public'] ?? null,
+				"{$ability_id} must declare mcp.public = false explicitly rather than omitting the key."
 			);
 		}
 
@@ -497,8 +503,100 @@ final class RegistrationTest extends TestCase {
 			$ability = WordPressTestState::$registered_abilities[ $ability_id ] ?? null;
 
 			$this->assertIsArray( $ability, "{$ability_id} should be registered." );
-			$this->assertArrayNotHasKey( 'mcp', $ability['meta'] ?? [], "{$ability_id} must remain Abilities-API-only (synced-pattern entities and backend inventory stay editor-internal)." );
+			$this->assertFalse(
+				self::resolves_mcp_public( $ability['meta'] ?? [] ),
+				"{$ability_id} must remain Abilities-API-only (synced-pattern entities and backend inventory stay editor-internal)."
+			);
+			$this->assertSame(
+				false,
+				$ability['meta']['mcp']['public'] ?? null,
+				"{$ability_id} must declare mcp.public = false explicitly; an absent key would inherit meta.public under mcp-adapter >= 0.6.0."
+			);
 		}
+	}
+
+	public function test_every_registered_ability_declares_mcp_exposure_explicitly(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+		Registration::register_recommendation_abilities();
+
+		$this->assertNotEmpty( WordPressTestState::$registered_abilities );
+
+		$public = [];
+
+		foreach ( WordPressTestState::$registered_abilities as $ability_id => $ability ) {
+			$meta = $ability['meta'] ?? [];
+
+			$this->assertIsArray( $meta, "{$ability_id} must register a meta array." );
+			$this->assertIsArray(
+				$meta['mcp'] ?? null,
+				"{$ability_id} must declare a meta.mcp array so exposure never falls through to meta.public."
+			);
+			$this->assertArrayHasKey(
+				'public',
+				$meta['mcp'],
+				"{$ability_id} must declare meta.mcp.public explicitly. Since mcp-adapter 0.6.0 (McpAbilityExposure, upstream #254) an absent key inherits the high-level meta.public flag, so silence is no longer a private default."
+			);
+			$this->assertIsBool(
+				$meta['mcp']['public'],
+				"{$ability_id} must declare meta.mcp.public as a boolean."
+			);
+
+			if ( self::resolves_mcp_public( $meta ) ) {
+				$public[] = $ability_id;
+			}
+		}
+
+		sort( $public );
+
+		$this->assertSame(
+			[
+				'flavor-agent/get-active-theme',
+				'flavor-agent/get-pattern',
+				'flavor-agent/get-theme-presets',
+				'flavor-agent/get-theme-styles',
+				'flavor-agent/get-theme-tokens',
+				'flavor-agent/introspect-block',
+				'flavor-agent/list-allowed-blocks',
+				'flavor-agent/list-patterns',
+				'flavor-agent/list-template-parts',
+				'flavor-agent/list-templates',
+				'flavor-agent/preview-recommend-block',
+				'flavor-agent/preview-recommend-navigation',
+				'flavor-agent/preview-recommend-post-blocks',
+				'flavor-agent/preview-recommend-style',
+				'flavor-agent/preview-recommend-template',
+				'flavor-agent/preview-recommend-template-part',
+				'flavor-agent/search-wordpress-docs',
+			],
+			$public,
+			'The universal MCP default server surface must stay exactly the ten externally-useful read helpers, search-wordpress-docs, and the six preview siblings.'
+		);
+	}
+
+	/**
+	 * Mirrors WP\MCP\Abilities\McpAbilityExposure::is_meta_public() as shipped in
+	 * mcp-adapter 0.6.0+ (upstream #254): an explicit meta.mcp.public wins, a
+	 * malformed meta.mcp fails closed, and otherwise exposure is inherited from
+	 * the high-level meta.public flag that WordPress 7.1 resolves on every ability.
+	 *
+	 * Reimplemented here rather than called directly because mcp-adapter is an
+	 * optional runtime dependency that is absent from the unit-test bootstrap.
+	 *
+	 * @param array<string, mixed> $meta Registered ability meta.
+	 */
+	private static function resolves_mcp_public( array $meta ): bool {
+		$mcp_meta = $meta['mcp'] ?? [];
+
+		if ( ! is_array( $mcp_meta ) ) {
+			return false;
+		}
+
+		if ( isset( $mcp_meta['public'] ) ) {
+			return (bool) $mcp_meta['public'];
+		}
+
+		return true === ( $meta['public'] ?? false );
 	}
 
 	public function test_search_wordpress_docs_does_not_claim_readonly_annotations(): void {
@@ -701,10 +799,14 @@ final class RegistrationTest extends TestCase {
 			$meta = Registration::external_apply_meta( $ability_id );
 
 			$this->assertTrue( $meta['show_in_rest'] );
-			$this->assertArrayNotHasKey(
-				'mcp',
-				$meta,
+			$this->assertFalse(
+				self::resolves_mcp_public( $meta ),
 				"{$ability_id} must stay off the universal MCP server — activity rows can carry prompts."
+			);
+			$this->assertSame(
+				false,
+				$meta['mcp']['public'] ?? null,
+				"{$ability_id} must declare mcp.public = false explicitly rather than omitting the key."
 			);
 
 			foreach ( $annotations as $key => $value ) {
@@ -756,7 +858,8 @@ final class RegistrationTest extends TestCase {
 
 		$this->assertIsArray( $ability );
 		$this->assertTrue( (bool) ( $ability['meta']['show_in_rest'] ?? false ) );
-		$this->assertArrayNotHasKey( 'mcp', $ability['meta'] );
+		$this->assertFalse( self::resolves_mcp_public( $ability['meta'] ) );
+		$this->assertSame( false, $ability['meta']['mcp']['public'] ?? null );
 		$this->assertSame(
 			'Recommend editorial content',
 			$ability['label'] ?? null
