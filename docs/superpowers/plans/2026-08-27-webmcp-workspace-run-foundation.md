@@ -20,6 +20,7 @@
 - Keep the current eight recommendation Abilities and 35 total Ability invariant. Do not create a ninth workflow Ability, add an MCP Adapter exposure, or register document.modelContext tools.
 - Preserve every legacy recommendation panel and its current checkbox/review owner. Spec 1 adds no product button and performs no dual write to shared selection, review, or apply-plan state.
 - Invoke recommendations only through the registered WP_Ability object returned by wp_get_ability(). Validate the fixed input before permission preflight, call execute(), then independently validate the output; never invoke recommender callbacks directly.
+- Keep preflight input distinct from the exact input WordPress authorized. Gate the post-normalization validation boundary against protected target drift, require a scoped `wp_before_execute_ability` witness for every ready result, retain only its closed `retainedAuthorizationInput`, and fail a short-circuited apparent success closed.
 - Add the closed optional workspaceContext field to the same eight recommendation Abilities and consume every included signed seam through its fixed native, preflight, or guidance destination. Run-based precollected docs suppress the legacy internal docs lookup; legacy direct calls without workspaceContext retain it.
 - Read hard/soft context criticality from the manifest. Missing hard mandatory context makes only the affected surface unavailable; docs grounding and recent outcomes are soft, remain visible in the receipt, and never block recommendation execution.
 - Spec 1 emits only advisory and stage_only units. Do not emit governed_apply or executionBinding until Spec 3 owns exact binding predicates and operation digests.
@@ -29,6 +30,8 @@
 - Preserve the vendor-less bootstrap guarantee. Do not add a runtime Composer dependency for canonical JSON or any other foundation class unless release packaging and the fallback bootstrap are deliberately redesigned and separately approved.
 - Do not reuse inc/Attestation/Canonicalizer.php, inc/Support/RecommendationSignature.php, or src/utils/structural-equality.js for protocol digests. Their sorting/number behavior is not RFC 8785.
 - Keep all revisions and request tokens in 0..9007199254740991. Overflow is workspace_revision_exhausted; wrapping or lossy comparison is forbidden.
+- Key asynchronous generation cleanup by `{ workspaceId, requestToken }` and exact controller identity; a token from an invalidated workspace can never release or settle a fresh request.
+- Keep request bodies and the internal REST wrapper closed, while normalizing nested public runs with the canonical compatible-output rule: select known fields, strip compatible optional extensions, and still reject reserved/private or lifecycle-incompatible members.
 - Capture the authoritative clock once per reservation, lease renewal, finalization, projection, or prune batch. Store UTC seconds and expose RFC 3339 UTC.
 - Keep public run JSON and private native bindings separate. No success, error, hook, log, or test snapshot may expose private payloads or unrestricted context.
 - Reserve HTTP 503 for manifest/storage/foundation failure before a terminal run. Provider or adapter failures become bounded per-surface results whenever terminal finalization is still possible.
@@ -42,15 +45,15 @@
 | Spec acceptance | Primary task | Required evidence |
 | --- | --- | --- |
 | AC1 sole page owner and no second store/context | Tasks 4–5 | Composed-store tests and source scan |
-| AC2 tab-local identity and primary-scope reset | Task 5 | UUID, scope, null-gap, and two-tab tests |
+| AC2 tab-local identity and primary-scope reset | Tasks 3 and 5 | Independent page/actor UUIDs, scope, null-gap, and two-tab tests |
 | AC3 exact context/install CAS effects | Task 4 | Pure reducer plus exported thunk tests |
-| AC4 late run retained but not current | Tasks 4 and 13–14 | Coordinator race and browser test |
+| AC4 late run retained but not current | Tasks 4, 5, and 13–14 | Workspace-aware handle race and browser test |
 | AC5 any valid one-to-nine surface subset | Tasks 1, 8, and 11 | Registry fixture and orchestration matrix |
 | AC6 two style invocations and generating post_blocks | Tasks 1 and 8 | Mapping and invoker assertions |
 | AC7 complete result set and status derivation | Tasks 8 and 11 | Ready/partial/failed adapter tests |
 | AC8 receipt partition plus consumed values | Tasks 6–8 | Shared receipt fixtures and per-Ability consumption spies |
-| AC9 server-owned signature and bindings | Task 7 | Inclusion/exclusion and spoof rejection |
-| AC10 bounded immutable public/private payloads | Tasks 8–11 | Size, digest, and corruption tests |
+| AC9 server-owned signature and bindings | Tasks 7–8 | Inclusion/exclusion, protected post-normalization gate, execution witness, closed retained authorization input, and spoof rejection |
+| AC10 bounded immutable public/private payloads | Tasks 8–13 | Size, digest, corruption, and compatible-response projection tests |
 | AC11 idempotency, takeover, and fencing | Tasks 9–10 | Explicit interleaving repository fake |
 | AC12 expiry and tombstone deadlines | Tasks 9–10 | Exact boundary tests |
 | AC13 read projection performs no writes | Tasks 10–11 | Write-counter assertions |
@@ -186,7 +189,7 @@ Assert exactly this canonical surface order:
     global_styles
     style_book
 
-Assert exactly eight unique recommendation Ability IDs, two independently scoped style entries, the five reserved future executor-lane names and schema versions, no Spec 1 governed_apply policy, every interaction mode, all nine mandatory surface profiles and expanded hardContextPaths arrays, all four focus profiles, all 18 closed seam definitions, every seam consumer allowlist/destination/criticality, every truncation maximum/unit, the exact five-row trusted-docs allowlist/currentness policy, fixed defaults, the safe-integer ceiling, every section 11 field/collection/byte limit and regex, public/internal REST schemas, the complete closed JSON Schema vocabulary, and foundation error metadata. Assert wrong/missing versions fail rather than falling back.
+Assert exactly eight unique recommendation Ability IDs, two independently scoped style entries, the five reserved future executor-lane names and schema versions, no Spec 1 governed_apply policy, every interaction mode, all nine mandatory surface profiles and expanded hardContextPaths arrays, all four focus profiles, all 18 closed seam definitions, every seam consumer allowlist/destination/criticality, every truncation maximum/unit, the exact five-row trusted-docs allowlist/currentness policy, every surface's exact authorization-projection paths, the per-surface closed retained-authorization-input schemas and 1 MiB cap, the nested-response reserved-member list, fixed defaults, the safe-integer ceiling, every section 11 field/collection/byte limit and regex, public/internal REST schemas, the complete closed JSON Schema vocabulary, and foundation error metadata. Assert wrong/missing versions fail rather than falling back.
 
 Require shared fixtures across Tasks 1–8 to cover every string minimum/maximum/maximum-plus-one and regex near-miss; every collection maximum/maximum-plus-one/duplicate/order rule; all six editor-scope unions and prefix-composed maxima; timestamp offset/milliseconds/impossible-date/leap-second cases; the edited-content escaping cap; exact receipt partition, category-only fields, server-derived truncation limits/units, and cross-field count mismatches; operation-count caps per surface; every error-details branch; `{}` versus `[]`; invalid UTF-8/lone surrogates; docs 8/9-item plus 360/361-character boundaries; and the one-path mixed docs aggregation with included, unavailable, and differently truncated surface counts. PHP and JavaScript must accept/reject the shared wire fixtures identically.
 
@@ -353,8 +356,14 @@ Expected: PHP and JavaScript match every shared byte/digest vector; existing att
     isRecommendationContextConfigurationConfigured(value)
 
     createUuidV4({ getRandomValues } = {})
-    createRecommendationPageIdentity(dependencies = {})
-    getRecommendationPageIdentity()
+    createRecommendationPageIdentity(dependencies = {}): Readonly<{
+      editorInstanceId: string,
+      humanActorSessionId: string
+    }>
+    getRecommendationPageIdentity(): Readonly<{
+      editorInstanceId: string,
+      humanActorSessionId: string
+    }>
     createRecommendationWorkspaceId(dependencies = {})
 
     selectRecommendationEditorScopeInputs(select)
@@ -399,7 +408,7 @@ When content is requested without a mode, surfaceParameters is exactly:
 
 - [ ] **Step 2: Write failing PHP/JS parity tests**
 
-Each valid case must emit identical canonical bytes and digest in PHP and JavaScript. Each invalid case must return context_configuration_invalid with the same path and reasonCode. Add secure-randomness tests that reject Math.random() fallback and reuse page identity only within one module lifetime.
+Each valid case must emit identical canonical bytes and digest in PHP and JavaScript. Each invalid case must return context_configuration_invalid with the same path and reasonCode. Add secure-randomness tests that reject Math.random() fallback. Pin one frozen page-identity object per module lifetime: repeated reads return the identical pair; both members are lowercase UUIDv4 values from separate draws; the two values differ; workspace IDs use additional draws; and two isolated page/module harnesses receive four distinct identity values.
 
 Run:
 
@@ -414,7 +423,7 @@ Read enums, order, defaults, regexes, and limits only from V1Contract. Return ty
 
 - [ ] **Step 4: Implement secure page identity and scope resolution**
 
-Use crypto.getRandomValues(), set UUIDv4 version/variant bits, and fail closed without secure randomness. Resolver priority is Style Book target, Global Styles root, canonical Site Editor entity, regular saved post/CPT, then temporary entity.
+Use crypto.getRandomValues(), set UUIDv4 version/variant bits, and fail closed without secure randomness. `createRecommendationPageIdentity()` performs and caches exactly two independent draws for `{ editorInstanceId, humanActorSessionId }`; `createRecommendationWorkspaceId()` never reuses either value. Resolver priority is Style Book target, Global Styles root, canonical Site Editor entity, regular saved post/CPT, then temporary entity.
 
 Pin these subtleties:
 
@@ -471,19 +480,19 @@ Then:
       workspaceId,
       expectedWorkspaceRevision,
       idempotencyKey
-    })
+    }): { requestKey: { workspaceId, requestToken } } | error
     cacheRecommendationRun({ run, payloadDigest })
     installRecommendationRun({
       workspaceId,
       expectedWorkspaceRevision,
       runId
     })
-    finishRecommendationGeneration({ requestToken, runId = null })
-    failRecommendationGeneration({ requestToken, error })
+    finishRecommendationGeneration({ requestKey, runId = null })
+    failRecommendationGeneration({ requestKey, error })
 
 - [ ] **Step 1: Write pure reducer failures first**
 
-Cover unbound defaults; initialize and invalidate; semantic/no-op context replacement; wrong ID/revision no-op; revision overflow; atomic supersede/clear; selected focus replacement; generation state with no revision change; immutable cache insertion; same-ID/same-digest retry; same-ID/different-digest run_payload_mismatch; deterministic 10-run eviction; first install; exact current retry; superseded-run non-revival; and two different runs from one base revision.
+Cover unbound defaults; initialize and invalidate; semantic/no-op context replacement; wrong ID/revision no-op; revision overflow; atomic supersede/clear; selected focus replacement; generation state with no revision change; immutable cache insertion; same-ID/same-digest retry; same-ID/different-digest run_payload_mismatch; deterministic 10-run eviction; first install; exact current retry; superseded-run non-revival; and two different runs from one base revision. Pin generation begin returning the committed `{ workspaceId, requestToken }`, finish/fail requiring both values, stale old-workspace keys being no-ops even when the visible token matches, and request-token overflow returning `workspace_revision_exhausted` without changing state.
 
 Run:
 
@@ -535,6 +544,8 @@ Every CAS thunk performs:
 
 The reducer repeats the guard. Exact same-current-run/same-digest installation succeeds without mutation; a superseded run never revives.
 
+`beginRecommendationGeneration` also checks the current token before dispatch. When it is already `9007199254740991`, return `workspace_revision_exhausted` with no action. Otherwise the guarded reducer increments it once and the thunk returns a frozen request key from the committed `baseWorkspaceId` and `requestToken`. Finish/fail compare both fields; token equality alone is never sufficient.
+
 - [ ] **Step 4: Compose the existing store**
 
 Import the extracted default-state factory near src/store/index.js imports, merge the three slices into DEFAULT_STATE, spread the extracted action creators with existing actions, run reduceRecommendationWorkspaceState() before the legacy reducer switch, and spread the exact selector names fixed by Spec 1. Do not register another store.
@@ -576,8 +587,11 @@ Run:
       blockEditor
     })
 
-    registerRecommendationGenerationController(requestToken, controller)
-    releaseRecommendationGenerationController(requestToken)
+    registerRecommendationGenerationController(requestKey, controller): {
+      requestKey,
+      controller
+    }
+    releaseRecommendationGenerationController(requestHandle)
     abortRecommendationGenerationRequests()
 
     RecommendationWorkspaceBootstrap()
@@ -597,7 +611,8 @@ Use injected store selectors/actions, Style Book subscription, page identity, UU
 - selection keeps ordered first occurrences, discards missing IDs, and caps at 20;
 - deselection replaces a non-empty focused configuration with [];
 - document/site focus ignores selection churn;
-- unmount aborts all active requests.
+- unmount aborts all active requests;
+- registering returns a frozen handle, release requires the same composite key and controller object, and a late release for an aborted old-workspace handle cannot delete a new controller whose visible token is equal.
 
 Run:
 
@@ -609,6 +624,8 @@ Expected: fail because the component does not exist.
 
 Use existing helpers from src/utils/editor-entity-contracts.js, src/global-styles/selectors.js, and src/style-book/dom.js. Select bounded primitives from core/editor, core/edit-site, core/interface, and core/block-editor; do not retain entire store objects or make ActivitySessionBootstrap an owner.
 
+Keep the controller map module-local and key it by the canonical `workspaceId + "\0" + requestToken` composite. Store the exact frozen handle. `releaseRecommendationGenerationController()` deletes only when the current map entry has the same request-key values and the same controller object; stale or repeated release is a no-op. `abortRecommendationGenerationRequests()` aborts every current controller and clears the map before invalidation, but late promise cleanup remains harmless because it still holds only its obsolete handle.
+
 On a key change, execute in this order:
 
     abortRecommendationGenerationRequests()
@@ -618,7 +635,7 @@ On a key change, execute in this order:
 
 During a null gap, stop after invalidation. Never preserve the old ID for later restoration.
 
-Create coordinator.js with the page-lifetime controller Map and the three lifecycle functions above. Task 13 extends this same module with completeRecommendationRequest; there is no second abort registry.
+Create coordinator.js with the page-lifetime controller Map and the three lifecycle functions above. Task 13 extends this same module with the internal `coordinateRecommendationRequest()` seam and no-actor `completeRecommendationRequest()` store wrapper; there is no second abort registry.
 
 - [ ] **Step 3: Implement deterministic focus synchronization**
 
@@ -880,6 +897,7 @@ Then:
 - Create: inc/Recommendations/Runs/SurfaceRegistry.php
 - Create: inc/Recommendations/Runs/SurfaceInputAdapter.php
 - Create: inc/Recommendations/Runs/AbilityInvoker.php
+- Create: inc/Recommendations/Runs/AbilityInvocationGuardException.php
 - Create: inc/Recommendations/Runs/SurfaceResultAdapter.php
 - Create: inc/Support/ClosedJsonSchemaValidator.php
 - Create: inc/Support/WorkspaceContextGuidance.php
@@ -922,14 +940,33 @@ Then:
       int $base_revision
     ): array|\WP_Error
 
-    AbilityInvoker::invoke(string $surface_id, array $input): array
-    AbilityInvoker::reauthorize(string $surface_id, array $retained_input): true|\WP_Error
+    SurfaceInputAdapter::authorization_projection(
+      string $surface_id,
+      array $ability_input,
+      array $editor_scope
+    ): array|\WP_Error
+    SurfaceInputAdapter::retained_authorization_input(
+      string $surface_id,
+      array $ability_input,
+      array $editor_scope
+    ): array|\WP_Error
+
+    AbilityInvoker::invoke(
+      string $surface_id,
+      array $adapted_input,
+      array $editor_scope
+    ): array{nativeOutput: mixed, retainedAuthorizationInput: array, retainedAuthorizationInputDigest: string}|\WP_Error
+    AbilityInvoker::reauthorize(
+      string $surface_id,
+      array $retained_authorization_input,
+      array $editor_scope
+    ): true|\WP_Error
 
     SurfaceResultAdapter::adapt(
       string $run_id,
       string $surface_id,
       string $ability_id,
-      array $ability_input,
+      array $retained_authorization_input,
       mixed $native_output,
       array $remaining_budget
     ): array|\WP_Error
@@ -960,7 +997,7 @@ Then:
 
 - [ ] **Step 1: Add a faithful WP_Ability test seam**
 
-Extend tests/phpunit/bootstrap.php without breaking existing registration-array assertions. Add a test WP_Ability object and wp_get_ability() registry that expose registered input/output schemas, check_permissions(), and execute(), with counters and injected error/filter behavior. Add reusable REST-schema validation stubs. Reset all new registries/counters between tests. Add schema-corpus helpers that walk every live input/output schema for the eight recommendation Abilities and report every encountered validation or annotation keyword.
+Extend tests/phpunit/bootstrap.php without breaking existing registration-array assertions. Add a faithful test WP_Ability object and wp_get_ability() registry that expose normalize_input(), validate_input(), check_permissions(), and execute() in WordPress 7.1 order, including scoped `wp_ability_normalize_input`, `wp_ability_validate_input`, `wp_pre_execute_ability`, and `wp_before_execute_ability` behavior, counters, and injected errors. Add reusable REST-schema validation stubs. Reset all new registries, hooks, and counters between tests. Add schema-corpus helpers that walk every live input/output schema for the eight recommendation Abilities and report every encountered validation or annotation keyword.
 
 - [ ] **Step 2: Write failing registry and ordering tests**
 
@@ -978,7 +1015,7 @@ Assert exact mapping:
 | global_styles | flavor-agent/recommend-style | Global Styles root |
 | style_book | flavor-agent/recommend-style | exact Style Book block |
 
-Assert one-to-nine unique input surfaces normalize to canonical order, post_blocks is generating, and requesting both style surfaces executes style twice with distinct scopes.
+Assert one-to-nine unique input surfaces normalize to canonical order, post_blocks is generating, and requesting both style surfaces executes style twice with distinct scopes. Pin the exact Spec section 12.2 protected-projection table in the manifest and adapter: all post-ID aliases consumed by `RecommendationAbility::permission_callback`, navigation `menuId`, template/template-part refs, both style scope shapes, fixed surface, authoritative editor scope, and `clientRequest.scopeKey`. The retention projector returns only closed `{ surfaceId, editorScope, abilityInput }`; `abilityInput` is the exact normalized adapter output after validation against that surface's separate recursively closed retained-input schema, permits no additional properties at any level, and keeps the complete wrapper within 1 MiB canonical JSON. Reject conflicting post aliases or any protected projection that differs from the server identity before permission or execution.
 
 - [ ] **Step 3: Implement closed per-surface input adapters**
 
@@ -992,6 +1029,8 @@ Build the existing registered input fields plus the new closed optional workspac
 - post_blocks: exact persistent post ID, prompt, requestReference, document, clientRequest, and only permitted outcome/docs workspace context; never a client block tree;
 - global_styles/style_book: exact closed scope and bounded styleContext, prompt, document, clientRequest.
 
+Materialize one closed retained-input schema per wire surface from exactly those adapter fields plus the optional closed workspaceContext. Replace every intentionally open registered-schema object with the bounded server-built shape used by the adapter; do not copy `additionalProperties: true` into the retention schema. A normalized value with any undeclared root or nested field fails rather than being stripped or retained.
+
 Construct workspaceContext exactly as Spec 1 section 10.3.1. Native fields consume their mapped seams; remaining allowed structural values are deterministically rendered to semanticSummary; activity becomes recentOutcomeSummary; the matching per-surface docs entry becomes docsGrounding. Reject an included seam with no declared destination. Bound the final derived prompt to 5,000 code points without truncating normalized intent. Set clientRequest.sessionId to actorSessionId, abortId to runId, scopeKey to editorScope.key, and requestToken to base revision. Validate target identity before any permission callback. A temporary scope cannot create a persistent executor binding.
 
 For post_blocks, inspect the captured save/publication state immediately before invocation. If dirty, saving, autosaving, not saveable, absent, or malformed, emit surface unavailable with reasonCode unsaved_editor_content and call neither permission nor execute. The Ability continues to use its own fresh saved-server context and native resolved/review signatures.
@@ -1002,9 +1041,20 @@ Implement the complete closed manifest vocabulary from Spec 1 section 6: local $
 
 Enumerate every live input/output schema for the eight recommendation Abilities. Tests fail if any encountered keyword is neither validated nor explicitly annotation-only. Add discriminating valid/invalid fixtures for union-valued type and the current anyOf schema, plus parity assertions against rest_validate_value_from_schema for every real registered schema. Never silently accept a branch because an unsupported keyword was ignored.
 
-Resolve only the registry Ability ID. Validate adapted input against get_input_schema(), call check_permissions(), then call execute(), then validate the result against get_output_schema(). This independent post-validation is required because wp_pre_execute_ability may short-circuit WordPress execution. Classify missing/prerequisite/permission as unavailable; classify attempted execution/schema/adapter errors as failed. Strip provider bodies and stack traces.
+Resolve only the registry Ability ID and keep these values distinct:
 
-Assert target validation occurs before permission, permission immediately precedes execute, and reauthorize() repeats the retained input projection check without invoking the recommendation.
+    adaptedInput = SurfaceInputAdapter output
+    preflightInput = ability.normalize_input(adaptedInput)
+    expectedAuthorizationProjection = adapter projection from authoritative scope
+    preflightAuthorizationProjection = projection from preflightInput
+
+Reject a normalization error, registered-schema or closed-retention-schema failure, conflicting target alias, retained wrapper over 1 MiB canonical JSON, or projection mismatch before permission; a protected target change is bounded `ability_input_target_changed` and never reaches the recommendation callback. Validate `preflightInput` independently against get_input_schema() and the surface's closed retained schema, then call the Ability's validate_input() and check_permissions() on that exact value. Permission denial is unavailable; normalization/schema/projection errors are failed.
+
+Immediately around execute(), install a final-priority active-invocation-token/name-scoped `wp_ability_validate_input` gate and a `PHP_INT_MIN` exact-object/name-scoped `wp_before_execute_ability` witness, and remove both in `finally`. Call execute() with `adaptedInput`, not the already-normalized value. The validation gate preserves an incoming WP_Error. Otherwise it sees the final execution-pass normalized input after Core schema validation, validates the complete value against the surface's closed retained schema, wraps it as `retainedAuthorizationInput`, enforces canonical serializability and the 1 MiB cap, and returns WP_Error if its protected projection differs from preflight/server authority. This gate is independent of normalizer priority; test a target-changing normalizer registered after invocation setup and prove neither permission nor recommendation callback runs.
+
+The witness recomputes the closed retained value from Core's exact normalized input after authoritative permission, requires a canonical byte match with the gate candidate, and calls check_permissions() once with the byte-equivalent `retainedAuthorizationInput.abilityInput`. A mismatch or non-true result throws a private no-payload invocation-guard exception, caught by the invoker before Core reaches do_execute(). Accept a successful output only when exactly one witness completes. A schema-valid `wp_pre_execute_ability` return or any other apparently successful bypass with no witness becomes failed `ability_execution_short_circuited`; it creates no ready binding. Independently validate the accepted result against get_output_schema() because WordPress output-validation filters may override the built-in verdict. Strip provider bodies, hook/exception details, and stack traces.
+
+Digest and pass only the witnessed `retainedAuthorizationInput` to SurfaceResultAdapter. `reauthorize()` verifies its digest, surface-specific closed schema, 1 MiB cap, and protected projection against the retained surface/editor scope, then calls check_permissions(retainedAuthorizationInput.abilityInput) only. It never calls normalize_input(), execute(), or the recommendation callback. Tests prove target validation occurs before any permission callback, the execution witness follows Core's authoritative permission check, every permission callback/filter receives byte-equivalent input on later reauthorization, an injected undeclared secret/grant flag fails before permission/callback, and temporary hooks are removed on every exit.
 
 - [ ] **Step 5: Make all eight Abilities consume the signed projection**
 
@@ -1026,7 +1076,7 @@ Use the approved native-to-unit rules in canonical order. Bound title, summary, 
       unitCount
     }
 
-PrivateBinding contains resultRef, source surface, Ability ID, input digest, retained allowlisted input projection, validated native result, unit mapping, existing signatures/target evidence, and binding schema version. PublicResult contains no operations, pattern markup, target evidence, or native payload. Independently enforce all public record/error/freshness/cardinality bounds from Spec section 11; the wider/open native Ability schema is never treated as protocol validation.
+PrivateBinding contains resultRef, source surface, Ability ID, the witnessed `retainedAuthorizationInput` digest, the closed at-most-1-MiB exact normalized retained value, validated native result, unit mapping, existing signatures/target evidence, and binding schema version. It contains neither preflightInput nor undeclared normalizer fields, credential/provider fields, or unrestricted combined context. PublicResult contains no operations, pattern markup, target evidence, or native payload. Independently enforce all public record/error/freshness/cardinality bounds from Spec section 11; the wider/open native Ability schema is never treated as the closed retention or protocol schema.
 
 Derive IDs exactly:
 
@@ -1049,6 +1099,10 @@ Emit only advisory or stage_only in Spec 1. Mutation-shaped block, pattern, temp
 
 At least one test per wire surface must use the real Flavor Agent registration/output path. Cover required resultRef even for failed/unavailable, exact contextPaths, warning/error unions, freshness signatures, per-surface operationCount caps, zero-suggestion ready, ready/partial/failed derivation inputs, native/public/private size failures, 25-unit surface cap, 100-unit run budget accounting, deterministic later-surface handling, all seam consumer destinations, precollected-docs suppression, dirty post_blocks unavailability, and zero Spec 1 governed_apply units.
 
+Add discriminating execution-lifecycle cases: a preflight normalizer changes a post target; a stateful normalizer changes it only on the execute pass; a target-changing normalizer registered after invocation setup is caught by the validation gate before permission; a harmless change to a declared non-protected field succeeds and the exact closed witnessed value/digest is retained; an injected undeclared secret or permission-grant flag fails before permission/callback and is absent from storage/reauthorization; a `wp_ability_permission_result` rule that requires a declared retained field observes the byte-equivalent field/value during witness and later reauthorization; oversize/non-canonical input, normalization, or validation failure invokes neither permission nor callback; and `wp_pre_execute_ability` returns a schema-valid native result but produces no witness, so the surface fails with `ability_execution_short_circuited`. Assert zero ready binding for every rejected case and no leaked temporary hook in the following test.
+
+Shared surface-error fixtures pin `ability_input_target_changed` to `validation`/`refresh_context` and `ability_execution_short_circuited` to `recovery`/`retry_same`; each uses the same bounded reason code, the containing surface ID, and no hook, provider, input, credential, or exception detail.
+
 Run:
 
     vendor/bin/phpunit tests/phpunit/RecommendationRunServiceTest.php tests/phpunit/RegistrationTest.php tests/phpunit/AbilitySchemaContractTest.php tests/phpunit/PreviewRecommendationAbilityTest.php tests/phpunit/BlockAbilitiesTest.php tests/phpunit/ContentAbilitiesTest.php tests/phpunit/PatternAbilitiesTest.php tests/phpunit/NavigationAbilitiesTest.php tests/phpunit/TemplateAbilitiesTest.php tests/phpunit/StyleAbilitiesTest.php tests/phpunit/PostBlocksAbilitiesTest.php
@@ -1056,7 +1110,7 @@ Run:
 
 Then:
 
-    git add tests/fixtures/recommendation-protocol/run-cases.json inc/Recommendations/Runs/SurfaceRegistry.php inc/Recommendations/Runs/SurfaceInputAdapter.php inc/Recommendations/Runs/AbilityInvoker.php inc/Recommendations/Runs/SurfaceResultAdapter.php inc/Support/ClosedJsonSchemaValidator.php inc/Support/WorkspaceContextGuidance.php inc/Abilities/Registration.php inc/Abilities/RecommendationAbilityExecution.php inc/Abilities/BlockAbilities.php inc/Abilities/ContentAbilities.php inc/Abilities/PatternAbilities.php inc/Abilities/NavigationAbilities.php inc/Abilities/TemplateAbilities.php inc/Abilities/StyleAbilities.php inc/Abilities/PostBlocksAbilities.php inc/AI/Abilities/PreviewRecommendationAbility.php tests/phpunit/bootstrap.php tests/phpunit/RecommendationRunServiceTest.php tests/phpunit/AbilitySchemaContractTest.php tests/phpunit/RegistrationTest.php tests/phpunit/PreviewRecommendationAbilityTest.php tests/phpunit/BlockAbilitiesTest.php tests/phpunit/ContentAbilitiesTest.php tests/phpunit/PatternAbilitiesTest.php tests/phpunit/NavigationAbilitiesTest.php tests/phpunit/TemplateAbilitiesTest.php tests/phpunit/StyleAbilitiesTest.php tests/phpunit/PostBlocksAbilitiesTest.php
+    git add tests/fixtures/recommendation-protocol/run-cases.json inc/Recommendations/Runs/SurfaceRegistry.php inc/Recommendations/Runs/SurfaceInputAdapter.php inc/Recommendations/Runs/AbilityInvoker.php inc/Recommendations/Runs/AbilityInvocationGuardException.php inc/Recommendations/Runs/SurfaceResultAdapter.php inc/Support/ClosedJsonSchemaValidator.php inc/Support/WorkspaceContextGuidance.php inc/Abilities/Registration.php inc/Abilities/RecommendationAbilityExecution.php inc/Abilities/BlockAbilities.php inc/Abilities/ContentAbilities.php inc/Abilities/PatternAbilities.php inc/Abilities/NavigationAbilities.php inc/Abilities/TemplateAbilities.php inc/Abilities/StyleAbilities.php inc/Abilities/PostBlocksAbilities.php inc/AI/Abilities/PreviewRecommendationAbility.php tests/phpunit/bootstrap.php tests/phpunit/RecommendationRunServiceTest.php tests/phpunit/AbilitySchemaContractTest.php tests/phpunit/RegistrationTest.php tests/phpunit/PreviewRecommendationAbilityTest.php tests/phpunit/BlockAbilitiesTest.php tests/phpunit/ContentAbilitiesTest.php tests/phpunit/PatternAbilitiesTest.php tests/phpunit/NavigationAbilitiesTest.php tests/phpunit/TemplateAbilitiesTest.php tests/phpunit/StyleAbilitiesTest.php tests/phpunit/PostBlocksAbilitiesTest.php
     git commit -m "Adapt recommendation run surfaces"
 
 ---
@@ -1353,7 +1407,7 @@ Errors before reservation invoke zero Ability work and create no row. Assert mal
 
 Accept only protocolVersion, workspaceId, expectedWorkspaceRevision, actorSessionId, editorScope, contextConfiguration, contextCapture, and idempotencyKey. Derive current user and captured siteScopeId; reject request-supplied authority fields. Normalize and completely validate contextCapture before calling reserve(). Generate run ID on first reservation and use actor session only for diagnostics.
 
-For an active terminal dedupe, call the exact same authorize_run_read() path used by read(): captured-site context, owner, current scope authorization, payload digests, availability, and per-ready retained-input reauthorization. Then return the existing run without recapturing server context. For a terminal or physical-tombstone dedupe, use the same owner/scope/availability path: `expiresAt <= now < tombstoneUntil` returns run_expired, while `now >= tombstoneUntil` returns run_not_found despite physical prune lag. A new result requires a fresh idempotency key.
+For an active terminal dedupe, call the exact same authorize_run_read() path used by read(): captured-site context, owner, current scope authorization, payload digests, availability, and per-ready witnessed retained-authorization-input reauthorization. Then return the existing run without recapturing server context. For a terminal or physical-tombstone dedupe, use the same owner/scope/availability path: `expiresAt <= now < tombstoneUntil` returns run_expired, while `now >= tombstoneUntil` returns run_not_found despite physical prune lag. A new result requires a fresh idempotency key.
 
 - [ ] **Step 3: Orchestrate context and surfaces**
 
@@ -1367,7 +1421,7 @@ Derive run status ready when all are ready, partial when ready and non-ready coe
 
 - [ ] **Step 4: Build immutable public/private payloads**
 
-Public run contains protocolVersion, runId, workspaceId, baseWorkspaceRevision, wire status, created/completed/expires timestamps, normalized intent snapshot, public context signature/receipt, and canonical results. Private payload contains complete normalized configuration, per-surface retained input projections, native outputs, mappings, and bindings—never the unrestricted combined context.
+Public run contains protocolVersion, runId, workspaceId, baseWorkspaceRevision, wire status, created/completed/expires timestamps, normalized intent snapshot, public context signature/receipt, and canonical results. Private payload contains complete normalized configuration, each ready surface's exact closed witnessed `retainedAuthorizationInput` and digest, native outputs, mappings, and bindings—never preflight input, undeclared normalizer fields, credential/provider fields, or the unrestricted combined context.
 
 Canonicalize and cap both payloads before finalize. Re-read and verify the committed row/digests before returning success.
 
@@ -1380,14 +1434,15 @@ Implement one private/shared authorize_run_read() service path used by both read
     EditorScope parse and current authorization
     availability projection
     public/private digest verification
-    reauthorize every ready result from retained input
+    verify every ready retained-authorization-input digest/closed schema/protected projection
+    call check_permissions() on each exact witnessed retainedAuthorizationInput.abilityInput
     return immutable public payload
 
-If any ready result is no longer authorized, deny the complete run. Tombstones reveal only runId, expiresAt, and tombstoneUntil after owner/scope authorization. Corrupt JSON/digest mismatch returns run_payload_mismatch and no partial payload. Tests revoke one ready surface after completion and prove both GET and active POST dedupe deny identically.
+If any ready result is no longer authorized, deny the complete run. Reauthorization calls neither normalize_input() nor execute(). Tombstones reveal only runId, expiresAt, and tombstoneUntil after owner/scope authorization. Corrupt JSON/digest mismatch returns run_payload_mismatch and no partial payload. Tests retain a witnessed target, revoke that target after completion, and prove both GET and active POST dedupe pass the byte-equivalent closed `abilityInput` to check_permissions(), deny identically, and perform zero normalization or execution.
 
 - [ ] **Step 6: Verify all surfaces and commit**
 
-Cover all 511 non-empty subsets of nine surfaces at the registry/service boundary without making real provider calls; use representative real registration/output tests per surface separately. Cover two style invocations, clean and dirty post_blocks, zero-unit success, provider failure as surface failure, payload caps, exact result order, identical read/dedupe permission revocation, pre-reservation capture rejection, context-signature persistence, and finalization loss.
+Cover all 511 non-empty subsets of nine surfaces at the registry/service boundary without making real provider calls; use representative real registration/output tests per surface separately. Cover two style invocations, clean and dirty post_blocks, zero-unit success, provider failure as surface failure, payload caps, exact result order, exact witnessed retained-input read/dedupe permission revocation, pre-reservation capture rejection, context-signature persistence, and finalization loss.
 
 Run:
 
@@ -1475,7 +1530,7 @@ Set Cache-Control: no-store on every success and normalized error response. Map 
 
 - [ ] **Step 5: Prove GET is observational**
 
-Use repository write counters to assert GET performs no prune, lazy expiry, row update, activity write, workspace install, or Ability execute. Permission reauthorization may call check_permissions() only. Assert privateBinding, native result, input projection, site binding, and user binding do not appear in any serialized response or error.
+Use repository write counters to assert GET performs no prune, lazy expiry, row update, activity write, workspace install, Ability normalization, or Ability execute. Permission reauthorization may call check_permissions() only on the witnessed `retainedAuthorizationInput.abilityInput`. Assert privateBinding, native result, effectiveInput, retainedAuthorizationInput, preflight input, site binding, and user binding do not appear in any serialized response or error.
 
 - [ ] **Step 6: Verify existing routes and commit**
 
@@ -1518,15 +1573,22 @@ Then:
         collectContext,
         createRun,
         resolveEditorScope,
+        getRecommendationPageIdentity,
         digestRun,
         createAbortController
       }
     )
 
-    completeRecommendationRequest({
+    coordinateRecommendationRequest({
       workspaceId,
       expectedWorkspaceRevision,
       actorSessionId,
+      idempotencyKey
+    })
+
+    completeRecommendationRequest({
+      workspaceId,
+      expectedWorkspaceRevision,
       idempotencyKey
     })
 
@@ -1549,11 +1611,13 @@ and:
       signal
     }
 
-Reject arbitrary paths/Ability names, unknown response fields, non-terminal runs, missing/duplicate result surfaces, invalid IDs/timestamps/statuses, private fields, oversized public payloads, and error objects without fixed code/category/retry disposition.
+Reject arbitrary paths/Ability names, non-terminal runs, missing/duplicate result surfaces, invalid IDs/timestamps/statuses, oversized public payloads, and error objects without the fixed base code/category/retry structure. Keep the outer success/error REST wrappers closed: an extra wrapper property fails.
+
+For the nested public run, add paired fixtures proving a compatible unknown optional property at the run, result, unit, receipt, and error object boundaries is accepted then stripped, and the normalized object/digest equals the same run without those extensions. Recursively reject every exact reserved/private member from Spec section 13.1, including `applyBatchId`, `executionBinding`, `privateBinding`, `effectiveInput`, `retainedAuthorizationInput`, native payloads, operations, and authority/lease fields. Reject `compensated` and every other incompatible value of a known closed enum. Accept an unknown bounded error code when category/retryDisposition/base fields are valid; validate exact details for known codes and discard unsupported code-specific details for generic handling.
 
 - [ ] **Step 2: Implement the JavaScript closed-schema validator and client**
 
-Mirror the PHP validator vocabulary and error paths. Validate before POST and after response; apiFetch supplies the cookie REST nonce. Normalize server errors to the common bounded envelope and never cache an unvalidated response.
+Mirror the PHP validator vocabulary and error paths for closed requests and known response fields. Validate before POST; apiFetch supplies the cookie REST nonce. After response, first validate the exact outer wrapper and scan the nested run for reserved/private names, then recursively project only known protocol 1.0 fields while ignoring compatible optional extensions. Validate that known projection, compute its canonical digest, and cache only it. Normalize server errors to the common bounded envelope with open code strings and never cache an invalid or unprojected response.
 
 - [ ] **Step 3: Write coordinator race tests before implementation**
 
@@ -1570,7 +1634,11 @@ Use deferred capture/network promises and the actual store actions to cover:
 - run_payload_mismatch -> first cache retained, no install;
 - abort on scope change/unmount;
 - context change does not abort but loses CAS;
-- latest-request generation projection ignores stale finish/fail tokens.
+- latest-request generation projection ignores stale finish/fail request keys;
+- request A is aborted in workspace A, workspace B registers request B with the same visible token, then A settles: A's identity-checked release and finish/fail are no-ops, B's controller/loading state remain, and only B can release/settle them;
+- request-token maximum returns workspace_revision_exhausted before controller allocation, capture, or network;
+- the exported first-party store action has no actor override and always POSTs `getRecommendationPageIdentity().humanActorSessionId`;
+- the separately named internal seam passes through a valid later-agent UUID only when it differs from both page identity values; an absent, malformed, `editorInstanceId`-equal, or `humanActorSessionId`-equal value creates no generation state, controller, capture, or POST.
 
 Run:
 
@@ -1585,8 +1653,9 @@ The coordinator performs exactly:
     read and compare workspace
     require configured normalized context
     require current resolved scope match
-    begin generation and receive unique request token
-    register AbortController in the existing coordinator Map
+    first-party wrapper injects page humanActorSessionId; internal seam validates its required actorSessionId
+    begin generation and receive GenerationRequestKey
+    register AbortController and retain the returned identity-checked handle
     capture one immutable snapshot
     synchronously recheck ID/revision/scope
     POST fixed request
@@ -1594,13 +1663,13 @@ The coordinator performs exactly:
     cache immutable run/digest
     invoke install CAS with original expected revision
     observe committed relationship or conflict
-    release controller and finish/fail matching token
+    release the exact controller handle and finish/fail the matching request key in finally
 
-There is no asynchronous gap between the final page comparison and guarded dispatch inside installRecommendationRun. A failed install returns workspace_changed_during_generation and may include retained runId for safe diagnostics; it performs no semantic mutation.
+There is no asynchronous gap between the final page comparison and guarded dispatch inside installRecommendationRun. Every asynchronous continuation closes over its original request key and controller handle. A failed install returns workspace_changed_during_generation and may include retained runId for safe diagnostics; it performs no semantic mutation.
 
-- [ ] **Step 5: Compose coordinator actions into the sole store**
+- [ ] **Step 5: Compose the human wrapper into the sole store**
 
-Import and spread createRecommendationCoordinatorActionCreators() into the existing flavor-agent actions. Do not register another store, React context, global callback, or WebMCP tool. Keep the controller Map module-local.
+Import and spread createRecommendationCoordinatorActionCreators() into the existing flavor-agent actions. It exposes only the no-actor `completeRecommendationRequest()` wrapper; the separately named `coordinateRecommendationRequest()` export remains a non-store internal seam for later agent wiring and is not spread into the store. Do not register another store, React context, global callback, or WebMCP tool. Keep the controller Map module-local.
 
 - [ ] **Step 6: Verify and commit**
 

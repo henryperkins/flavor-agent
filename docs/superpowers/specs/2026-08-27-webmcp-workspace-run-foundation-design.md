@@ -181,7 +181,16 @@ Registered Ability schemas remain Gutenberg/WordPress-compatible draft-04 schema
 
 ### 7.1 Identity values
 
-The page creates `editorInstanceId` once when the editor bundle evaluates. It is a UUIDv4 held for that top-level page load only and is not restored from local storage, session storage, post meta, or the server. The first-party human workflow also creates one page-lifetime `humanActorSessionId`; later agent calls supply a distinct `actorSessionId`. Actor sessions identify request provenance, not authority or workspace identity.
+`createRecommendationPageIdentity()` performs two independent secure UUIDv4 draws when the editor bundle first requests page identity and returns one frozen value for that top-level page lifetime:
+
+```text
+RecommendationPageIdentity = {
+  editorInstanceId: UUIDv4,
+  humanActorSessionId: UUIDv4
+}
+```
+
+The two IDs MUST differ. `getRecommendationPageIdentity()` returns the same frozen pair for every subsequent read in that page/module instance. Neither value is restored from local storage, session storage, post meta, or the server, and each later page/module instance receives a new pair. Workspace IDs use separate secure UUIDv4 draws and are not either page-identity value. The first-party human workflow uses `humanActorSessionId`; later agent calls supply a distinct explicit `actorSessionId`. Actor sessions identify request provenance, not authority or workspace identity.
 
 The editor-scope resolver returns this closed value:
 
@@ -302,9 +311,9 @@ The cache is bounded to ten runs. On insertion, it retains the current run plus 
 
 Generation state is operational UI state. Updating it does not increment `workspaceRevision` and it is not returned as part of the public workspace protocol.
 
-The singular `recommendationGeneration` slice is the latest-request UI projection, not a count or registry of every active request. The coordinator owns the complete page-lifetime map of request tokens to active `AbortController` instances outside reducer state. A finish/fail action updates the projection only when its request token is still current; scope transition or invalidation aborts every controller.
+The singular `recommendationGeneration` slice is the latest-request UI projection, not a count or registry of every active request. An internal generation request is identified by the closed pair `GenerationRequestKey = { workspaceId: UUIDv4, requestToken: SafeInteger }`. The coordinator owns a page-lifetime map from that composite key to `GenerationRequestHandle = { requestKey, controller }` outside reducer state. Registration returns the exact frozen handle; release deletes an entry only when both the composite key and stored `AbortController` object are identical to that handle. A finish/fail action carries the request key and updates the projection only when both its `workspaceId` matches `baseWorkspaceId` and its token is still current. Scope transition or invalidation aborts and removes every registered controller. Resetting the visible token to `0` therefore cannot let cleanup from an old workspace release or settle a request in a fresh workspace.
 
-Every workspace revision, expected/base workspace revision, generation request token, and Ability `clientRequest.requestToken` is an integer in the closed range `0..9007199254740991`. Increment at the upper bound fails closed with `workspace_revision_exhausted`; neither runtime wraps, rounds, converts the value to floating-point scientific notation, or dispatches the requested semantic mutation. The shared manifest and both REST/store validators own this same ceiling.
+Every workspace revision, expected/base workspace revision, generation request token, and Ability `clientRequest.requestToken` is an integer in the closed range `0..9007199254740991`. Increment at the upper bound fails closed with `workspace_revision_exhausted`; neither runtime wraps, rounds, converts the value to floating-point scientific notation, or dispatches the requested semantic mutation. A generation-token overflow creates no request handle or controller and performs no capture or network request. The shared manifest and both REST/store validators own this same ceiling.
 
 ### 8.2 Module boundary
 
@@ -312,7 +321,7 @@ The workspace logic MUST be extracted rather than adding another large block to 
 
 | Target module | Responsibility |
 |---|---|
-| `src/recommendations/workspace/editor-instance.js` | Page-lifetime UUID and test injection |
+| `src/recommendations/workspace/editor-instance.js` | Frozen page-identity pair, independent workspace UUIDs, and secure-random test injection |
 | `src/recommendations/workspace/editor-scope.js` | Bounded primary-scope resolver |
 | `src/recommendations/workspace/context-configuration.js` | Normalization, semantic equality, client validation |
 | `src/recommendations/workspace/state.js` | Default state, action types, pure reducer, selectors, CAS predicates |
@@ -338,8 +347,8 @@ The store exposes these foundation actions. Names are implementation contracts f
 | `beginRecommendationGeneration` | Current workspace snapshot | None |
 | `cacheRecommendationRun` | Immutable `runId`/payload digest | None |
 | `installRecommendationRun` | `workspaceId`, `expectedWorkspaceRevision`, `runId` | First current installation: increment once |
-| `finishRecommendationGeneration` | Matching transient request token | None |
-| `failRecommendationGeneration` | Matching transient request token | None |
+| `finishRecommendationGeneration` | Matching transient `GenerationRequestKey` | None |
+| `failRecommendationGeneration` | Matching transient `GenerationRequestKey` | None |
 
 `replaceRecommendationContextConfiguration` performs one reducer commit that:
 
@@ -780,7 +789,7 @@ The complete shared context object is request-lifetime only. A terminal run stor
 - the intent snapshot in the public run and the normalized complete context configuration in the private payload
 - the public receipt
 - the public context signature
-- per-surface bounded Ability input projections needed to interpret or later revalidate that result
+- each ready surface's closed, size-bounded, witnessed `retainedAuthorizationInput` derived from the normalized input Core authorized and needed to later reauthorize/revalidate that result
 - native Ability outputs and future executor bindings in the private payload
 
 It MUST NOT store an unrestricted copy of the combined Gutenberg/server context envelope, raw recent activity, credentials, arbitrary selector output, or registry state.
@@ -809,6 +818,7 @@ String lengths below are Unicode code points after normalization; byte limits ar
 | Units in one surface result | 25 | Surface fails with `result_too_large` |
 | Units in one run | 100 | Excess surface fails deterministically |
 | One native Ability result | 1 MiB canonical JSON | That surface is `failed` |
+| One closed normalized/retained Ability authorization input | 1 MiB canonical JSON | That surface fails before permission/callback and creates no binding |
 | Public terminal run payload | 512 KiB canonical JSON | Finalization fails closed |
 | Private terminal binding payload | 4 MiB canonical JSON | Finalization fails closed |
 | Unit title | 160 characters | Truncate with warning |
@@ -971,6 +981,31 @@ The six preview Ability schemas derived from recommendation schemas explicitly r
 
 `clientRequest.requestToken` uses the non-negative `baseWorkspaceRevision`. Ability and surface identity remain part of the existing server transient key, so two style invocations do not overwrite each other's result classification. A later workspace revision naturally produces a newer token.
 
+Each registry entry also owns an `authorizationProjection` projector. It canonicalizes the fixed surface ID, authoritative `editorScope.key`, `clientRequest.scopeKey`, and these exact target-bearing Ability input values:
+
+| Surface | Protected target/permission input values |
+|---|---|
+| `block`, `content`, `pattern`, `post_blocks` | Root `postId`/`post_id`; `postContext.postId`/`post_id`/`id`; `editorContext.postId`/`post_id`; `document.postId`/`post_id`/`id`/`entityId`/`scopeKey` |
+| `navigation` | `menuId`, `document.scopeKey` |
+| `template` | `templateRef`, `document.scopeKey` |
+| `template_part` | `templatePartRef`, `document.scopeKey` |
+| `global_styles` | `scope.surface`, `scope.scopeKey`, `scope.globalStylesId`, `scope.entityId`, `document.scopeKey` |
+| `style_book` | The Global Styles values above plus `scope.blockName` |
+
+A separate retained-input projector emits this recursively closed private value:
+
+```text
+RetainedAuthorizationInput = {
+  surfaceId: SurfaceId,
+  editorScope: EditorScope,
+  abilityInput: PerSurfaceRetainedAbilityInput
+}
+```
+
+The manifest owns a separate recursively closed `PerSurfaceRetainedAbilityInput` schema for every wire surface. It admits exactly the bounded fields the fixed adapter builds for that surface—including its declared prompt/context fields, `document`, `clientRequest`, and optional closed `workspaceContext`—and narrows every intentionally open registered Ability object to the server-built projection defined by this spec. No additional property is permitted at any level. The complete `RetainedAuthorizationInput` is canonical-JSON-serializable and at most 1 MiB. It contains no credential/provider field, unrestricted combined context, arbitrary selector value, native result, or undeclared normalizer extension.
+
+For the four post-scoped surfaces the authorization projector examines every alias listed above, including an alias injected into an otherwise open registered Ability schema. Every positive target must resolve to the same server-authoritative post identity; conflicting aliases, a target change, or a scope mismatch fail closed. The theme surfaces similarly require their exact server-authoritative navigation/template/style target even though their current permission callbacks use the fixed `edit_theme_options` capability. A normalizer may change a declared non-authoritative field only when the complete result still satisfies the closed retained schema and all bounds; adding an undeclared field fails before permission and callback rather than being stripped. Consequently Core's permission callback and `wp_ability_permission_result` filters receive the same canonical `abilityInput` that every later reauthorization replays.
+
 ### 12.3 Ability invocation
 
 For each requested surface in canonical order, the service:
@@ -978,14 +1013,21 @@ For each requested surface in canonical order, the service:
 1. validates target identity for that surface
 2. enforces the surface's freshness prerequisites, including the clean-editor predicate for `post_blocks`
 3. resolves the exact fixed Ability with `wp_get_ability()`
-4. validates the adapted input against the Ability's registered input schema
-5. classifies a missing Ability or failed prerequisite/permission preflight as `unavailable`
-6. calls `WP_Ability::execute()` with the adapted input
-7. classifies an attempted execution error as `failed`
-8. independently validates and bounds the successful output through the registered Ability output schema
-9. passes the result to the fixed `SurfaceResultAdapter`
+4. calls `normalize_input()` on the adapted input to produce `preflightInput`
+5. validates and bounds `preflightInput` against the registered schema and exact authorization projection
+6. calls `validate_input()` and then `check_permissions()` on `preflightInput`
+7. installs the scoped execution validation gate and witness described below
+8. calls `WP_Ability::execute()` with the original adapted input
+9. requires exactly one witnessed `retainedAuthorizationInput`, then independently validates and bounds the successful output through the registered Ability output schema
+10. passes the result and witnessed authorization input to the fixed `SurfaceResultAdapter`
 
-The workflow cannot bypass, weaken, or cache an Ability permission decision. The explicit input and output validation around `execute()` is defense in depth for WordPress filters that can short-circuit Ability execution; it does not replace the registered `WP_Ability` path or make a direct callback valid.
+The invoker distinguishes the preflight value from the input WordPress actually authorizes inside `execute()`. Immediately around step 8, it installs a temporary final-priority `wp_ability_validate_input` gate scoped by an active invocation token and exact Ability name, plus a `PHP_INT_MIN` exact-object/name-scoped `wp_before_execute_ability` witness; both are removed in `finally`. The validation gate preserves any incoming `WP_Error`. Otherwise, because it runs after all execution-pass normalization and Core schema validation but before permission, it validates the complete value against the surface's closed retained-input schema, wraps it as `RetainedAuthorizationInput`, canonicalizes and enforces the 1 MiB cap, and returns `WP_Error` when any check fails or its protected projection differs from the preflight and server-authoritative projections. A protected mismatch on either normalization pass is a failed surface with bounded code `ability_input_target_changed`.
+
+The witness runs only after Core validation and its authoritative permission check. It recomputes the closed retained value from the exact normalized input it receives, requires a byte-for-byte canonical match with the validation-gate candidate, and calls `check_permissions()` once on that exact `abilityInput`. A mismatch or non-true repeat permission result throws a private, no-payload invocation-guard exception that the invoker catches and maps to the bounded surface failure; because Core fires this action immediately before `do_execute()`, the recommendation callback is not invoked and no binding is created. Thus the registered permission callback and every permission-result filter observe byte-equivalent input at generation and later reauthorization. The original adapted input is passed to `execute()` so the normal execution pass starts from the same raw value as preflight rather than normalizing an already-normalized value.
+
+A `ready` result MUST retain exactly the one witnessed `retainedAuthorizationInput` and its canonical digest. Every later GET/dedupe authorization verifies that digest and calls `check_permissions()` with its exact closed `abilityInput`, without normalizing or executing again. An apparently successful return with no witness—including a `wp_pre_execute_ability` short-circuit—or with more than one witness becomes a `failed` surface with bounded code `ability_execution_short_circuited` and creates no ready private binding. A normalization, schema, projection, or permission failure creates no witness or binding. `preflightInput`, the unrestricted context envelope, and every normalized field outside the closed retained schema are never persisted.
+
+The workflow cannot bypass, weaken, or cache an Ability permission decision. The explicit input and output validation around `execute()` is defense in depth for WordPress filters; it does not replace the registered `WP_Ability` path or make a direct callback valid.
 
 Recommendation execution is logically read-only with respect to the target document. Existing request-diagnostic activity logging remains governed by `RecommendationAbilityExecution`; Spec 1 does not relabel that existing diagnostic write as target mutation or suppress it to make a hint look read-only.
 
@@ -1002,14 +1044,14 @@ The public result matches protocol section 13.4. The private binding contains:
 
 - `resultRef`
 - source surface and exact recommendation Ability ID
-- digest of the normalized Ability input
-- the allowlisted per-surface input projection needed for later freshness/executor work
+- digest of the witnessed closed `retainedAuthorizationInput`
+- that schema-valid, at-most-1-MiB exact normalized authorization input needed for permission reauthorization and later freshness/executor work
 - the validated native Ability output
 - unit-to-native-result mapping
 - exact existing resolved/review signatures and target evidence when present
 - a binding schema version
 
-It never stores credentials, arbitrary shared context, or client-supplied operations.
+It never stores credentials, unrestricted shared context, unallowlisted normalizer additions, or client-supplied operations; the retained normalized Ability input is the closed surface projection, not the wider registered Ability schema.
 
 `resultRef` is generated as:
 
@@ -1084,6 +1126,10 @@ The public JSON is the canonical protocol `RecommendationRun`:
 ```
 
 The public run has no `applyPlan`. It has no internal `building` status.
+
+The internal REST success wrapper remains the exact closed `{ run, deduplicated }` object and the normalized error wrapper remains closed. The nested public `run` uses the canonical protocol's output-tolerance rule instead: the JavaScript client validates every known protocol 1.0 field, recursively selects only known public fields, and ignores compatible unknown optional response members. Ignored members are removed before canonical hashing, cache insertion, authorization/UI decisions, or logging, so the same known run with or without a compatible extension has one client digest.
+
+Tolerance is not permission to accept a known incompatible or private shape. Before projection, the client recursively rejects any member with one of these exact reserved names: `applyBatchId`, `privateBinding`, `privatePayload`, `nativeResult`, `nativeOutput`, `inputProjection`, `effectiveInput`, `retainedAuthorizationInput`, `operations`, `patternMarkup`, `targetEvidence`, `siteScopeId`, `userId`, `generationBindingDigest`, `leaseToken`, or `leaseTokenHash`. It also rejects `executionBinding` in Spec 1, every missing or invalid known required field, and every unknown value of a closed lifecycle/surface/interaction/execution enum, including `compensated`. Unknown `error.code` and `reasonCode` strings remain compatible when their known base structure, category, and retry disposition are valid; a known code still uses its exact details schema, while unsupported code-specific detail members are discarded for generic handling. This response policy never weakens the recursively closed POST body or the closed outer REST wrapper.
 
 ### 13.2 Internal storage states
 
@@ -1262,7 +1308,7 @@ Reservation behavior is deterministic:
 | Building with expired lease | Same binding and editor scope | Compare-and-swap a new fencing lease and regenerate under the same `runId` |
 | Any row | Different binding or editor scope | Return `idempotency_conflict` with zero Ability execution |
 
-An active terminal dedupe response calls the same `authorize_run_read()` path as GET before returning: captured current-site storage context, exact owner match, current editor-scope authorization, public/private digest verification, and per-ready-result reauthorization from each retained input projection. It may not use a lighter reservation-time check. A terminal/physical-tombstone dedupe uses the same owner/scope authorization and availability projection as GET: the expiry window returns bounded `run_expired` metadata, and the tombstone deadline or later returns `run_not_found` even when physical cleanup lags. Stripped payloads have no ready-result projection to reauthorize. Idempotency never bypasses revoked permissions or corruption checks.
+An active terminal dedupe response calls the same `authorize_run_read()` path as GET before returning: captured current-site storage context, exact owner match, current editor-scope authorization, public/private digest verification, protected-projection verification, and per-ready-result `check_permissions()` reauthorization against each witnessed `retainedAuthorizationInput.abilityInput`. It neither normalizes nor executes the Ability and may not use a lighter reservation-time check. A terminal/physical-tombstone dedupe uses the same owner/scope authorization and availability projection as GET: the expiry window returns bounded `run_expired` metadata, and the tombstone deadline or later returns `run_not_found` even when physical cleanup lags. Stripped payloads have no ready-result authorization input to reauthorize. Idempotency never bypasses revoked permissions or corruption checks.
 
 A caller intending a fresh generation uses a fresh idempotency key.
 
@@ -1280,7 +1326,7 @@ Abandoned `building` reservations older than 24 hours are deleted by the prune j
 
 ### 15.1 Page coordinator
 
-The shared `completeRecommendationRequest()` coordinator accepts:
+The internal `coordinateRecommendationRequest()` seam accepts:
 
 ```text
 workspaceId
@@ -1289,7 +1335,7 @@ actorSessionId
 idempotencyKey
 ```
 
-It does not accept arbitrary Ability names, surface input objects, operations, or selector paths.
+The exported first-party `completeRecommendationRequest()` store action accepts only `workspaceId`, `expectedWorkspaceRevision`, and `idempotencyKey`; it always reads `getRecommendationPageIdentity().humanActorSessionId` and passes that value to the internal seam. No first-party caller can override human provenance. A later agent entry point may call only the separately named internal seam and must supply a lowercase UUIDv4 that differs from both current page-identity values. An absent, malformed, `editorInstanceId`-equal, or `humanActorSessionId`-equal agent value fails before generation state, controller allocation, capture, or network. Tests inject page identity rather than reading ambient globals. Neither seam accepts arbitrary Ability names, surface input objects, operations, or selector paths.
 
 One call may refresh recommendation results for several UI surfaces, but generation does not mutate any WordPress document, template, style, navigation, or pattern target. The only semantic page mutation is installing the new current-run relationship after CAS; the only new server writes are the run reservation/terminal payload plus any pre-existing diagnostic logging performed by the invoked Abilities.
 
@@ -1382,7 +1428,7 @@ The GET route requires:
 - current site/blog storage context
 - exact `user_id` owner match
 - current access to the primary editor scope
-- reauthorization of every ready result through its retained bounded Ability input projection
+- protected-projection verification and `check_permissions()` reauthorization of every ready result against its witnessed `retainedAuthorizationInput.abilityInput`, without normalization or execution
 
 If any ready result is no longer authorized, the route denies the complete run rather than returning a mutated/redacted version of immutable evidence. Tombstones reveal only `runId`, expired availability, and deadlines after owner/scope authorization.
 
@@ -1452,6 +1498,8 @@ Error codes remain an open protocol set, but this foundation fixes generic handl
 | `context_not_configured` | `validation` | `refresh_context` | Zero capture, Ability, run, or workspace writes |
 | `context_capture_invalid` | `validation` | `refresh_context` | Complete caller capture validation occurs before reservation; zero Ability or run writes |
 | `generation_in_progress` | `busy` | `wait` | Existing building reservation only |
+| `ability_input_target_changed` | `validation` | `refresh_context` | One surface fails before its recommendation callback and creates no binding |
+| `ability_execution_short_circuited` | `recovery` | `retry_same` | One surface fails because Core never reached the witnessed authorized execution boundary |
 | `result_too_large` | `validation` | `regenerate` | One surface failure inside a terminal partial/failed run |
 | `run_payload_mismatch` | `recovery` | `manual_recovery` | No payload returned and no workspace install |
 | `recommendation_protocol_unavailable` | `unavailable` | `retry_same` | No capture, Ability execution, reservation, or claimed terminal run |
@@ -1462,6 +1510,8 @@ Error codes remain an open protocol set, but this foundation fixes generic handl
 
 The canonical `run_expired`, `run_not_found`, `surface_unavailable`, `authorization_failed`, and `idempotency_conflict` codes retain their protocol meanings. Clients branch on code/category/retry disposition, never localized messages.
 
+Inside a `SurfaceResult`, the two Ability lifecycle failures use their table code as both `error.code` and `error.reasonCode`, the exact category/retry disposition above, and a bounded non-provider message. The containing result supplies `surfaceId`; no private input, hook name, provider body, or exception text enters the public error.
+
 Error `details` is a closed per-code union. A validation path is 1–512 characters and matches `^\$(?:\.[A-Za-z][A-Za-z0-9_]*|\[[0-9]+\])*$`. The foundation schemas are:
 
 | Code family | Exact `details` shape |
@@ -1471,7 +1521,7 @@ Error `details` is a closed per-code union. A validation path is 1–512 charact
 | `run_expired` | `{ runId: RunId, expiresAt: ServerTimestamp, tombstoneUntil: ServerTimestamp }` |
 | `workspace_changed_during_generation` | `{ currentWorkspaceRevision: SafeInteger, runId: RunId | null }` |
 | `workspace_revision_exhausted` | `{ currentWorkspaceRevision: 9007199254740991 }` |
-| `result_too_large` | `{ surfaceId: SurfaceId }` |
+| `ability_input_target_changed`, `ability_execution_short_circuited`, `result_too_large` | `{ surfaceId: SurfaceId }` |
 | `run_payload_mismatch`, `run_finalization_conflict`, `run_not_found`, `idempotency_conflict` | `{ runId: RunId }` |
 | `context_not_configured`, `recommendation_protocol_unavailable`, `run_storage_unavailable`, `authorization_failed` | `{}` |
 
@@ -1546,6 +1596,8 @@ Add checked-in fixtures consumed by Jest and PHPUnit for:
 - expanded hard/soft consumer policy and trusted-docs normalization/currentness cases
 - context-signature inclusion/exclusion rules
 - eight-Ability-to-nine-surface mapping
+- exact authorization-projection paths, per-surface closed retained-input schemas, 1 MiB bounds, and digest cases
+- nested public-run compatible-extension projection and reserved/private-member rejection
 - deterministic `resultRef` and `unitId`
 
 PHP and JavaScript MUST produce identical canonical configuration JSON for every shared fixture.
@@ -1554,7 +1606,7 @@ PHP and JavaScript MUST produce identical canonical configuration JSON for every
 
 Focused tests cover:
 
-- editor instance created once per bundle lifetime
+- one frozen page-identity pair per bundle lifetime, with independent `editorInstanceId` and `humanActorSessionId` UUIDs and separate workspace-ID draws
 - every primary editor-scope shape and temporary-to-canonical transition
 - selected block changes do not create a workspace; selected-focus changes replace configuration and supersede exactly once
 - scope navigation creates a fresh workspace at revision `0`
@@ -1567,7 +1619,11 @@ Focused tests cover:
 - superseded same run cannot be revived
 - two different completions from the same base revision allow one install
 - generation state updates never change workspace revision
+- stale release/finish/fail from an old workspace cannot affect a fresh workspace request that reused the same visible token; controller identity is required for release
+- generation request-token overflow creates no state, controller, capture, or network mutation
 - a late response after scope change cannot install
+- compatible unknown nested public-run members are stripped before digest/cache, while unknown wrapper members, reserved/private members, `applyBatchId`, `executionBinding`, and incompatible lifecycle values fail closed
+- unknown error codes retain generic category/retry handling without becoming a closed allowlist
 - collector path/source allowlist, bounds, and failure classification
 
 Suggested locations are:
@@ -1595,6 +1651,12 @@ Focused PHPUnit coverage includes:
 - trusted docs hostile-URL/currentness rejection and soft failure for every docs consumer
 - `post_blocks` unavailable while dirty/saving/autosaving, with zero Ability calls
 - target-identity-before-permission ordering
+- protected-target normalization changes on either preflight or execution pass fail before the recommendation callback and create no binding, including a normalizer registered after the invoker begins execution
+- a harmless change to a declared non-protected field is retained byte-equivalently in the exact `wp_before_execute_ability`-witnessed `retainedAuthorizationInput`; later GET/dedupe reauthorization uses that closed `abilityInput` without normalization or execution
+- injected undeclared credential/provider fields and over-1-MiB retained inputs fail before permission/callback and are never persisted or passed to reauthorization
+- a permission-result filter that grants only when a declared retained field is present observes the same field/value during witness and GET/dedupe reauthorization; an undeclared-field-dependent rule cannot create a callback or binding
+- a schema-valid `wp_pre_execute_ability` short-circuit has no execution witness and becomes `ability_execution_short_circuited`
+- both Ability lifecycle errors use their exact category/retry/reason mappings and expose no provider, hook, input, credential, or exception detail
 - exact registered Ability resolution, permission denial, execution, and output validation
 - style invoked separately for Global Styles and Style Book
 - exactly one result per requested surface, including failure/unavailable entries
@@ -1602,7 +1664,7 @@ Focused PHPUnit coverage includes:
 - native/public/private size failures
 - schema install and upgrade idempotency
 - per-blog storage context captured across an ambient multisite switch
-- owner-scoped reads and permission revocation
+- owner-scoped reads and permission revocation against the witnessed retained authorization target/input
 - reservation insert races and idempotency conflicts
 - active lease refusal, stale lease takeover, and fencing-token loss
 - one-time terminal finalization and payload immutability
@@ -1678,15 +1740,15 @@ Evidence is tied to an immutable implementation candidate, not to a dirty workin
 Spec 1 is implemented only when all of the following are true:
 
 1. The existing `flavor-agent` store contains the sole page-owned workspace slice; no mutable React context or second store exists.
-2. Workspace identity follows `editorInstanceId + editorScopeKey`, resets on primary scope change, and remains tab-local.
+2. One frozen page identity contains independent `editorInstanceId` and first-party `humanActorSessionId` values; workspace identity follows `editorInstanceId + editorScopeKey`, resets on primary scope change, and remains tab-local.
 3. Context replacement and run installation have exact same-page CAS behavior and revision effects from the canonical protocol.
-4. A run completing after a workspace change is retained but cannot become current.
+4. A run completing after a workspace change is retained but cannot become current, and its stale request handle cannot release or settle a fresh workspace request.
 5. One normalized request can invoke any valid subset of the nine surfaces through the exact eight registered Abilities.
 6. Both style surfaces are independent invocations and `post_blocks` remains requestable.
 7. Every terminal run has one result per requested surface and a correct ready/partial/failed status.
 8. Every requested seam appears in exactly one final receipt category with category-valid metadata, every included value has a declared consumer, and hard/soft absence follows the manifest without letting docs failure block a recommendation.
-9. The server, not the client, computes the context signature and authenticated bindings.
-10. Public and private run payloads are separated, immutable after finalization, bounded, and digest-checked.
+9. The server, not the client, computes the context signature and authenticated bindings; every ready binding retains the exact closed normalized authorization input witnessed after Core authorized that byte-equivalent input.
+10. Public and private run payloads are separated, immutable after finalization, bounded, and digest-checked; the client strips compatible unknown nested response members while rejecting reserved, private, and incompatible members.
 11. Idempotency, lease takeover, and fencing prevent two different terminal payloads for one run.
 12. Active TTL, tombstone retention, and not-found boundaries match protocol section 21.1.
 13. Run reads project time without database writes or page-store dispatches.
