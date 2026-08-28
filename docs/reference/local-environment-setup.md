@@ -212,7 +212,20 @@ Flavor Agent conventions when using the Explorer:
 
 `scripts/wp70-e2e.js` provisions a deterministic Docker-backed browser harness for editor and Site Editor regressions. It is not the full representative local runtime described above unless a test explicitly extends it with companion plugins.
 
-The bootstrap installs and activates the `ai` plugin from WordPress.org because Flavor Agent declares `Requires Plugins: ai` in its plugin header — without it `wp plugin activate flavor-agent` would refuse to run. To install additional companions for a specific spec (for example `gutenberg` or a provider connector), set `FLAVOR_AGENT_WP70_COMPANION_PLUGINS` to a comma-separated slug list before running `npm run wp:e2e:wp70:bootstrap`; `ai` is always force-prepended to the list.
+The bootstrap installs and activates the `ai` plugin from WordPress.org because Flavor Agent declares `Requires Plugins: ai` in its plugin header — without it `wp plugin activate flavor-agent` would refuse to run. To install additional companions for a specific spec (for example a provider connector), set `FLAVOR_AGENT_WP70_COMPANION_PLUGINS` to a comma-separated list before running `npm run wp:e2e:wp70:bootstrap`; `ai` is always force-prepended to the list. Entries accept a `slug@version` form (`gutenberg@23.6.2, plugin-check`) so a recorded gate names the exact package it verified — an unpinned slug installs whatever is current that day, which is not reproducible.
+
+### Gutenberg browser gate
+
+The default harness runs the editor that ships inside the pinned WordPress image, so Gutenberg is opt-in — installing it by default would silently change what every existing WP 7.0 gate verifies.
+
+```bash
+npm run wp:e2e:wp70:bootstrap:gutenberg   # pinned Gutenberg (23.7.1) + WP 7.0.0
+npm run test:e2e:wp70
+```
+
+`--with-gutenberg=<version>` (or `FLAVOR_AGENT_WP70_GUTENBERG`) targets another point on the line; use `23.6.2` rather than `23.6.0` for the 23.6 line, and `23.7.1` rather than `23.7.0`, because each earlier tag was superseded. Bootstrap prints the WordPress image and the resolved companion list — copy both into the compatibility record in `gutenberg-feature-tracking.md`, since "ran against Gutenberg" without a version is not evidence.
+
+CI runs both targets: the `e2e-wp70` job is a matrix over `bundled` (the editor inside the pinned WordPress image) and `gutenberg-23.7.1`, with `fail-fast: false` so one red leg does not cancel the other. Both legs are still `continue-on-error: true` while the harness earns its place as a gate, so read the job log rather than the check badge — a failing step inside a `continue-on-error` job still reports success.
 
 Current Site Editor browser specs exercise Flavor Agent editor behavior and selected Abilities API routes, but they do not validate the dedicated MCP server or the AI plugin Settings UI. Use the representative local runtime for MCP/AI-plugin manual checks, or extend `scripts/wp70-e2e.js` only when adding a dedicated MCP or AI-plugin Playwright spec.
 

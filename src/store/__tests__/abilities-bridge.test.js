@@ -1,3 +1,12 @@
+const fs = require( 'fs' );
+const path = require( 'path' );
+
+const BRIDGE_PATH = path.join(
+	__dirname,
+	'../../../assets/abilities-bridge.js'
+);
+const PLUGIN_ENTRY_PATH = path.join( __dirname, '../../../flavor-agent.php' );
+
 describe( 'abilities bridge asset', () => {
 	beforeEach( () => {
 		jest.resetModules();
@@ -8,29 +17,24 @@ describe( 'abilities bridge asset', () => {
 	afterEach( () => {
 		delete window.flavorAgentAbilities;
 		delete window.wp;
-		jest.dontMock( '@wordpress/core-abilities' );
 		jest.dontMock( '@wordpress/abilities' );
 	} );
 
-	function mockModules( { ready, executeAbility } ) {
-		jest.doMock(
-			'@wordpress/core-abilities',
-			() => ( ready === undefined ? {} : { ready } ),
-			{ virtual: true }
-		);
+	function mockModules( { executeAbility } ) {
 		jest.doMock( '@wordpress/abilities', () => ( { executeAbility } ), {
 			virtual: true,
 		} );
 	}
 
-	test( 'exposes core abilities readiness with a frozen executeAbility', async () => {
-		const ready = Promise.resolve();
+	test( 'exposes a resolved readiness with a frozen executeAbility', async () => {
 		const executeAbility = jest.fn();
-		mockModules( { ready, executeAbility } );
+		mockModules( { executeAbility } );
 
 		await import( '../../../assets/abilities-bridge' );
 
-		expect( window.flavorAgentAbilities.ready ).toBe( ready );
+		await expect(
+			window.flavorAgentAbilities.ready
+		).resolves.toBeUndefined();
 		expect( typeof window.flavorAgentAbilities.executeAbility ).toBe(
 			'function'
 		);
@@ -39,7 +43,7 @@ describe( 'abilities bridge asset', () => {
 
 	test( 'delegates to the native executeAbility on success', async () => {
 		const executeAbility = jest.fn().mockResolvedValue( { ok: true } );
-		mockModules( { ready: Promise.resolve(), executeAbility } );
+		mockModules( { executeAbility } );
 
 		await import( '../../../assets/abilities-bridge' );
 
@@ -55,15 +59,27 @@ describe( 'abilities bridge asset', () => {
 		expect( result ).toEqual( { ok: true } );
 	} );
 
-	test( 'uses an already-resolved readiness when core does not export ready', async () => {
-		const executeAbility = jest.fn();
-		mockModules( { ready: undefined, executeAbility } );
+	// Gutenberg 23.6 (gutenberg#79155) made `@wordpress/core-abilities`
+	// auto-initialize on import, fetching categories and abilities with
+	// `per_page: -1` — values the REST controller rejects. Loading it from the
+	// bridge would fire both rejected requests on every editor load, so neither
+	// the asset nor the script-module dependency list may reference it.
+	test( 'never pulls in @wordpress/core-abilities', () => {
+		expect( fs.readFileSync( BRIDGE_PATH, 'utf8' ) ).not.toMatch(
+			/from\s+'@wordpress\/core-abilities'/
+		);
 
-		await import( '../../../assets/abilities-bridge' );
+		const scriptModuleCall = fs
+			.readFileSync( PLUGIN_ENTRY_PATH, 'utf8' )
+			.match(
+				/wp_enqueue_script_module\(\s*'@flavor-agent\/abilities-bridge'[\s\S]*?\);/
+			)?.[ 0 ];
 
-		await expect(
-			window.flavorAgentAbilities.ready
-		).resolves.toBeUndefined();
+		expect( scriptModuleCall ).toBeDefined();
+		expect( scriptModuleCall ).toContain( "'@wordpress/abilities'" );
+		expect( scriptModuleCall ).not.toContain(
+			"'@wordpress/core-abilities'"
+		);
 	} );
 
 	test( 'falls back to the REST run endpoint when the store reports Ability not found', async () => {
@@ -76,7 +92,7 @@ describe( 'abilities bridge asset', () => {
 			.fn()
 			.mockResolvedValue( { payload: { suggestions: [] } } );
 		window.wp = { apiFetch };
-		mockModules( { ready: Promise.resolve(), executeAbility } );
+		mockModules( { executeAbility } );
 
 		await import( '../../../assets/abilities-bridge' );
 
@@ -98,7 +114,7 @@ describe( 'abilities bridge asset', () => {
 		const executeAbility = jest.fn().mockRejectedValue( thrown );
 		const apiFetch = jest.fn();
 		window.wp = { apiFetch };
-		mockModules( { ready: Promise.resolve(), executeAbility } );
+		mockModules( { executeAbility } );
 
 		await import( '../../../assets/abilities-bridge' );
 

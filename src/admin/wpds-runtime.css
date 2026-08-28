@@ -1,4 +1,4 @@
-@import "../../node_modules/@wordpress/theme/src/prebuilt/css/design-tokens.css";
+@import "@wordpress/theme/design-tokens.css";
 @import "../../node_modules/@wordpress/base-styles/build-style/admin-schemes.css";
 
 /**
@@ -7,12 +7,18 @@
  * tokens these screens need so they react to the active admin color scheme
  * without depending on private @wordpress/theme APIs.
  *
- * The design-tokens @import must stay on the deep node_modules path: the
- * build's postcss-import resolver cannot read package exports maps, and a
- * JS-side `import "@wordpress/theme/design-tokens.css"` is tree-shaken away
- * because the package declares `sideEffects: false`. The
- * wpds-token-compatibility test pins this path to the package's public
- * `./design-tokens.css` export target so an upstream relocation fails loudly.
+ * The design-tokens @import addresses the package's public
+ * `./design-tokens.css` export rather than a path into node_modules, so it
+ * follows the file when upstream moves it -- 1.0.0 dropped `src` from the
+ * published package. That resolution comes from the exports-aware
+ * postcss-import resolver in postcss.config.js; importing the stylesheet from
+ * JavaScript instead would not work, because dependency extraction turns any
+ * `@wordpress/*` request into a script handle. The wpds-token-compatibility
+ * test pins the specifier to that export so a deep path cannot creep back in.
+ *
+ * The base-styles @import stays on a relative path: that package maps its
+ * stylesheets with a trailing-slash directory export, which Node's resolver no
+ * longer honors.
  */
 body {
 	--wpds-color-background-interactive-brand-strong: var(--wp-admin-theme-color, #3858e9);

@@ -148,13 +148,29 @@ jobs:
           if-no-files-found: ignore
 
   e2e-wp70:
-    name: WordPress 7.1 Site Editor suite
+    name: WordPress 7.1 Site Editor suite (${{ matrix.editor.label }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
     # First CI landing for a harness that has only ever run locally. Flip this
     # to false once it has gone green on master, so it becomes a real gate.
     continue-on-error: true
+
+    strategy:
+      # Independent editor targets: a red Gutenberg leg must not cancel the
+      # bundled leg, because they answer different questions.
+      fail-fast: false
+      matrix:
+        editor:
+          # The editor that ships inside the pinned WordPress image.
+          - label: bundled
+            bootstrap: npm run wp:e2e:wp70:bootstrap
+          # The Gutenberg plugin line, pinned so a green run names exactly what
+          # it verified. Runs the documented npm script rather than setting
+          # FLAVOR_AGENT_WP70_GUTENBERG directly, so a break in that entry
+          # point surfaces here instead of only when someone runs it locally.
+          - label: gutenberg-23.7.1
+            bootstrap: npm run wp:e2e:wp70:bootstrap:gutenberg
 
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -201,7 +217,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Provision the WordPress 7.1 harness
-        run: npm run wp:e2e:wp70:bootstrap
+        run: ${{ matrix.editor.bootstrap }}
 
       - name: Run the WordPress 7.1 Site Editor suite
         run: npm run test:e2e:wp70
@@ -214,7 +230,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: playwright-wp70
+          name: playwright-wp70-${{ matrix.editor.label }}
           path: |
             output/playwright-wp70/
             playwright-report/

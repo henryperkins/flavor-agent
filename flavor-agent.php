@@ -204,10 +204,16 @@ function flavor_agent_enqueue_editor(): void {
 	$asset    = include $asset_path;
 	$css_path = FLAVOR_AGENT_DIR . 'build/index.css';
 
+	// `@wordpress/core-abilities` is deliberately not a dependency here. Since
+	// Gutenberg 23.6 (gutenberg#79155) that module auto-initializes on import,
+	// so naming it would fetch categories and abilities with `per_page: -1` on
+	// every editor load — values the REST controller rejects. The bridge reads
+	// the store only when another consumer has already loaded it, and otherwise
+	// runs abilities over REST. See assets/abilities-bridge.js.
 	wp_enqueue_script_module(
 		'@flavor-agent/abilities-bridge',
 		FLAVOR_AGENT_URL . 'assets/abilities-bridge.js',
-		[ '@wordpress/core-abilities', '@wordpress/abilities' ],
+		[ '@wordpress/abilities' ],
 		FLAVOR_AGENT_VERSION
 	);
 
