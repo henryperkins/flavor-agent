@@ -384,9 +384,9 @@ check_absent \
 # absent meta.mcp key INHERITS meta.public rather than defaulting to private,
 # so any doc still describing the old "carries no mcp meta" mechanism is
 # describing a guarantee the adapter no longer provides.
-check_absent \
+check_absent_regex \
 	'docs still describe MCP privacy as the absence of an mcp meta key (0.6.0+ inherits meta.public instead)' \
-	'carry **no `mcp` meta**' \
+	'(carry|carries|declare|declares) \**no\** *`mcp` meta' \
 	"${ability_count_docs[@]}" \
 	"${repo_root}/docs/reference/wordpress-ai-roadmap-tracking.md"
 
@@ -394,7 +394,7 @@ check_absent_regex \
 	'superseded meta.mcp.public ability count still appears in live docs (current: seventeen)' \
 	'(ten|Ten) externally-useful (read )?helpers and (all )?six preview siblings( declare)?' \
 	"${ability_count_docs[@]}" \
-	"${repo_root}/.github/copilot-instructions.md"
+	"${repo_root}/docs/reference/wordpress-ai-roadmap-tracking.md"
 
 check_present_in_each_fixed \
 	'mcp-adapter version pin drifted between the setup reference and the contributor runbooks' \

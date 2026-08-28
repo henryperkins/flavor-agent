@@ -519,6 +519,10 @@ final class RegistrationTest extends TestCase {
 		Registration::register_category();
 		Registration::register_abilities();
 		Registration::register_recommendation_abilities();
+		// Mirrors FeatureBootstrap's runtime path. Without this the registry the
+		// test walks holds 28 of 35 abilities, leaving the external-apply and
+		// activity abilities outside the rule this test exists to enforce.
+		Registration::register_external_apply_abilities();
 
 		$this->assertNotEmpty( WordPressTestState::$registered_abilities );
 

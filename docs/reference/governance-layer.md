@@ -200,7 +200,7 @@ This is safe because of what a caller *gains*, not because of how they arrive:
 
 A recommendation's `executionContract` is an advisory shaping and attribution artifact, never an apply authority.
 
-Exposure is not editor-only. `recommend-block` declares no `mcp` meta, so it is not on the universal MCP default server, but it is a first-class tool on the dedicated Flavor Agent MCP server at `/wp-json/mcp/flavor-agent` (`inc/MCP/ServerBootstrap.php`), its `preview-recommend-block` sibling is `mcp.public` and reaches the same input preparation with `resolveSignatureOnly` forced, and the Abilities REST route is reachable directly. The permission gates are identical on every vector.
+Exposure is not editor-only. `recommend-block` declares `meta.mcp.public = false` explicitly, so it is not on the universal MCP default server, but it is a first-class tool on the dedicated Flavor Agent MCP server at `/wp-json/mcp/flavor-agent` (`inc/MCP/ServerBootstrap.php`), its `preview-recommend-block` sibling is `mcp.public` and reaches the same input preparation with `resolveSignatureOnly` forced, and the Abilities REST route is reachable directly. The permission gates are identical on every vector.
 
 ### Data flow to the provider
 
