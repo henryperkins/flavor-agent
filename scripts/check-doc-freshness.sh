@@ -369,14 +369,14 @@ check_present_in_each_fixed \
 check_absent \
 	'superseded mcp-adapter version pin still appears in live docs (current: v0.6.1)' \
 	'the upstream README at v0.5.0' \
-	"${live_docs[@]}" \
+	"${ability_count_docs[@]}" \
 	"${repo_root}/docs/reference/local-environment-setup.md" \
 	"${repo_root}/docs/reference/wordpress-ai-roadmap-tracking.md"
 
 check_absent \
 	'stale "README has not been updated" claim about mcp-adapter still appears in live docs (upstream rewrote it at v0.6.x)' \
 	'the README has not been updated' \
-	"${live_docs[@]}" \
+	"${ability_count_docs[@]}" \
 	"${repo_root}/docs/reference/local-environment-setup.md" \
 	"${repo_root}/docs/reference/wordpress-ai-roadmap-tracking.md"
 
@@ -387,13 +387,13 @@ check_absent \
 check_absent \
 	'docs still describe MCP privacy as the absence of an mcp meta key (0.6.0+ inherits meta.public instead)' \
 	'carry **no `mcp` meta**' \
-	"${live_docs[@]}" \
+	"${ability_count_docs[@]}" \
 	"${repo_root}/docs/reference/wordpress-ai-roadmap-tracking.md"
 
 check_absent_regex \
 	'superseded meta.mcp.public ability count still appears in live docs (current: seventeen)' \
-	'(ten|Ten) externally-useful read helpers and (all )?six preview siblings declare' \
-	"${live_docs[@]}" \
+	'(ten|Ten) externally-useful (read )?helpers and (all )?six preview siblings( declare)?' \
+	"${ability_count_docs[@]}" \
 	"${repo_root}/.github/copilot-instructions.md"
 
 check_present_in_each_fixed \
