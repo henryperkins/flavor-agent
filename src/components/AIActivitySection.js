@@ -1,8 +1,44 @@
 import { Button } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
+import { __, sprintf } from '@wordpress/i18n';
 
 import { isDiagnosticActivityEntry } from '../store/activity-history';
+import { formatCount } from '../utils/format-count';
 import { truncateActivityTitle } from '../utils/activity-title';
+
+const DEFAULT_SECTION_TITLE = __( 'Recent AI Actions', 'flavor-agent' );
+
+/**
+ * Diagnostic-entry descriptions keyed by surface. Surface keys are stable
+ * tokens, so translating the description can never change lookup behavior.
+ *
+ * @type {Object<string, string>}
+ */
+const DIAGNOSTIC_SURFACE_DESCRIPTIONS = Object.freeze( {
+	content: __( 'Content request diagnostic', 'flavor-agent' ),
+	navigation: __( 'Navigation request diagnostic', 'flavor-agent' ),
+	pattern: __( 'Pattern request diagnostic', 'flavor-agent' ),
+	template: __( 'Template request diagnostic', 'flavor-agent' ),
+	'template-part': __( 'Template part request diagnostic', 'flavor-agent' ),
+	'post-blocks': __(
+		'Post content structure request diagnostic',
+		'flavor-agent'
+	),
+	'global-styles': __( 'Global Styles request diagnostic', 'flavor-agent' ),
+	'style-book': __( 'Style Book request diagnostic', 'flavor-agent' ),
+} );
+
+/**
+ * Applied-entry descriptions keyed by surface.
+ *
+ * @type {Object<string, string>}
+ */
+const SURFACE_ACTION_DESCRIPTIONS = Object.freeze( {
+	template: __( 'Template action', 'flavor-agent' ),
+	'template-part': __( 'Template part action', 'flavor-agent' ),
+	'post-blocks': __( 'Post content action', 'flavor-agent' ),
+	'global-styles': __( 'Global Styles action', 'flavor-agent' ),
+} );
 
 function getRequestMeta( entry ) {
 	const requestMeta = entry?.request?.ai;
@@ -56,30 +92,50 @@ function getExternalApplyStatus( entry ) {
 		: '';
 }
 
+/**
+ * Map an activity entry onto a status pill.
+ *
+ * `tone` is a stable token rendered as `flavor-agent-pill--{tone}`, never
+ * translated text — same rule as `SURFACE_TONES` in `surface-labels.js`. This
+ * lane vocabulary adds `error`/`success`, which the recommendation lanes have
+ * no use for; keep the two lists apart rather than mixing tokens across them.
+ *
+ * @param {Object} entry Activity entry.
+ * @return {{label: string, tone: string}} Pill label and tone token.
+ */
 function getStatusLabel( entry ) {
 	if (
 		isDiagnosticActivityEntry( entry ) &&
 		entry?.undo?.status !== 'failed'
 	) {
-		return { label: 'Review', tone: 'review' };
+		return { label: __( 'Review', 'flavor-agent' ), tone: 'review' };
 	}
 
 	if (
 		isDiagnosticActivityEntry( entry ) &&
 		entry?.undo?.status === 'failed'
 	) {
-		return { label: 'Request failed', tone: 'error' };
+		return {
+			label: __( 'Request failed', 'flavor-agent' ),
+			tone: 'error',
+		};
 	}
 
 	switch ( getExternalApplyStatus( entry ) ) {
 		case 'pending':
-			return { label: 'Pending approval', tone: 'review' };
+			return {
+				label: __( 'Pending approval', 'flavor-agent' ),
+				tone: 'review',
+			};
 		case 'rejected':
-			return { label: 'Rejected', tone: 'error' };
+			return { label: __( 'Rejected', 'flavor-agent' ), tone: 'error' };
 		case 'expired':
-			return { label: 'Expired', tone: 'stale' };
+			return { label: __( 'Expired', 'flavor-agent' ), tone: 'stale' };
 		case 'failed':
-			return { label: 'Apply failed', tone: 'error' };
+			return {
+				label: __( 'Apply failed', 'flavor-agent' ),
+				tone: 'error',
+			};
 	}
 
 	if (
@@ -89,36 +145,45 @@ function getStatusLabel( entry ) {
 		return {
 			label:
 				entry?.undo?.status === 'undone'
-					? 'Undo pending sync'
-					: 'Audit sync pending',
+					? __( 'Undo pending sync', 'flavor-agent' )
+					: __( 'Audit sync pending', 'flavor-agent' ),
 			tone: 'stale',
 		};
 	}
 
 	if ( entry?.undo?.status === 'undone' ) {
-		return { label: 'Undone', tone: 'stale' };
+		return { label: __( 'Undone', 'flavor-agent' ), tone: 'stale' };
 	}
 
 	if ( entry?.undo?.status === 'blocked' ) {
-		return { label: 'Undo blocked', tone: 'error' };
+		return { label: __( 'Undo blocked', 'flavor-agent' ), tone: 'error' };
 	}
 
 	if ( entry?.undo?.status === 'failed' ) {
-		return { label: 'Undo unavailable', tone: 'error' };
+		return {
+			label: __( 'Undo unavailable', 'flavor-agent' ),
+			tone: 'error',
+		};
 	}
 
 	if (
 		entry?.undo?.status === 'available' &&
 		entry?.undo?.canUndo === true
 	) {
-		return { label: 'Undo available', tone: 'success' };
+		return {
+			label: __( 'Undo available', 'flavor-agent' ),
+			tone: 'success',
+		};
 	}
 
 	if ( entry?.undo?.status === 'available' ) {
-		return { label: 'Undo unavailable', tone: 'stale' };
+		return {
+			label: __( 'Undo unavailable', 'flavor-agent' ),
+			tone: 'stale',
+		};
 	}
 
-	return { label: 'Applied', tone: 'success' };
+	return { label: __( 'Applied', 'flavor-agent' ), tone: 'success' };
 }
 
 function getExternalApplyMessage( entry ) {
@@ -126,20 +191,33 @@ function getExternalApplyMessage( entry ) {
 
 	switch ( status ) {
 		case 'pending':
-			return 'External apply awaiting admin approval.';
+			return __(
+				'External apply awaiting admin approval.',
+				'flavor-agent'
+			);
 		case 'rejected': {
 			const decisionNote = getExternalApply( entry )?.decisionNote;
 
 			return decisionNote
-				? `External apply rejected: ${ decisionNote }`
-				: 'External apply request was rejected.';
+				? sprintf(
+						/* translators: %s: reviewer-supplied rejection note. */
+						__( 'External apply rejected: %s', 'flavor-agent' ),
+						decisionNote
+				  )
+				: __( 'External apply request was rejected.', 'flavor-agent' );
 		}
 		case 'expired':
-			return 'External apply request expired before approval.';
+			return __(
+				'External apply request expired before approval.',
+				'flavor-agent'
+			);
 		case 'failed': {
 			const failureMessage = getExternalApply( entry )?.failureMessage;
 
-			return failureMessage || 'External apply request failed.';
+			return (
+				failureMessage ||
+				__( 'External apply request failed.', 'flavor-agent' )
+			);
 		}
 		default:
 			return '';
@@ -148,60 +226,43 @@ function getExternalApplyMessage( entry ) {
 
 function describeActivity( entry ) {
 	if ( isDiagnosticActivityEntry( entry ) ) {
-		switch ( entry?.surface ) {
-			case 'content':
-				return 'Content request diagnostic';
-			case 'navigation':
-				return 'Navigation request diagnostic';
-			case 'pattern':
-				return 'Pattern request diagnostic';
-			case 'template':
-				return 'Template request diagnostic';
-			case 'template-part':
-				return 'Template part request diagnostic';
-			case 'post-blocks':
-				return 'Post content structure request diagnostic';
-			case 'global-styles':
-				return 'Global Styles request diagnostic';
-			case 'style-book':
-				return 'Style Book request diagnostic';
+		const surfaceDescription =
+			DIAGNOSTIC_SURFACE_DESCRIPTIONS[ entry?.surface ];
+
+		if ( surfaceDescription ) {
+			return surfaceDescription;
 		}
 
 		return entry?.target?.blockName
-			? `Block request diagnostic · ${ entry.target.blockName.replace(
-					'core/',
-					''
-			  ) }`
-			: 'Block request diagnostic';
+			? sprintf(
+					/* translators: %s: block name, with the core/ prefix removed. */
+					__( 'Block request diagnostic · %s', 'flavor-agent' ),
+					entry.target.blockName.replace( 'core/', '' )
+			  )
+			: __( 'Block request diagnostic', 'flavor-agent' );
 	}
 
-	if ( entry?.surface === 'template' ) {
-		return 'Template action';
-	}
+	const actionDescription = SURFACE_ACTION_DESCRIPTIONS[ entry?.surface ];
 
-	if ( entry?.surface === 'template-part' ) {
-		return 'Template part action';
-	}
-
-	if ( entry?.surface === 'post-blocks' ) {
-		return 'Post content action';
-	}
-
-	if ( entry?.surface === 'global-styles' ) {
-		return 'Global Styles action';
+	if ( actionDescription ) {
+		return actionDescription;
 	}
 
 	if ( entry?.surface === 'style-book' ) {
 		return entry?.target?.blockTitle
-			? `Style Book action · ${ entry.target.blockTitle }`
-			: 'Style Book action';
+			? sprintf(
+					/* translators: %s: Style Book block title. */
+					__( 'Style Book action · %s', 'flavor-agent' ),
+					entry.target.blockTitle
+			  )
+			: __( 'Style Book action', 'flavor-agent' );
 	}
 
 	if ( entry?.target?.blockName ) {
 		return entry.target.blockName.replace( 'core/', '' );
 	}
 
-	return 'Block action';
+	return __( 'Block action', 'flavor-agent' );
 }
 
 function getLocalizedActivityLogUrl() {
@@ -245,7 +306,7 @@ export default function AIActivitySection( {
 	isUndoing = false,
 	onUndo,
 	description = '',
-	title = 'Recent AI Actions',
+	title = DEFAULT_SECTION_TITLE,
 	initialOpen = true,
 	resetKey = null,
 	maxVisible = Number.POSITIVE_INFINITY,
@@ -308,8 +369,7 @@ export default function AIActivitySection( {
 				</span>
 				<span className="flavor-agent-card__meta">
 					<span className="flavor-agent-pill">
-						{ entries.length }{ ' ' }
-						{ entries.length === 1 ? 'action' : 'actions' }
+						{ formatCount( entries.length, 'action' ) }
 					</span>
 				</span>
 				<span
@@ -352,7 +412,11 @@ export default function AIActivitySection( {
 								<div className="flavor-agent-activity-row__info">
 									<div className="flavor-agent-activity-row__label">
 										{ truncateActivityTitle(
-											entry?.suggestion || 'AI action'
+											entry?.suggestion ||
+												__(
+													'AI action',
+													'flavor-agent'
+												)
 										) }
 									</div>
 									<div className="flavor-agent-activity-row__meta">
@@ -365,7 +429,10 @@ export default function AIActivitySection( {
 									) }
 									{ hasPendingUndoSync && (
 										<div className="flavor-agent-activity-row__meta">
-											Activity audit sync pending.
+											{ __(
+												'Activity audit sync pending.',
+												'flavor-agent'
+											) }
 										</div>
 									) }
 									{ externalApplyMessage && (
@@ -395,7 +462,10 @@ export default function AIActivitySection( {
 										href={ activityEntryUrl }
 										className="flavor-agent-activity-row__link"
 									>
-										View activity
+										{ __(
+											'View activity',
+											'flavor-agent'
+										) }
 									</Button>
 								) }
 
@@ -407,7 +477,9 @@ export default function AIActivitySection( {
 										className="flavor-agent-card__apply"
 										disabled={ isUndoing }
 									>
-										{ isUndoing ? 'Undoing…' : 'Undo' }
+										{ isUndoing
+											? __( 'Undoing…', 'flavor-agent' )
+											: __( 'Undo', 'flavor-agent' ) }
 									</Button>
 								) }
 							</div>
@@ -422,7 +494,11 @@ export default function AIActivitySection( {
 					onClick={ () => setShowAll( true ) }
 					className="flavor-agent-advisory-section__show-more"
 				>
-					{ `Show ${ entries.length - maxVisible } more` }
+					{ sprintf(
+						/* translators: %d: number of additional activity rows revealed by the control. */
+						__( 'Show %d more', 'flavor-agent' ),
+						entries.length - maxVisible
+					) }
 				</Button>
 			) }
 		</div>

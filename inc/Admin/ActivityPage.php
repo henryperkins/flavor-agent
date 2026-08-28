@@ -187,6 +187,14 @@ final class ActivityPage {
 			true
 		);
 
+		// Loads the locale data the bundle's __()/_n() calls need; without it
+		// the AI Activity page renders English regardless of site locale.
+		wp_set_script_translations(
+			'flavor-agent-activity-log',
+			'flavor-agent',
+			FLAVOR_AGENT_DIR . 'languages'
+		);
+
 		if ( file_exists( $css_path ) ) {
 			wp_enqueue_style(
 				'flavor-agent-activity-log',

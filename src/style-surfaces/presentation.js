@@ -1,9 +1,7 @@
 import { Button } from '@wordpress/components';
+import { __, sprintf } from '@wordpress/i18n';
 
-import {
-	MANUAL_IDEAS_LABEL,
-	REVIEW_LANE_LABEL,
-} from '../components/surface-labels';
+import { getToneLabel, SURFACE_TONES } from '../components/surface-labels';
 
 function formatPath( path = [] ) {
 	return Array.isArray( path ) ? path.join( '.' ) : '';
@@ -27,7 +25,11 @@ function getCanonicalPresetSlug( operation = {} ) {
 
 export function formatStyleOperation( operation = {} ) {
 	if ( operation?.type === 'set_theme_variation' ) {
-		return `Switch to variation: ${ operation.variationTitle }`;
+		return sprintf(
+			/* translators: %s: theme style variation title. */
+			__( 'Switch to variation: %s', 'flavor-agent' ),
+			operation.variationTitle
+		);
 	}
 
 	if (
@@ -44,7 +46,7 @@ export function formatStyleOperation( operation = {} ) {
 		return `${ pathLabel } → ${ String( operation.value || '' ) }`;
 	}
 
-	return 'Review this change before applying it.';
+	return __( 'Review this change before applying it.', 'flavor-agent' );
 }
 
 export function isInlineStyleNotice( notice ) {
@@ -57,10 +59,23 @@ export function formatStyleBadgeLabel( value = '' ) {
 		.replace( /\b\w/g, ( char ) => char.toUpperCase() );
 }
 
-export function getStyleSuggestionToneLabel( suggestion ) {
+/**
+ * Map a style suggestion onto a shared surface tone token.
+ *
+ * Returns a token, never rendered text, so pill styling stays independent of
+ * the active locale.
+ *
+ * @param {Object} suggestion Style suggestion.
+ * @return {string} Tone token from `SURFACE_TONES`.
+ */
+export function getStyleSuggestionTone( suggestion ) {
 	return suggestion?.tone === 'executable'
-		? REVIEW_LANE_LABEL
-		: MANUAL_IDEAS_LABEL;
+		? SURFACE_TONES.REVIEW
+		: SURFACE_TONES.MANUAL;
+}
+
+export function getStyleSuggestionToneLabel( suggestion ) {
+	return getToneLabel( getStyleSuggestionTone( suggestion ) );
 }
 
 export function StyleOperationList( {
@@ -98,8 +113,11 @@ export function StyleSuggestionCard( {
 } ) {
 	const secondaryGuidance =
 		suggestion?.tone === 'executable' ? executableGuidance : manualGuidance;
-	const reviewActionLabel = isSelected ? 'Reviewing' : 'Review';
-	const suggestionLabel = suggestion?.label || 'suggestion';
+	const reviewActionLabel = isSelected
+		? __( 'Reviewing', 'flavor-agent' )
+		: __( 'Review', 'flavor-agent' );
+	const suggestionLabel =
+		suggestion?.label || __( 'suggestion', 'flavor-agent' );
 
 	return (
 		<div
@@ -130,7 +148,7 @@ export function StyleSuggestionCard( {
 					) }
 					{ isSelected && (
 						<span className="flavor-agent-pill flavor-agent-pill--success">
-							Review open
+							{ __( 'Review open', 'flavor-agent' ) }
 						</span>
 					) }
 				</div>
@@ -159,7 +177,12 @@ export function StyleSuggestionCard( {
 							}
 							className="flavor-agent-card__apply"
 							disabled={ isStale }
-							aria-label={ `${ reviewActionLabel } ${ suggestionLabel }` }
+							aria-label={ sprintf(
+								/* translators: 1: review action label. 2: suggestion label. */
+								__( '%1$s %2$s', 'flavor-agent' ),
+								reviewActionLabel,
+								suggestionLabel
+							) }
 						>
 							{ reviewActionLabel }
 						</Button>

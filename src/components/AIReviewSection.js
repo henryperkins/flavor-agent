@@ -1,7 +1,11 @@
 import { Button } from '@wordpress/components';
+import { __ } from '@wordpress/i18n';
 
 import { formatCount, joinClassNames } from '../utils/format-count';
 import { EXECUTABLE_LABEL, REVIEW_SECTION_TITLE } from './surface-labels';
+
+const DEFAULT_CONFIRM_LABEL = __( 'Confirm Apply', 'flavor-agent' );
+const DEFAULT_CANCEL_LABEL = __( 'Cancel Preview', 'flavor-agent' );
 
 export default function AIReviewSection( {
 	title = REVIEW_SECTION_TITLE,
@@ -12,8 +16,8 @@ export default function AIReviewSection( {
 	summary = null,
 	children = null,
 	hint = '',
-	confirmLabel = 'Confirm Apply',
-	cancelLabel = 'Cancel Preview',
+	confirmLabel = DEFAULT_CONFIRM_LABEL,
+	cancelLabel = DEFAULT_CANCEL_LABEL,
 	onConfirm,
 	onCancel,
 	confirmDisabled = false,

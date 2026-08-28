@@ -2,16 +2,16 @@ const fs = require( 'fs' );
 const path = require( 'path' );
 const { spawnSync } = require( 'child_process' );
 
-// Pinned to the exact stable WordPress 7.0.0 image so the harness is reproducible
-// across runs. Use the fully qualified patch tag (not the floating `7.0` tag) so a
-// future 7.0.x republish cannot silently change what the release gates verified.
+// Pinned to the exact stable WordPress 7.1.0 image so the harness is reproducible
+// across runs. Use the fully qualified patch tag (not the floating `7.1` tag) so a
+// future 7.1.x republish cannot silently change what the release gates verified.
 // Override with FLAVOR_AGENT_WP70_BASE_IMAGE to test against another build.
-const DEFAULT_BASE_IMAGE = 'wordpress:7.0.0-php8.2-apache';
+const DEFAULT_BASE_IMAGE = 'wordpress:7.1.0-php8.2-apache';
 const DEFAULT_WORDPRESS_PORT = '9404';
 const DEFAULT_PHPMYADMIN_PORT = '9405';
 const DEFAULT_THEME_SLUG = 'flavor-agent-e2e';
 // Flavor Agent declares `Requires Plugins: ai` in its plugin header, so WP
-// refuses to activate the plugin unless the AI plugin is present. The WP 7.0
+// refuses to activate the plugin unless the AI plugin is present. The WP 7.1
 // harness intentionally stays minimal (no MCP / AI provider plugins) — extend
 // via FLAVOR_AGENT_WP70_COMPANION_PLUGINS only when a spec needs it.
 const DEFAULT_COMPANION_PLUGINS = [ 'ai' ];
@@ -40,7 +40,7 @@ function getWp70HarnessConfig( rootDir = path.resolve( __dirname, '..' ) ) {
 			process.env.FLAVOR_AGENT_WP70_COMPANION_PLUGINS
 		),
 		wordpressTitle:
-			process.env.FLAVOR_AGENT_WP70_TITLE || 'Flavor Agent WP 7.0 E2E',
+			process.env.FLAVOR_AGENT_WP70_TITLE || 'Flavor Agent WP 7.1 E2E',
 		adminUser: process.env.FLAVOR_AGENT_WP70_ADMIN_USER || 'admin',
 		adminPassword: process.env.FLAVOR_AGENT_WP70_ADMIN_PASSWORD || 'admin',
 		adminEmail:
@@ -66,7 +66,7 @@ function getWp70HarnessConfig( rootDir = path.resolve( __dirname, '..' ) ) {
 			WORDPRESS_URL: baseURL,
 			WORDPRESS_TITLE:
 				process.env.FLAVOR_AGENT_WP70_TITLE ||
-				'Flavor Agent WP 7.0 E2E',
+				'Flavor Agent WP 7.1 E2E',
 			WORDPRESS_ADMIN_USER:
 				process.env.FLAVOR_AGENT_WP70_ADMIN_USER || 'admin',
 			WORDPRESS_ADMIN_PASSWORD:
@@ -107,7 +107,7 @@ function runCommand( command, args, options = {} ) {
 	if ( result.error ) {
 		if ( result.error.code === 'ENOENT' ) {
 			throw new Error(
-				`${ command } was not found on PATH. Install Docker Desktop or Docker Engine plus the Docker CLI before running the WordPress 7.0 browser harness.`
+				`${ command } was not found on PATH. Install Docker Desktop or Docker Engine plus the Docker CLI before running the WordPress 7.1 browser harness.`
 			);
 		}
 
@@ -166,22 +166,40 @@ async function waitForWordPressCli( harness ) {
 	}
 
 	throw new Error(
-		'The WordPress 7.0 browser harness did not become ready in time.'
+		'The WordPress 7.1 browser harness did not become ready in time.'
 	);
 }
 
 async function waitForHttp( harness ) {
-	for ( let attempt = 0; attempt < 40; attempt++ ) {
+	// A single successful response is not proof the server is stably serving.
+	// Immediately after a first boot + core install, WordPress answers one GET
+	// and then stalls the next request long enough for the auth setup spec to
+	// burn its whole timeout on the login POST. Require consecutive successes
+	// so the harness is only declared ready once it is actually settled.
+	const requiredConsecutiveSuccesses = 3;
+	let consecutiveSuccesses = 0;
+
+	for ( let attempt = 0; attempt < 60; attempt++ ) {
 		try {
 			const response = await fetch( `${ harness.baseURL }/wp-login.php`, {
 				redirect: 'manual',
 			} );
 
 			if ( response.ok || response.status === 302 ) {
-				return;
+				consecutiveSuccesses += 1;
+
+				if ( consecutiveSuccesses >= requiredConsecutiveSuccesses ) {
+					return;
+				}
+
+				await wait( 1000 );
+				continue;
 			}
+
+			consecutiveSuccesses = 0;
 		} catch ( error ) {
 			// The container may be up before Apache is fully reachable.
+			consecutiveSuccesses = 0;
 		}
 
 		await wait( 1000 );
@@ -226,7 +244,7 @@ wp_insert_post(
 		'post_title'   => 'Flavor Agent E2E Post',
 		'post_type'    => 'post',
 		'post_status'  => 'publish',
-		'post_content' => 'Seed content for the Flavor Agent WP 7.0 Site Editor harness.',
+		'post_content' => 'Seed content for the Flavor Agent WP 7.1 Site Editor harness.',
 	)
 );
 update_option( 'show_on_front', 'posts' );
@@ -331,7 +349,7 @@ async function main() {
 	if ( command === 'bootstrap' ) {
 		const harness = await bootstrapWp70Harness();
 		process.stdout.write(
-			`WP 7.0 browser harness ready at ${ harness.baseURL }\n`
+			`WP 7.1 browser harness ready at ${ harness.baseURL }\n`
 		);
 		return;
 	}
@@ -339,7 +357,7 @@ async function main() {
 	if ( command === 'teardown' ) {
 		const harness = teardownWp70Harness();
 		process.stdout.write(
-			`WP 7.0 browser harness stopped for ${ harness.baseURL }\n`
+			`WP 7.1 browser harness stopped for ${ harness.baseURL }\n`
 		);
 		return;
 	}

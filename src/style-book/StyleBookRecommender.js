@@ -25,6 +25,7 @@ import {
 	MANUAL_IDEAS_LABEL,
 	REVIEW_LANE_LABEL,
 	REVIEW_SECTION_TITLE,
+	SURFACE_TONES,
 } from '../components/surface-labels';
 import {
 	buildBlockStyleExecutionContractFromSettings,
@@ -56,7 +57,7 @@ import { useStyleSurfaceActivityContext } from '../style-surfaces/use-style-surf
 import { useStyleSurfaceDerivedContext } from '../style-surfaces/use-style-surface-derived-context';
 import { getStyleBookUiState, subscribeToStyleBookUi } from './dom';
 import {
-	getStyleSuggestionToneLabel,
+	getStyleSuggestionTone,
 	isInlineStyleNotice,
 	StyleOperationList,
 	StyleSuggestionCard,
@@ -156,12 +157,17 @@ function StyleBookPanel( {
 				/>
 			) }
 			<SurfacePanelIntro
-				eyebrow="Style Book"
-				introCopy="Review stays required before Flavor Agent applies theme-backed block style changes to the active Style Book example."
+				eyebrow={ __( 'Style Book', 'flavor-agent' ) }
+				introCopy={ __(
+					'Review stays required before Flavor Agent applies theme-backed block style changes to the active Style Book example.',
+					'flavor-agent'
+				) }
 				className="flavor-agent-style-surface__intro"
 			>
 				<div className="flavor-agent-style-surface__meta">
-					<span className="flavor-agent-pill">Style Book</span>
+					<span className="flavor-agent-pill">
+						{ __( 'Style Book', 'flavor-agent' ) }
+					</span>
 					{ blockTitle && (
 						<span className="flavor-agent-pill">
 							{ blockTitle }
@@ -200,22 +206,31 @@ function StyleBookPanel( {
 			) }
 
 			<SurfaceComposer
-				title="Ask Flavor Agent"
+				title={ __( 'Ask Flavor Agent', 'flavor-agent' ) }
 				prompt={ prompt }
 				onPromptChange={ setPrompt }
 				onFetch={ onRequest }
-				label="Describe the block style direction"
-				placeholder="Describe the block style direction you want."
+				label={ __(
+					'Describe the block style direction',
+					'flavor-agent'
+				) }
+				placeholder={ __(
+					'Describe the block style direction you want.',
+					'flavor-agent'
+				) }
 				helperText={ promptHelp }
 				rows={ 4 }
 				starterPrompts={ [
-					'Make this block feel more editorial',
-					'Strengthen emphasis and hierarchy',
-					'Soften spacing and surfaces',
+					__( 'Make this block feel more editorial', 'flavor-agent' ),
+					__( 'Strengthen emphasis and hierarchy', 'flavor-agent' ),
+					__( 'Soften spacing and surfaces', 'flavor-agent' ),
 				] }
-				fetchLabel="Get Style Suggestions"
-				loadingLabel="Thinking…"
-				submitHint="Press Cmd/Ctrl+Enter to submit."
+				fetchLabel={ __( 'Get Style Suggestions', 'flavor-agent' ) }
+				loadingLabel={ __( 'Thinking\u2026', 'flavor-agent' ) }
+				submitHint={ __(
+					'Press Cmd/Ctrl+Enter to submit.',
+					'flavor-agent'
+				) }
 				isLoading={ isLoading }
 				disabled={ ! capabilityAvailable }
 			/>
@@ -236,7 +251,7 @@ function StyleBookPanel( {
 						'Recommended style-book adjustment'
 					}
 					description={ featuredSuggestion.description || '' }
-					tone={ getStyleSuggestionToneLabel( featuredSuggestion ) }
+					tone={ getStyleSuggestionTone( featuredSuggestion ) }
 					why={
 						featuredSuggestion.tone === 'executable'
 							? 'Start here first, then review the exact operations before applying them.'
@@ -255,7 +270,7 @@ function StyleBookPanel( {
 			{ executableSuggestions.length > 0 && (
 				<RecommendationLane
 					title={ REVIEW_LANE_LABEL }
-					tone={ REVIEW_LANE_LABEL }
+					tone={ SURFACE_TONES.REVIEW }
 					count={ executableSuggestions.length }
 					countNoun="suggestion"
 					description={
@@ -348,8 +363,11 @@ function StyleBookPanel( {
 				entries={ activityEntries }
 				isUndoing={ isUndoing }
 				onUndo={ onUndo }
-				title="Recent AI Style Book Actions"
-				description="Undo is only available while the current Style Book block styles still match the applied AI change."
+				title={ __( 'Recent AI Style Book Actions', 'flavor-agent' ) }
+				description={ __(
+					'Undo is only available while the current Style Book block styles still match the applied AI change.',
+					'flavor-agent'
+				) }
 				initialOpen={ ! hasResult }
 				resetKey={ activityResetKey }
 				maxVisible={ 3 }

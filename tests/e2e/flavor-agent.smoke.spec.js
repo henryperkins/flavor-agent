@@ -1,4 +1,4 @@
-const { test, expect } = require( '@playwright/test' );
+const { test, expect } = require( './test-fixtures' );
 const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
 const {
 	getWp70HarnessConfig,
@@ -1313,7 +1313,13 @@ async function openFirstTemplateEditor( page ) {
 		} )
 		.first();
 
-	await expect( templateButton ).toBeVisible();
+	// The Site Editor renders the DataViews template grid before its records
+	// resolve, so the row exists as `gridcell "Navigate to item Actions"` with
+	// no title for a while. On WordPress 7.1 that gap routinely outlasts the
+	// default 5s expect timeout under Playground — the same test passes in
+	// isolation and fails when the suite is under load — so wait explicitly on
+	// the title rather than on the grid being present.
+	await expect( templateButton ).toBeVisible( { timeout: 60_000 } );
 	await templateButton.click();
 	await page.waitForFunction(
 		() =>
@@ -2130,7 +2136,7 @@ async function getTemplatePartInsertState( page, insertedContent ) {
 
 // Playground WP 6.9.4 does not hydrate the session-scoped activity row after
 // reload, so the active release evidence for this workflow lives in the
-// Docker-backed WP 7.0 harness.
+// Docker-backed WP 7.1 harness.
 test( '@wp70-site-editor block inspector smoke applies, persists, and undoes AI recommendations', async ( {
 	page,
 } ) => {
@@ -3536,6 +3542,11 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 		Boolean( window.flavorAgentData?.canRecommendPatterns )
 	);
 	await seedParagraphBlock( page );
+	// The inserter-open ranking is gated on a non-empty visible pattern list,
+	// which comes entirely from core's /wp/v2/block-patterns/patterns resolver.
+	// Assert the catalog hydrated first so a harness fault fails here, at a
+	// named precondition, instead of as an opaque "no ability request" timeout.
+	await waitForPatternCatalogHydration( page );
 	const searchPrompt = 'hero';
 
 	await dismissWelcomeGuide( page );
@@ -3702,6 +3713,10 @@ test( 'pattern surface inserts a recommended pattern at the top-level root and r
 	// Seeds and SELECTS a single top-level paragraph, so the captured insertion
 	// root is undefined -> the null/'' code path under test.
 	await seedParagraphBlock( page );
+	// This test asserts a ranking request carrying a non-empty
+	// visiblePatternNames, so an unhydrated catalog fails it. Surface that as a
+	// precondition rather than as a downstream assertion timeout.
+	await waitForPatternCatalogHydration( page );
 	await dismissWelcomeGuide( page );
 
 	await page
@@ -4588,7 +4603,7 @@ test( '@wp70-site-editor style book surface keeps stale results visible but disa
 } );
 
 // Playground WP 6.9.4 rejects root template insertion in this path even after
-// the plugin preflight passes. The WP 7.0 harness exercises the shipped
+// the plugin preflight passes. The WP 7.1 harness exercises the shipped
 // template apply workflow against the Docker-backed editor runtime.
 test( '@wp70-site-editor template surface smoke previews and applies executable template recommendations', async ( {
 	page,
@@ -6128,15 +6143,48 @@ test( 'an unregistered block style is asserted as empty in the recommendation re
 	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
 	await dismissWelcomeGuide( page );
 	await promptInput.fill( 'Improve this quote.' );
+	// Opening or focusing inspector controls can move editor selection into the
+	// quote's default inner paragraph. Reassert the intended target immediately
+	// before submitting so this request exercises the style-less quote contract.
+	await page.evaluate( () => {
+		const blockEditor = window.wp.data.select( 'core/block-editor' );
+		const quote = blockEditor.getBlocks()[ 0 ];
+
+		if ( quote?.clientId ) {
+			window.wp.data
+				.dispatch( 'core/block-editor' )
+				.selectBlock( quote.clientId );
+		}
+	} );
+	await expect
+		.poll( () =>
+			page.evaluate(
+				() =>
+					window.wp.data
+						.select( 'core/block-editor' )
+						.getSelectedBlock()?.name || ''
+			)
+		)
+		.toBe( 'core/quote' );
 	await page.getByRole( 'button', { name: 'Get Suggestions' } ).click();
 
 	await expect
-		.poll( () => blockRequests.length, { timeout: 30_000 } )
+		.poll(
+			() =>
+				blockRequests.filter(
+					( request ) =>
+						request.editorContext?.block?.name === 'core/quote'
+				).length,
+			{ timeout: 30_000 }
+		)
 		.toBeGreaterThan( 0 );
 
 	// The client must assert emptiness rather than omit the key — that is the
 	// distinction D4 makes the server honour.
-	const context = blockRequests[ 0 ].editorContext || {};
+	const context =
+		blockRequests.find(
+			( request ) => request.editorContext?.block?.name === 'core/quote'
+		)?.editorContext || {};
 
 	expect( context.block ).toHaveProperty( 'styles' );
 	expect( context.block.styles ).toEqual( [] );

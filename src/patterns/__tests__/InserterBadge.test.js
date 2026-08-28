@@ -242,8 +242,8 @@ describe( 'InserterBadge', () => {
 		expect(
 			badgeAnchor
 				?.querySelector( '.flavor-agent-inserter-badge--ready' )
-				?.getAttribute( 'title' )
-		).toBe( 'Hero match.' );
+				?.getAttribute( 'aria-label' )
+		).toBe( '1 pattern recommendation available. Hero match.' );
 		expect(
 			badgeAnchor?.querySelector( '.flavor-agent-inserter-badge--ready' )
 				?.tagName
@@ -343,7 +343,7 @@ describe( 'InserterBadge', () => {
 			anchor
 				.querySelector( '.flavor-agent-inserter-badge--ready' )
 				?.getAttribute( 'aria-label' )
-		).toBe( '1 pattern recommendation available' );
+		).toBe( '1 pattern recommendation available. Hero.' );
 	} );
 
 	test( 'hides ready badge when allowed matches are not insertable at the active root', () => {
@@ -421,12 +421,7 @@ describe( 'InserterBadge', () => {
 			anchor
 				.querySelector( '.flavor-agent-inserter-badge--ready' )
 				?.getAttribute( 'aria-label' )
-		).toBe( '1 pattern recommendation available' );
-		expect(
-			anchor
-				.querySelector( '.flavor-agent-inserter-badge--ready' )
-				?.getAttribute( 'title' )
-		).toBe( 'Renderable reason.' );
+		).toBe( '1 pattern recommendation available. Renderable reason.' );
 		expect( document.body.textContent ).not.toContain( 'Hidden reason.' );
 	} );
 

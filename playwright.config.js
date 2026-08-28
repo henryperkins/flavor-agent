@@ -24,11 +24,20 @@ if ( process.platform === 'win32' ) {
 }
 
 module.exports = defineConfig( {
+	metadata: {
+		flavorAgentHarness: 'playground',
+	},
 	testDir: path.join( rootDir, 'tests/e2e' ),
-	testIgnore: /.*\.wp70\.setup\.js/,
+	// `__tests__` under tests/e2e belongs to Jest (`npm run test:unit`), which
+	// matches any file there. Playwright's default testMatch would also collect
+	// `*.test.js` from it and fail at load time on Jest globals.
+	testIgnore: [ /.*\.wp70\.setup\.js/, /__tests__/ ],
 	// Playground can take close to a minute to finish a cold WordPress boot on
-	// this host before the first admin request becomes usable.
-	timeout: 120_000,
+	// this host before the first admin request becomes usable, and WordPress 7.1
+	// is meaningfully slower to reach a usable editor than the 6.9.4 build this
+	// harness used to pin — enough that individual specs were exhausting a 120s
+	// budget under suite load while passing in isolation.
+	timeout: 180_000,
 	workers: 1,
 	retries: 0,
 	grepInvert: /@wp70-site-editor/,
@@ -40,18 +49,28 @@ module.exports = defineConfig( {
 		video: 'off',
 	},
 	webServer: {
-		// Playground's current 7.0 beta editor runtime breaks before plugin bootstrap,
-		// so smoke coverage stays on stable 6.9.4 via the MU-plugin loader harness.
+		// Smoke coverage runs on stable WordPress 7.1 via the MU-plugin loader
+		// harness, matching the Docker-backed Site Editor harness and the local
+		// dev container. The earlier 6.9.4 pin dated from when 7.0 was still a
+		// beta whose editor runtime broke before plugin bootstrap; 7.1 is stable
+		// and boots cleanly, so there is no longer a reason to trail the release.
 		command: [
-			// Pinned to the last-known-good CLI from the 2026-03-27 green run.
-			// Bumping this requires rerunning the full playground smoke suite.
-			'npx @wp-playground/cli@3.1.13 server',
+			// CLI pinned so a Playground release cannot silently change what the
+			// suite verifies. 3.1.13 predates WordPress 7.1 support; bumping this
+			// requires rerunning the full playground smoke suite.
+			'npx @wp-playground/cli@3.1.51 server',
 			`--port ${ port }`,
-			'--wp=6.9.4',
+			'--wp=7.1',
 			'--login',
-			`--mount-dir ${ quoteShellArg( pluginDir ) } /wordpress/wp-content/plugins/flavor-agent`,
-			`--mount-dir ${ quoteShellArg( muPluginDir ) } /wordpress/wp-content/mu-plugins`,
-			'--verbosity=quiet',
+			`--mount-dir ${ quoteShellArg(
+				pluginDir
+			) } /wordpress/wp-content/plugins/flavor-agent`,
+			`--mount-dir ${ quoteShellArg(
+				muPluginDir
+			) } /wordpress/wp-content/mu-plugins`,
+			// Deliberately NOT --verbosity=quiet. The server's own output is the
+			// only channel that can explain a boot failure, and CI discarded it
+			// for every run before this. Default verbosity is ~20 lines.
 		].join( ' ' ),
 		env: {
 			...process.env,
@@ -60,7 +79,14 @@ module.exports = defineConfig( {
 			TEMP: playgroundTmpDir,
 		},
 		port,
-		reuseExistingServer: true,
+		// Locally this keeps the ~1 minute cold boot out of every run. In CI it
+		// must be off: a reused server can be serving a stale mount, which
+		// would record a green against code the run never actually exercised.
+		reuseExistingServer: ! process.env.CI,
+		// Playwright pipes webServer stderr by default but drops stdout, so the
+		// Playground CLI's boot log never reached the job log.
+		stdout: 'pipe',
+		stderr: 'pipe',
 		timeout: 120_000,
 	},
 } );

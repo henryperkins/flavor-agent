@@ -1,4 +1,4 @@
-const { test, expect } = require( '@playwright/test' );
+const { test, expect } = require( './test-fixtures' );
 const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
 
 const DOCS_WARNING_TEXT =
@@ -162,6 +162,13 @@ test( 'pattern inserter shows the soft notice when a result ran without docs gro
 	await waitForFlavorAgent( page );
 	await dismissWelcomeGuide( page );
 	await seedParagraphBlock( page );
+	// The welcome guide can mount after the editor finishes hydrating, so the
+	// pre-seed dismissal is not always the last word. Its modal overlay makes
+	// the editor behind it inert, which strips the toolbar buttons of their
+	// accessible names and leaves `Block Inserter` unmatchable until the test
+	// times out. Dismiss again post-seed, the way the pattern-surface smoke
+	// specs in flavor-agent.smoke.spec.js already do.
+	await dismissWelcomeGuide( page );
 
 	await page
 		.getByRole( 'button', {

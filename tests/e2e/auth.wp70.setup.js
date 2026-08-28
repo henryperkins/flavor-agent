@@ -1,7 +1,7 @@
 const { test, expect } = require( '@playwright/test' );
 const { getWp70HarnessConfig } = require( '../../scripts/wp70-e2e' );
 
-test( 'authenticate the WP 7.0 Site Editor harness', async ( { page } ) => {
+test( 'authenticate the WP 7.1 Site Editor harness', async ( { page } ) => {
 	const harness = getWp70HarnessConfig();
 
 	await page.goto( '/wp-login.php', {

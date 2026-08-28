@@ -10,7 +10,6 @@ Use it when you need to answer:
 - which iteration issue or project board signals a near-term collision with a Flavor Agent surface
 
 For project-board pressure on the AI program (project 240), use `wordpress-ai-roadmap-tracking.md`.
-For point-in-time WP 7.0 release-cycle compatibility analysis, use `docs/wordpress-7.0-gutenberg-23-impact-brief.md`.
 
 ## Source And Refresh
 
@@ -210,8 +209,4 @@ Action implications 4, 5, 7, and 8 above describe upstream pressures with no cor
 ## Related References
 
 - `docs/reference/wordpress-ai-roadmap-tracking.md` — board pressure (project 240) and active overlap with Flavor Agent surfaces.
-- `docs/reference/gutenberg-23-3-nightly-validation-checklist.md` — manual runtime checklist for Gutenberg 23.3, React 19, Connectors, Abilities bridge, Inspector style states, pattern inserter, and Style Book checks.
-- `docs/validation/2026-06-18-gutenberg-23-4-alignment.md` — static/code alignment record plus open 23.4 runtime and corpus-refresh evidence.
-- `docs/wordpress-7.0-gutenberg-23-impact-brief.md` — point-in-time compatibility brief for the WP 7.0 release cycle.
-- `docs/wordpress-7.0-developer-docs-index.md` — broader upstream source map for WP 7.0.
-- `docs/wp7-migration-opportunities.md` — older migration snapshot.
+- `docs/reference/local-environment-setup.md` — representative local WordPress, Gutenberg, and companion-plugin setup.

@@ -34,7 +34,7 @@ vendor/bin/phpunit --filter test_method_name tests/phpunit/AgentControllerTest.p
 # E2E tests
 npm run test:e2e                # all suites
 npm run test:e2e:playground     # fast Playground smoke suite
-npm run test:e2e:wp70           # Docker-backed WP 7.0 Site Editor suite
+npm run test:e2e:wp70           # Docker-backed WP 7.1 Site Editor suite
 npm run check:docs              # stale-doc freshness guard
 
 # Aggregate verification (single entry point for automated runs)

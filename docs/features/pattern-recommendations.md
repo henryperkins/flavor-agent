@@ -84,7 +84,7 @@ Recommendation outcome events added for this path are `adapted_preview_shown`, `
 - Revalidate the current server apply context before direct insertion, so docs-grounding or pattern-catalog drift cannot apply an old ranked result
 - Re-run recommendations as the user changes the inserter search text
 - Scope results to the current insertion root instead of returning globally valid-but-unavailable patterns
-- Show inserter-level status as shelf, loading, empty, unavailable, or error feedback
+- Show inserter-level status as shelf, loading, empty, unavailable, catalog-unavailable, or error feedback
 - Explain missing embedding, Qdrant, private Cloudflare AI Search, or chat setup paths inside the native inserter before any recommendation request can succeed
 - Show compact "why this pattern" metadata in the inserter shelf using source signals, matched category, allowed inserter context, component scores, design metadata, and nearby-block fit where those fields are available.
 
@@ -95,6 +95,7 @@ Recommendation outcome events added for this path are `adapted_preview_shown`, `
 - Synced/user recommendation payloads are rehydrated from the current published `wp_block` post and require `current_user_can( 'read_post', $id )` before ranking or response output, even though the indexed corpus is already limited to published user patterns
 - When synced/user candidates in the current visible-pattern scope are filtered because the current request cannot pass `read_post`, the response returns a de-duplicated aggregate unreadable-synced count only. The UI can explain partial or empty results without exposing pattern names, IDs, titles, or content.
 - If Pattern Storage or the Embedding Model is unavailable, Flavor Agent now shows a shared why-unavailable notice in the native inserter instead of silently degrading to an empty state
+- If WordPress itself exposes no block patterns — core resolves `getBlockPatterns` once per page with no `shouldInvalidate`, so a failed or empty `/wp/v2/block-patterns/patterns` response otherwise persists for the editor's lifetime — the inserter shows a catalog-unavailable notice after core finishes or a 20-second fallback wait. Retry invalidates core's resolution and starts a fresh bounded wait instead of reusing the expired timer or requesting an empty-scope ranking
 - If the backend returns ranked names that Gutenberg is not currently exposing through the allowed-pattern selector, the inserter keeps the result local and explanatory instead of patching registry metadata
 - If the pattern index is uninitialized, stale without a usable snapshot, or failed without a usable snapshot, the backend returns an error and may schedule a sync for admins
 - If a stored recommendation lacks a server `resolvedContextSignature`, or the current `resolveSignatureOnly` response does not match the stored signature, the Insert action is blocked and the shelf refreshes recommendations for the current target

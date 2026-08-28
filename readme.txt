@@ -2,7 +2,7 @@
 Contributors: hperkins
 Tags: ai, blocks, patterns, editor
 Requires at least: 7.0
-Tested up to: 7.0
+Tested up to: 7.1
 Requires PHP: 8.2
 Stable tag: 0.1.0
 License: GPLv2 or later
@@ -68,7 +68,7 @@ Use `Settings > Connectors` for text-generation providers. Use `Settings > Flavo
 
 = How do external integrations call Flavor Agent? =
 
-Use the WordPress Abilities API. Recommendation integrations call `POST /wp-json/wp-abilities/v1/abilities/flavor-agent/recommend-*/run` with the Flavor Agent payload wrapped in `{ "input": { ... } }`; browser clients can use the equivalent site-local apiFetch path `/wp-abilities/v1/abilities/{ability}/run`. External style applies use `request-style-apply`, then an administrator approves or rejects the pending row in `Settings > AI Activity`; template, block, content, navigation, and pattern external applies are not exposed in this release.
+Use the WordPress Abilities API. Recommendation integrations call `POST /wp-json/wp-abilities/v1/abilities/flavor-agent/recommend-*/run` with the Flavor Agent payload wrapped in `{ "input": { ... } }`; browser clients can use the equivalent site-local apiFetch path `/wp-abilities/v1/abilities/{ability}/run`. Governed external applies cover four lanes: Global Styles / Style Book (`request-style-apply`), templates (`request-template-apply`), template parts (`request-template-part-apply`), and post content blocks (`request-post-blocks-apply`). Administrators approve or reject pending rows in `Settings > AI Activity`. Selected-block, editorial-content, navigation, and pattern external applies are not exposed in this release.
 
 = What data is sent to AI providers? =
 

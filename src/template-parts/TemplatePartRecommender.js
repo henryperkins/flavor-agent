@@ -9,7 +9,7 @@ import {
 	useRef,
 	useState,
 } from '@wordpress/element';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 import AIActivitySection from '../components/AIActivitySection';
 import AIReviewSection from '../components/AIReviewSection';
@@ -902,14 +902,26 @@ export default function TemplatePartRecommender() {
 	return (
 		<PluginDocumentSettingPanel
 			name="flavor-agent-template-part-recommendations"
-			title="AI Template Part Recommendations"
+			title={ __( 'AI Template Part Recommendations', 'flavor-agent' ) }
 		>
 			<div className="flavor-agent-panel flavor-agent-template-part-panel">
 				<SurfaceScopeBar
 					scopeLabel={ formatTemplatePartLabel( slug, area ) }
 					scopeDetails={ [
-						area ? `Area: ${ areaLabel }` : '',
-						slug ? `Slug: ${ slug }` : '',
+						area
+							? sprintf(
+									/* translators: %s: template part area label, such as "Header". */
+									__( 'Area: %s', 'flavor-agent' ),
+									areaLabel
+							  )
+							: '',
+						slug
+							? sprintf(
+									/* translators: %s: template part slug. */
+									__( 'Slug: %s', 'flavor-agent' ),
+									slug
+							  )
+							: '',
 					].filter( Boolean ) }
 					isFresh={ hasMatchingResult }
 					hasResult={ hasResult }
@@ -925,12 +937,18 @@ export default function TemplatePartRecommender() {
 
 				{ canRecommend && (
 					<SurfaceComposer
-						title="Ask Flavor Agent"
+						title={ __( 'Ask Flavor Agent', 'flavor-agent' ) }
 						prompt={ prompt }
 						onPromptChange={ setPrompt }
 						onFetch={ handleFetch }
-						placeholder="Describe the structure or layout you want."
-						label="What are you trying to achieve with this template part?"
+						placeholder={ __(
+							'Describe the structure or layout you want.',
+							'flavor-agent'
+						) }
+						label={ __(
+							'What are you trying to achieve with this template part?',
+							'flavor-agent'
+						) }
 						hideLabelFromVision
 						rows={ 2 }
 						meta={
@@ -1131,7 +1149,7 @@ function TemplatePartSuggestionCard( {
 						) }
 						{ isApplied && (
 							<span className="flavor-agent-done-badge">
-								Applied
+								{ __( 'Applied', 'flavor-agent' ) }
 							</span>
 						) }
 					</div>
@@ -1171,12 +1189,12 @@ function TemplatePartSuggestionCard( {
 
 			{ ( blockHints.length > 0 || patternSuggestions.length > 0 ) && (
 				<details className="flavor-agent-card__details">
-					<summary>Details</summary>
+					<summary>{ __( 'Details', 'flavor-agent' ) }</summary>
 					{ blockHints.length > 0 && (
 						<div className="flavor-agent-template-list">
 							<div className="flavor-agent-template-list__header">
 								<div className="flavor-agent-section-label">
-									Focus Blocks
+									{ __( 'Focus Blocks', 'flavor-agent' ) }
 								</div>
 								<span className="flavor-agent-pill">
 									{ formatCount(
@@ -1224,7 +1242,10 @@ function TemplatePartSuggestionCard( {
 						<div className="flavor-agent-template-list">
 							<div className="flavor-agent-template-list__header">
 								<div className="flavor-agent-section-label">
-									Suggested Patterns
+									{ __(
+										'Suggested Patterns',
+										'flavor-agent'
+									) }
 								</div>
 								<span className="flavor-agent-pill">
 									{ formatCount(

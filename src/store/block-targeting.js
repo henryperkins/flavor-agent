@@ -1,3 +1,5 @@
+import { __ } from '@wordpress/i18n';
+
 export function getBlockByPath( blocks = [], path = [] ) {
 	let currentBlocks = Array.isArray( blocks ) ? blocks : [];
 	let block = null;
@@ -17,8 +19,10 @@ export function getBlockByPath( blocks = [], path = [] ) {
 	return block;
 }
 
-export const BLOCK_TARGET_MOVED_ERROR =
-	'The target block changed position or type and cannot be undone automatically.';
+export const BLOCK_TARGET_MOVED_ERROR = __(
+	'The target block changed position or type and cannot be undone automatically.',
+	'flavor-agent'
+);
 
 export function getBlockPathByClientId(
 	blocks = [],

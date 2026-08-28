@@ -6,6 +6,9 @@ const rootDir = __dirname;
 const harness = getWp70HarnessConfig( rootDir );
 
 module.exports = defineConfig( {
+	metadata: {
+		flavorAgentHarness: 'wp70',
+	},
 	testDir: path.join( rootDir, 'tests/e2e' ),
 	timeout: 120_000,
 	workers: 1,
@@ -27,7 +30,9 @@ module.exports = defineConfig( {
 			name: 'wp70-site-editor',
 			dependencies: [ 'setup' ],
 			grep: /@wp70-site-editor/,
-			testIgnore: /.*\.wp70\.setup\.js/,
+			// See the matching note in playwright.config.js: `__tests__` under
+			// tests/e2e is Jest's, not Playwright's.
+			testIgnore: [ /.*\.wp70\.setup\.js/, /__tests__/ ],
 			use: {
 				storageState: harness.storageStatePath,
 			},

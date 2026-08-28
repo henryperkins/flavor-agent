@@ -1,3 +1,5 @@
+import { __ } from '@wordpress/i18n';
+
 export function buildRecommendedPatterns( recommendations, allowedPatterns ) {
 	if (
 		! Array.isArray( recommendations ) ||
@@ -31,10 +33,10 @@ export function buildRecommendedPatterns( recommendations, allowedPatterns ) {
 }
 
 const SOURCE_SIGNAL_LABELS = {
-	qdrant_semantic: 'Semantic match',
-	qdrant_structural: 'Structural fit',
-	cloudflare_ai_search: 'AI Search match',
-	llm_ranker: 'Model ranked',
+	qdrant_semantic: __( 'Semantic match', 'flavor-agent' ),
+	qdrant_structural: __( 'Structural fit', 'flavor-agent' ),
+	cloudflare_ai_search: __( 'AI Search match', 'flavor-agent' ),
+	llm_ranker: __( 'Model ranked', 'flavor-agent' ),
 };
 
 function normalizeStringList( value ) {
@@ -74,7 +76,7 @@ export function getPatternRecommendationInsights( pattern, recommendation ) {
 		addUniqueLabel( labels, `Category: ${ category }` );
 	}
 
-	addUniqueLabel( labels, 'Allowed here' );
+	addUniqueLabel( labels, __( 'Allowed here', 'flavor-agent' ) );
 
 	const rankingHint = recommendation?.ranking?.rankingHint || {};
 	if (
@@ -82,7 +84,7 @@ export function getPatternRecommendationInsights( pattern, recommendation ) {
 		rankingHint.matchesNearbyCustomBlock ||
 		Number( rankingHint.siblingOverrideCount || 0 ) > 0
 	) {
-		addUniqueLabel( labels, 'Nearby block fit' );
+		addUniqueLabel( labels, __( 'Nearby block fit', 'flavor-agent' ) );
 	}
 
 	return labels;

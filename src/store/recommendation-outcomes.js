@@ -3,6 +3,7 @@ import {
 	primaryValidationReason,
 	VALIDATION_REASONS_VERSION,
 } from '../utils/validation-reasons';
+import { __ } from '@wordpress/i18n';
 
 export const RECOMMENDATION_OUTCOME_TYPE = 'recommendation_outcome';
 export const OUTCOME_VISIBILITY = 'diagnostic';
@@ -31,16 +32,37 @@ const recordedOutcomeKeys = new Set();
 const pendingOutcomeKeys = new Set();
 
 const OUTCOME_LABELS = Object.freeze( {
-	shown: 'Recommendations shown',
-	selected_for_review: 'Recommendation selected for review',
-	stale_blocked: 'Recommendation blocked by stale context',
-	validation_blocked: 'Recommendation blocked by validation',
-	insert_failed: 'Pattern insertion failed',
-	pattern_inserted_from_shelf: 'Pattern inserted from recommendation shelf',
-	adapted_preview_shown: 'Adapted pattern preview shown',
-	adapted_inserted_from_preview: 'Adapted pattern inserted from preview',
-	adaptation_blocked: 'Pattern adaptation blocked',
-	adapted_insert_failed: 'Adapted pattern insertion failed',
+	shown: __( 'Recommendations shown', 'flavor-agent' ),
+	selected_for_review: __(
+		'Recommendation selected for review',
+		'flavor-agent'
+	),
+	stale_blocked: __(
+		'Recommendation blocked by stale context',
+		'flavor-agent'
+	),
+	validation_blocked: __(
+		'Recommendation blocked by validation',
+		'flavor-agent'
+	),
+	insert_failed: __( 'Pattern insertion failed', 'flavor-agent' ),
+	pattern_inserted_from_shelf: __(
+		'Pattern inserted from recommendation shelf',
+		'flavor-agent'
+	),
+	adapted_preview_shown: __(
+		'Adapted pattern preview shown',
+		'flavor-agent'
+	),
+	adapted_inserted_from_preview: __(
+		'Adapted pattern inserted from preview',
+		'flavor-agent'
+	),
+	adaptation_blocked: __( 'Pattern adaptation blocked', 'flavor-agent' ),
+	adapted_insert_failed: __(
+		'Adapted pattern insertion failed',
+		'flavor-agent'
+	),
 } );
 
 const RANKING_EVIDENCE_KEYS = new Set( [
@@ -911,7 +933,8 @@ export function buildRecommendationOutcomeEntry( {
 		surface: safeSurface,
 		target: targetPayload,
 		suggestion: cleanString(
-			OUTCOME_LABELS[ safeEvent ] || 'Recommendation outcome',
+			OUTCOME_LABELS[ safeEvent ] ||
+				__( 'Recommendation outcome', 'flavor-agent' ),
 			MAX_LABEL_LENGTH
 		),
 		suggestionKey: finalSuggestionKey || null,

@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-07-17
+> Last updated: 2026-08-25
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.2+
 
@@ -76,7 +76,7 @@ flavor-agent/
     utils/                  Operation catalogs, validators, signatures, action helpers
   tests/
     phpunit/                PHP unit tests (one per major class)
-    e2e/                    Playwright suites (Playground + WP 7.0 Site Editor)
+    e2e/                    Playwright suites (Playground + Site Editor, both WP 7.1)
   scripts/                  Build, verify, doc-drift, e2e bootstrap helpers
   docs/                     Doc backbone + features + reference + audits + validation
   CLAUDE.md                 Project instructions for Claude Code (canonical architecture map)
@@ -206,7 +206,7 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 3. **Inserter DOM discovery is still markup-coupled (mitigated)**: `inserter-dom.js` centralizes container (5), search-input (4), and toolbar toggle selectors and now fails closed to `null` when the expected editor structure is absent, so caller cleanup is isolated to one module.
 4. **Pattern settings compatibility is explicit and fail-closed**: `pattern-settings.js` probes future stable `blockPatterns` / `blockPatternCategories` / `getAllowedPatterns` paths when present, but current Gutenberg trunk still exposes `__experimentalAdditional*`, `__experimental*`, and `__experimentalGetAllowedPatterns` as the live baseline. The adapter returns an empty scoped result plus diagnostics instead of widening to an `all-patterns-fallback` result when contextual selectors are unavailable.
 5. **Theme-token source resolution is now merged rather than over-promoted**: `theme-settings.js` isolates raw settings reads and now uses stable sources when available while filling only missing branches from `__experimentalFeatures`. Flavor Agent still targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and no longer preserves deprecated `__experimentalRole` compatibility.
-6. **Browser coverage is split across two harnesses**: Playground remains the fast `6.9.4` smoke path because the Playground 7.0 editor runtime broke before plugin bootstrap when it was last evaluated, while a dedicated Docker-backed WordPress `7.0` Site Editor harness owns refresh/drift-sensitive flows. The default `npm run test:e2e` command now aggregates both harnesses and the checked-in smoke suite now covers navigation plus `wp_template_part`, but the WP 7.0 half still requires Docker on PATH. The harness pins the exact stable image `wordpress:7.0.0-php8.2-apache` via `FLAVOR_AGENT_WP70_BASE_IMAGE`; the canonical tag and override instructions live in `docs/reference/local-environment-setup.md`.
+6. **Browser coverage is split across two harnesses, both on WordPress `7.1`**: Playground is the fast smoke path (`--wp=7.1` on a pinned `@wp-playground/cli`), while a dedicated Docker-backed Site Editor harness owns refresh/drift-sensitive flows. The split is by harness capability, not by WordPress version — the earlier `6.9.4` Playground pin dated from when 7.0 was a beta whose editor runtime broke before plugin bootstrap, and no longer applies. The default `npm run test:e2e` command aggregates both harnesses and the checked-in smoke suite covers navigation plus `wp_template_part`, but the Site Editor half still requires Docker on PATH. That harness pins the exact stable image `wordpress:7.1.0-php8.2-apache` via `FLAVOR_AGENT_WP70_BASE_IMAGE`, deliberately holding the plugin's `Requires PHP: 8.2` floor under browser coverage while the dev container runs PHP 8.3; the canonical tag and override instructions live in `docs/reference/local-environment-setup.md`.
 7. **Activity history is still only a first governance-console slice**: The new `Settings > AI Activity` page provides a recent DataViews timeline with external apply approval/rejection, request diagnostics, attestation discovery for eligible style/template/template-part applies, structured before/after state summaries for privileged users, a linked-row banner, selected-row target/focused-view/related-row actions, passive evidence badges, and a first rich visual diff layer for style-governance rows, but broader observability workflow beyond the stored timeline remains open.
 8. **Uninstall cleanup is explicit and option-focused**: `uninstall.php` clears Flavor Agent cron hooks plus the static sync/core-roadmap transient keys, drops the plugin-owned activity table, and deletes registered plugin-owned provider, embedding, Qdrant, Cloudflare AI Search, docs runtime, pattern index, activity, guideline, and experiment options. Dynamic docs grounding cache transients are not bulk-deleted by the uninstall handler.
 9. **Provider-backed verification is still environment-dependent**: Live recommendation verification depends on whichever text-generation runtime is configured in `Settings > Connectors`, plus plugin-owned embedding credentials and the selected pattern storage backend, and should be rerun whenever those paths change.
@@ -216,8 +216,8 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 For the consolidated work queue, source docs, gating state, and suggested next planning order, see [`reference/current-open-work.md`](reference/current-open-work.md).
 
 - Deepen the new admin activity page beyond the shipped rich visual diff layer with broader diagnostics, tighter ability-to-audit cross-reference metadata, and cross-operator workflows.
-- Continue the `improving-levers.md` roadmap from the remaining unshipped phases after Phase 3: docs fingerprint split, learning attribution, fixture harvest, bounded local ranking feedback, and editable site preference summaries. Pattern metadata/component ranking, deterministic design-quality signals, durable learning-report pattern-trait capture, and the expanded recommendation evaluation harness are represented in the current code. Shipped implementation plans are archived under `docs/superpowers/plans/archive/` and are not active backlog.
-- Done: the Docker-backed WP 7.0 browser harness now runs the official stable image, pinned to `wordpress:7.0.0-php8.2-apache`. Keep Docker available in environments that run that harness.
+- Remaining recommendation-quality follow-ups are fixture harvest, bounded local ranking feedback, and editable site preference summaries. Pattern metadata/component ranking, deterministic design-quality signals, durable learning-report pattern-trait capture, the docs fingerprint split, and the learning-attribution join contract are already in the current code. Track them in `docs/reference/current-open-work.md`.
+- Done: the Docker-backed Site Editor browser harness runs the official stable image, pinned to `wordpress:7.1.0-php8.2-apache`. Keep Docker available in environments that run that harness.
 - Revisit navigation apply only if a bounded previewable/undoable executor becomes its own tracked post-v1 milestone.
 - Keep Interactivity API work in the future backlog, not the current remediation backlog, until the plugin grows a front-end runtime surface.
 - Keep uninstall cleanup coverage in sync with new plugin-owned runtime options, tables, transients, and scheduled hooks as they are added.
@@ -320,16 +320,16 @@ npm run lint:js                      # ESLint on src/
 npm run lint:plugin                  # Plugin validation wrapper
 npm run check:docs                   # Live-doc freshness checks
 npm run test:unit -- --runInBand     # Jest unit tests
-npm run test:e2e                     # Default Playwright smoke coverage (Playground + WP 7.0 harness)
-npm run test:e2e:playground          # Fast 6.9.4 Playground smoke harness
-npm run test:e2e:wp70                # Docker-backed WP 7.0 Site Editor harness
+npm run test:e2e                     # Default Playwright smoke coverage (Playground + Site Editor harness)
+npm run test:e2e:playground          # Fast WP 7.1 Playground smoke harness
+npm run test:e2e:wp70                # Docker-backed WP 7.1 Site Editor harness
 node scripts/verify.js --skip-e2e    # Baseline non-browser release gate for cross-surface changes
 npm run wp:start                     # Local Docker stack up
 npm run wp:rebuild                   # Pull base image, rebuild, and start the local stack
 npm run wp:stop                      # Local Docker stack down
 npm run wp:reset                     # Local Docker stack reset
-npm run wp:e2e:wp70:bootstrap        # Provision the WP 7.0 browser harness without running tests
-npm run wp:e2e:wp70:teardown         # Stop and remove the WP 7.0 browser harness
+npm run wp:e2e:wp70:bootstrap        # Provision the WP 7.1 browser harness without running tests
+npm run wp:e2e:wp70:teardown         # Stop and remove the WP 7.1 browser harness
 
 # PHP
 composer install                     # PSR-4 autoloader

@@ -25,8 +25,10 @@ const {
 	normalizeTrustedUrl,
 	parseArgs,
 	pollUntilSettled,
+	pollWindow,
 	processEntries,
 	readSitemap,
+	resolveSameSourceDeletion,
 	resolveStaleDeletion,
 	resolveSummaryStatus,
 	findSupersededSourceItems,
@@ -77,6 +79,42 @@ function docsHtml( { canonical, title = 'WordPress Docs Page', body = '' } ) {
 	].join( '' );
 }
 
+function pollOptions( overrides = {} ) {
+	return {
+		dryRun: false,
+		instance: 'wp-dev',
+		pollSeconds: 10,
+		pollIntervalSeconds: 1,
+		pollMaxSeconds: 60,
+		pollProgressGraceSeconds: 5,
+		...overrides,
+	};
+}
+
+// Drives pollUntilSettled by scripting the two endpoints it reads: the instance /stats
+// active count and the per-item status in the listing.
+function settlementFetchMock( { active, itemStatus } ) {
+	return jest.fn( ( url ) => {
+		const href = String( url );
+		if ( href.endsWith( '/stats' ) ) {
+			return mockJsonResponse(
+				{ result: { queued: active(), running: 0, outdated: 0, error: 0 } },
+				href
+			);
+		}
+		if ( href.includes( '/items?' ) ) {
+			return mockJsonResponse(
+				{
+					result: [ { id: 'item-1', key: 'desired-key', status: itemStatus() } ],
+					result_info: { count: 1, per_page: 50, total_count: 1 },
+				},
+				href
+			);
+		}
+		throw new Error( `Unexpected fetch: ${ href }` );
+	} );
+}
+
 describe( 'update-docs-ai-search helpers', () => {
 	let originalFetch;
 
@@ -89,7 +127,7 @@ describe( 'update-docs-ai-search helpers', () => {
 		jest.restoreAllMocks();
 	} );
 
-	test( 'validates the public endpoint with a developer-docs-specific query', async () => {
+	test( 'validates the public endpoint with current docs and release-cycle evidence', async () => {
 		global.fetch = jest.fn( () =>
 			mockJsonResponse( {
 				result: {
@@ -99,6 +137,16 @@ describe( 'update-docs-ai-search helpers', () => {
 								metadata: {
 									source_url:
 										'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+									retrieved_at: '2026-08-20T00:00:00Z',
+								},
+							},
+						},
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://make.wordpress.org/core/2026/08/10/wordpress-7-0-dev-notes/',
+									published_at: '2026-08-10T00:00:00Z',
 								},
 							},
 						},
@@ -110,6 +158,7 @@ describe( 'update-docs-ai-search helpers', () => {
 		const validation = await validatePublicEndpoint( {
 			publicUrl: 'https://example.com/search',
 			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
 		} );
 		const request = JSON.parse( global.fetch.mock.calls[ 0 ][ 1 ].body );
 
@@ -118,9 +167,775 @@ describe( 'update-docs-ai-search helpers', () => {
 		);
 		expect( validation ).toMatchObject( {
 			status: 200,
-			chunkCount: 1,
-			sourceTypes: [ 'developer-docs' ],
+			chunkCount: 2,
+			sourceTypes: [ 'developer-docs', 'make-core' ],
+			currentSourceTypes: [ 'developer-docs', 'make-core' ],
+			freshness: {
+				developerDocs: true,
+				releaseCycle: true,
+			},
 			ok: true,
+			attempts: 1,
+		} );
+		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'rejects expected corpus sources when their freshness metadata is stale', async () => {
+		global.fetch = jest.fn( () =>
+			mockJsonResponse( {
+				result: {
+					chunks: [
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+									retrieved_at: '2026-05-01T00:00:00Z',
+								},
+							},
+						},
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://make.wordpress.org/core/2026/03/15/wordpress-7-0-field-guide/',
+									published_at: '2026-03-15T00:00:00Z',
+								},
+							},
+						},
+					],
+				},
+			} )
+		);
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: false,
+			currentSourceTypes: [],
+			freshness: {
+				checkedAt: '2026-08-24T00:00:00.000Z',
+				developerDocs: false,
+				releaseCycle: false,
+			},
+			evidence: [
+				{
+					sourceType: 'developer-docs',
+					retrievedAt: '2026-05-01T00:00:00.000Z',
+					publishedAt: '',
+					current: false,
+					basis: 'stale-retrieved-at',
+				},
+				{
+					sourceType: 'make-core',
+					retrievedAt: '',
+					publishedAt: '2026-03-15T00:00:00.000Z',
+					current: false,
+					basis: 'stale-published-at',
+				},
+			],
+		} );
+	} );
+
+	test( 'accepts WordPress 7.0 release-cycle evidence published on the release floor', async () => {
+		global.fetch = jest.fn( () =>
+			mockJsonResponse( {
+				result: {
+					chunks: [
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+									retrieved_at: '2026-08-20T00:00:00Z',
+								},
+							},
+						},
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://make.wordpress.org/core/2026/05/20/wordpress-7-0/',
+									published_at: '2026-05-20T00:00:00Z',
+								},
+							},
+						},
+					],
+				},
+			} )
+		);
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: true,
+			currentSourceTypes: [ 'developer-docs', 'make-core' ],
+			freshness: {
+				developerDocs: true,
+				releaseCycle: true,
+			},
+			evidence: [
+				{ sourceType: 'developer-docs', current: true, basis: 'retrieved-at' },
+				{ sourceType: 'make-core', current: true, basis: 'release-floor' },
+			],
+		} );
+		expect( global.fetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'rejects WordPress 7.0 release-cycle evidence immediately before the release floor', async () => {
+		global.fetch = jest.fn( () =>
+			mockJsonResponse( {
+				result: {
+					chunks: [
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+									retrieved_at: '2026-08-20T00:00:00Z',
+								},
+							},
+						},
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://make.wordpress.org/core/2026/05/19/wordpress-7-0/',
+									published_at: '2026-05-19T23:59:59.999Z',
+								},
+							},
+						},
+					],
+				},
+			} )
+		);
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: false,
+			currentSourceTypes: [ 'developer-docs' ],
+			freshness: {
+				developerDocs: true,
+				releaseCycle: false,
+			},
+			evidence: [
+				{ sourceType: 'developer-docs', current: true, basis: 'retrieved-at' },
+				{ sourceType: 'make-core', current: false, basis: 'stale-published-at' },
+			],
+		} );
+	} );
+
+	test( 'accepts WordPress 7.1 release-cycle evidence published on the release floor', async () => {
+		global.fetch = jest.fn( () =>
+			mockJsonResponse( {
+				result: {
+					chunks: [
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+									retrieved_at: '2026-09-20T00:00:00Z',
+								},
+							},
+						},
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://make.wordpress.org/core/2026/08/19/wordpress-7-1-release-day-process/',
+									published_at: '2026-08-19T00:00:00Z',
+								},
+							},
+						},
+					],
+				},
+			} )
+		);
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-1',
+			now: Date.parse( '2026-09-20T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+		const request = JSON.parse( global.fetch.mock.calls[ 0 ][ 1 ].body );
+
+		expect( request.messages[ 0 ].content ).toBe(
+			'WordPress 7.1 block.json metadata reference Gutenberg 23.8'
+		);
+		expect( validation ).toMatchObject( {
+			ok: true,
+			currentSourceTypes: [ 'developer-docs', 'make-core' ],
+			freshness: {
+				developerDocs: true,
+				releaseCycle: true,
+			},
+			evidence: [
+				{ sourceType: 'developer-docs', current: true, basis: 'retrieved-at' },
+				{ sourceType: 'make-core', current: true, basis: 'release-floor' },
+			],
+		} );
+	} );
+
+	test( 'rejects corpus sources with missing freshness timestamps', async () => {
+		global.fetch = jest.fn( () =>
+			mockJsonResponse( {
+				result: {
+					chunks: [
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://developer.wordpress.org/reference/functions/register-block-type/',
+								},
+							},
+						},
+						{
+							item: {
+								metadata: {
+									source_url:
+										'https://developer.wordpress.org/news/2026/08/12/wordpress-7-0-block-metadata/',
+								},
+							},
+						},
+					],
+				},
+			} )
+		);
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: false,
+			currentSourceTypes: [],
+			freshness: { developerDocs: false, releaseCycle: false },
+			evidence: [
+				{ sourceType: 'developer-docs', current: false, basis: 'missing-retrieved-at' },
+				{ sourceType: 'developer-blog', current: false, basis: 'missing-published-at' },
+			],
+		} );
+	} );
+
+	test( 'rejects invalid and archive URLs from freshness evidence', async () => {
+		const chunks = [
+			{
+				item: {
+					metadata: {
+						source_url: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+						retrieved_at: '2026-08-20T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://developer.wordpress.org/news/all-posts/',
+						published_at: '2026-08-20T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'http://make.wordpress.org/core/2026/08/20/dev-note/',
+						published_at: '2026-08-20T00:00:00Z',
+					},
+				},
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-1',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: false,
+			currentSourceTypes: [ 'developer-docs' ],
+			freshness: { developerDocs: true, releaseCycle: false },
+			evidence: [
+				{ sourceType: 'developer-docs', current: true, basis: 'retrieved-at' },
+				{
+					url: 'https://developer.wordpress.org/news/all-posts/',
+					sourceType: 'developer-blog',
+					current: false,
+					basis: 'ineligible-source-url',
+				},
+				{ url: '', sourceType: '', current: false, basis: 'invalid-source-url' },
+			],
+		} );
+	} );
+
+	test( 'accepts freshness provenance from legacy chunk frontmatter', async () => {
+		const chunks = [
+			{
+				text: [
+					'---',
+					'source_url: "https://developer.wordpress.org/reference/functions/register-block-type/"',
+					'retrieved_at: "2026-08-20T00:00:00Z"',
+					'---',
+					'# register_block_type',
+				].join( '\n' ),
+			},
+			{
+				text: [
+					'---',
+					'source_url: "https://developer.wordpress.org/news/2026/08/12/wordpress-7-0-block-metadata/"',
+					'published_at: "2026-08-12T00:00:00Z"',
+					'---',
+					'# WordPress 7.0 block metadata',
+				].join( '\n' ),
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: true,
+			currentSourceTypes: [ 'developer-docs', 'developer-blog' ],
+			evidence: [
+				{
+					retrievedAt: '2026-08-20T00:00:00.000Z',
+					current: true,
+					basis: 'retrieved-at',
+				},
+				{
+					publishedAt: '2026-08-12T00:00:00.000Z',
+					current: true,
+					basis: 'published-at',
+				},
+			],
+		} );
+	} );
+
+	test( 'prefers structured item metadata over legacy frontmatter', async () => {
+		const chunks = [
+			{
+				item: {
+					metadata: {
+						source_url: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+						retrieved_at: '2026-08-20T00:00:00Z',
+					},
+				},
+				text: [
+					'---',
+					'source_url: "http://developer.wordpress.org/reference/functions/register-block-type/"',
+					'retrieved_at: "2099-01-01T00:00:00Z"',
+					'---',
+				].join( '\n' ),
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://make.wordpress.org/core/2026/08/12/wordpress-7-0-dev-note/',
+						published_at: '2026-08-12T00:00:00Z',
+					},
+				},
+				text: [
+					'---',
+					'source_url: "https://make.wordpress.org/core/2026/03/15/old-note/"',
+					'published_at: "2026-03-15T00:00:00Z"',
+					'---',
+				].join( '\n' ),
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-1',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: true,
+			currentSourceTypes: [ 'developer-docs', 'make-core' ],
+			evidence: [
+				{ current: true, basis: 'retrieved-at' },
+				{ current: true, basis: 'published-at' },
+			],
+		} );
+	} );
+
+	test( 'prefers structured camelCase metadata over snake_case frontmatter aliases', async () => {
+		const chunks = [
+			{
+				item: {
+					metadata: {
+						sourceUrl: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+						retrievedAt: '2026-08-20T00:00:00Z',
+					},
+				},
+				text: [
+					'---',
+					'source_url: "http://developer.wordpress.org/reference/functions/register-block-type/"',
+					'retrieved_at: "2099-01-01T00:00:00Z"',
+					'---',
+				].join( '\n' ),
+			},
+			{
+				item: {
+					metadata: {
+						sourceUrl: 'https://make.wordpress.org/core/2026/08/12/wordpress-7-0-dev-note/',
+						publishedAt: '2026-08-12T00:00:00Z',
+					},
+				},
+				text: [
+					'---',
+					'source_url: "https://make.wordpress.org/core/2026/03/15/old-note/"',
+					'published_at: "2026-03-15T00:00:00Z"',
+					'---',
+				].join( '\n' ),
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-1',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: true,
+			currentSourceTypes: [ 'developer-docs', 'make-core' ],
+			evidence: [
+				{
+					url: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+					retrievedAt: '2026-08-20T00:00:00.000Z',
+					current: true,
+				},
+				{
+					url: 'https://make.wordpress.org/core/2026/08/12/wordpress-7-0-dev-note/',
+					publishedAt: '2026-08-12T00:00:00.000Z',
+					current: true,
+				},
+			],
+		} );
+	} );
+
+	test( 'rejects freshness timestamps that are later than validation time', async () => {
+		const chunks = [
+			{
+				item: {
+					metadata: {
+						source_url: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+						retrieved_at: '2099-01-01T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url:
+							'https://developer.wordpress.org/news/2026/08/12/wordpress-7-0-block-metadata/',
+						published_at: '2099-01-01T00:00:00Z',
+					},
+				},
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-1',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: false,
+			currentSourceTypes: [],
+			freshness: { developerDocs: false, releaseCycle: false },
+			evidence: [
+				{ sourceType: 'developer-docs', current: false, basis: 'future-retrieved-at' },
+				{ sourceType: 'developer-blog', current: false, basis: 'future-published-at' },
+			],
+		} );
+	} );
+
+	test( 'accepts every source at its rolling freshness boundary and records optional sources', async () => {
+		const chunks = [
+			{
+				item: {
+					metadata: {
+						source_url: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+						retrieved_at: '2026-05-26T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url:
+							'https://developer.wordpress.org/news/2026/07/10/wordpress-7-0-block-metadata/',
+						published_at: '2026-07-10T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://make.wordpress.org/core/2026/08/03/wordpress-7-0-dev-notes/',
+						published_at: '2026-08-03T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://make.wordpress.org/ai/2026/08/03/ai-client-update/',
+						published_at: '2026-08-03T00:00:00Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://wordpress.org/news/2026/08/wordpress-7-0-release/',
+						published_at: '2026-08-03T00:00:00Z',
+					},
+				},
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: true,
+			currentSourceTypes: [
+				'developer-docs',
+				'developer-blog',
+				'make-core',
+				'make-ai',
+				'wordpress-news',
+			],
+			freshness: { developerDocs: true, releaseCycle: true },
+		} );
+		expect( validation.evidence.map( ( item ) => item.basis ) ).toEqual( [
+			'retrieved-at',
+			'published-at',
+			'published-at',
+			'published-at',
+			'published-at',
+		] );
+	} );
+
+	test( 'rejects every source immediately before its rolling freshness boundary', async () => {
+		const chunks = [
+			{
+				item: {
+					metadata: {
+						source_url: 'https://developer.wordpress.org/reference/functions/register-block-type/',
+						retrieved_at: '2026-05-25T23:59:59.999Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url:
+							'https://developer.wordpress.org/news/2026/07/09/wordpress-7-1-block-metadata/',
+						published_at: '2026-07-09T23:59:59.999Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://make.wordpress.org/core/2026/08/02/wordpress-7-1-dev-notes/',
+						published_at: '2026-08-02T23:59:59.999Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://make.wordpress.org/ai/2026/08/02/ai-client-update/',
+						published_at: '2026-08-02T23:59:59.999Z',
+					},
+				},
+			},
+			{
+				item: {
+					metadata: {
+						source_url: 'https://wordpress.org/news/2026/08/wordpress-7-1-release/',
+						published_at: '2026-08-02T23:59:59.999Z',
+					},
+				},
+			},
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( { result: { chunks } } ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-1',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( { ok: false, currentSourceTypes: [] } );
+		expect( validation.evidence.map( ( item ) => item.basis ) ).toEqual( [
+			'stale-retrieved-at',
+			'stale-published-at',
+			'stale-published-at',
+			'stale-published-at',
+			'stale-published-at',
+		] );
+	} );
+
+	test( 'retries public endpoint validation past an empty post-ingest index resync', async () => {
+		// Cloudflare answers a failed retrieval with HTTP 200 and no chunks while the index
+		// resyncs after ingest, so the first probes look like an empty corpus.
+		const usableResult = {
+			result: {
+				chunks: [
+					{
+						item: {
+							metadata: {
+								source_url:
+									'https://developer.wordpress.org/block-editor/reference-guides/block-api/block-metadata/',
+								retrieved_at: '2026-08-20T00:00:00Z',
+							},
+						},
+					},
+					{
+						item: {
+							metadata: {
+								source_url:
+									'https://developer.wordpress.org/news/2026/08/12/wordpress-7-0-block-metadata/',
+								published_at: '2026-08-12T00:00:00Z',
+							},
+						},
+					},
+				],
+			},
+		};
+		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		const responses = [
+			{ result: { chunks: [] } },
+			// Partially rebuilt index: results exist but none are developer docs.
+			{
+				result: {
+					chunks: [
+						{ item: { metadata: { source_url: 'https://make.wordpress.org/ai/2026/04/01/hello/' } } },
+					],
+				},
+			},
+			usableResult,
+		];
+		global.fetch = jest.fn( () => mockJsonResponse( responses.shift(), 'https://example.com/search' ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 5,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( { ok: true, chunkCount: 2, attempts: 3 } );
+		expect( global.fetch ).toHaveBeenCalledTimes( 3 );
+	} );
+
+	test( 'reports validation failure with a return_on_failure-free diagnostic probe', async () => {
+		jest.spyOn( console, 'warn' ).mockImplementation( () => {} );
+		global.fetch = jest.fn( () =>
+			mockJsonResponse( { result: { chunks: [] } }, 'https://example.com/search' )
+		);
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			validationAttempts: 3,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( { ok: false, chunkCount: 0, attempts: 3 } );
+		// Three validation attempts, then one diagnostic probe.
+		expect( global.fetch ).toHaveBeenCalledTimes( 4 );
+
+		const attemptBody = JSON.parse( global.fetch.mock.calls[ 0 ][ 1 ].body );
+		expect( attemptBody.ai_search_options.retrieval.return_on_failure ).toBe( true );
+
+		const diagnosticBody = JSON.parse( global.fetch.mock.calls[ 3 ][ 1 ].body );
+		expect( diagnosticBody.ai_search_options.retrieval ).not.toHaveProperty( 'return_on_failure' );
+		expect( validation.diagnostic ).toMatchObject( { status: 200, chunkCount: 0 } );
+	} );
+
+	test( 'records empty freshness evidence when public validation cannot connect', async () => {
+		global.fetch = jest.fn( () => Promise.reject( new Error( 'network unavailable' ) ) );
+
+		const validation = await validatePublicEndpoint( {
+			publicUrl: 'https://example.com/search',
+			release: '7-0',
+			now: Date.parse( '2026-08-24T00:00:00Z' ),
+			validationAttempts: 1,
+			validationRetryDelayMs: 0,
+		} );
+
+		expect( validation ).toMatchObject( {
+			ok: false,
+			error: 'network unavailable',
+			currentSourceTypes: [],
+			evidence: [],
+			freshness: {
+				checkedAt: '2026-08-24T00:00:00.000Z',
+				developerDocs: false,
+				releaseCycle: false,
+			},
+			diagnostic: { error: 'network unavailable' },
 		} );
 	} );
 
@@ -439,6 +1254,21 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( () => parseArgs( [ '--recent-post-max-age-days=x' ] ) ).toThrow(
 			'recent-post-max-age-days must be a non-negative integer'
 		);
+	} );
+
+	test( 'defaults the active release profile to WordPress 7.1', () => {
+		const previousRelease = process.env.WP_DOCS_RELEASE;
+		delete process.env.WP_DOCS_RELEASE;
+
+		try {
+			expect( parseArgs( [] ).release ).toBe( '7-1' );
+		} finally {
+			if ( previousRelease === undefined ) {
+				delete process.env.WP_DOCS_RELEASE;
+			} else {
+				process.env.WP_DOCS_RELEASE = previousRelease;
+			}
+		}
 	} );
 
 	test( 'discoverSourceUrls keeps recent Make/Core posts and drops stale or undated ones', async () => {
@@ -833,9 +1663,19 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( resolveStaleDeletion( { ...healthy, uploadErrors: 1 } ).delete ).toBe( false );
 		expect( resolveStaleDeletion( { ...healthy, pollPending: 2 } ).delete ).toBe( false );
 		expect( resolveStaleDeletion( { ...healthy, pollErrors: 1 } ).delete ).toBe( false );
-		expect( resolveStaleDeletion( { ...healthy, validationOk: false } ) ).toEqual( {
+		// Validation that returned results but not the expected ones is noisy, not blind.
+		expect(
+			resolveStaleDeletion( { ...healthy, validationOk: false, validationChunkCount: 8 } )
+		).toEqual( {
 			delete: true,
 			reason: 'validation-warning',
+		} );
+		// Zero chunks means the retrieval index told us nothing → never prune on that.
+		expect(
+			resolveStaleDeletion( { ...healthy, validationOk: false, validationChunkCount: 0 } )
+		).toEqual( {
+			delete: false,
+			reason: 'validation-unavailable',
 		} );
 	} );
 
@@ -929,6 +1769,7 @@ describe( 'update-docs-ai-search helpers', () => {
 			pollPending: 0,
 			pollErrors: 0,
 			validationOk: false,
+			validationChunkCount: 8,
 			previousManifestCount: 13000,
 		};
 
@@ -936,6 +1777,115 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( resolveStaleDeletion( run ) ).toEqual( {
 			delete: true,
 			reason: 'validation-warning',
+		} );
+	} );
+
+	test( 'resolveSameSourceDeletion gates superseded generations on settlement and retrieval', () => {
+		const settled = {
+			dryRun: false,
+			explicitSources: false,
+			pollSkipped: false,
+			uploadErrors: 0,
+			pollPending: 0,
+			pollErrors: 0,
+			validationChunkCount: 8,
+		};
+
+		expect( resolveSameSourceDeletion( settled ) ).toEqual( {
+			delete: true,
+			reason: 'settled-current-sources',
+		} );
+
+		// Item-level settlement problems keep the prior behaviour.
+		expect( resolveSameSourceDeletion( { ...settled, dryRun: true } ).delete ).toBe( false );
+		expect( resolveSameSourceDeletion( { ...settled, explicitSources: true } ) ).toEqual( {
+			delete: false,
+			reason: 'targeted-run',
+		} );
+		expect( resolveSameSourceDeletion( { ...settled, pollSkipped: true } ).reason ).toBe(
+			'replacement-not-settled'
+		);
+		expect( resolveSameSourceDeletion( { ...settled, uploadErrors: 1 } ).reason ).toBe(
+			'replacement-not-settled'
+		);
+		expect( resolveSameSourceDeletion( { ...settled, pollPending: 1 } ).reason ).toBe(
+			'replacement-not-settled'
+		);
+		expect( resolveSameSourceDeletion( { ...settled, pollErrors: 1 } ).reason ).toBe(
+			'replacement-not-settled'
+		);
+
+		// A settled replacement is still not safe to swap in while retrieval is dark:
+		// deleting the old generation could leave the source with no searchable copy.
+		expect( resolveSameSourceDeletion( { ...settled, validationChunkCount: 0 } ) ).toEqual( {
+			delete: false,
+			reason: 'validation-unavailable',
+		} );
+		// Degraded-but-present retrieval is only a warning, exactly as for stale deletion.
+		expect(
+			resolveSameSourceDeletion( { ...settled, validationChunkCount: 1 } ).delete
+		).toBe( true );
+	} );
+
+	test( 'both destructive paths refuse to delete on the same zero-chunk evidence', () => {
+		// Regression guard for the real gap: same-source generations are deleted earlier in
+		// main() than resolveStaleDeletion() runs, so a zero-chunk run could skip bulk stale
+		// deletion while still pruning superseded generations. The two resolvers must agree.
+		const zeroChunk = {
+			dryRun: false,
+			deleteStale: true,
+			explicitSources: false,
+			limit: 0,
+			discoveryErrors: 0,
+			pollSkipped: false,
+			discovered: 13317,
+			prepared: 13316,
+			buildErrors: 0,
+			uploadErrors: 0,
+			pollPending: 0,
+			pollErrors: 0,
+			validationOk: false,
+			validationChunkCount: 0,
+			previousManifestCount: 13000,
+		};
+
+		expect( resolveStaleDeletion( zeroChunk ).delete ).toBe( false );
+		expect( resolveSameSourceDeletion( zeroChunk ).delete ).toBe( false );
+		expect( resolveStaleDeletion( zeroChunk ).reason ).toBe( 'validation-unavailable' );
+		expect( resolveSameSourceDeletion( zeroChunk ).reason ).toBe( 'validation-unavailable' );
+
+		// ...and both allow deletion once retrieval proves the corpus is answerable.
+		const retrievable = { ...zeroChunk, validationOk: true, validationChunkCount: 8 };
+		expect( resolveStaleDeletion( retrievable ).delete ).toBe( true );
+		expect( resolveSameSourceDeletion( retrievable ).delete ).toBe( true );
+	} );
+
+	test( 'resolveStaleDeletion refuses to prune when the retrieval index returned no chunks', () => {
+		// Regression guard for the 2026-08-10 scheduled run, which pruned 8 managed items
+		// under `validation-warning` even though the public endpoint had answered HTTP 200
+		// with zero chunks — i.e. the run had no evidence the corpus was retrievable.
+		const run = {
+			dryRun: false,
+			deleteStale: true,
+			explicitSources: false,
+			limit: 0,
+			discoveryErrors: 0,
+			pollSkipped: false,
+			discovered: 13317,
+			prepared: 13316,
+			buildErrors: 0,
+			uploadErrors: 0,
+			pollPending: 0,
+			pollErrors: 0,
+			validationOk: false,
+			validationChunkCount: 0,
+			previousManifestCount: 13000,
+		};
+
+		expect( resolveSummaryStatus( run ) ).toBe( 'needs-attention' );
+		expect( resolveStaleDeletion( run ) ).toEqual( {
+			delete: false,
+			reason: 'validation-unavailable',
 		} );
 	} );
 
@@ -1005,6 +1955,10 @@ describe( 'update-docs-ai-search helpers', () => {
 			`CLOUDFLARE_AI_SEARCH_PUBLIC_URL: \${{ vars.CLOUDFLARE_AI_SEARCH_PUBLIC_URL || '${ defaults.publicUrl }' }}`
 		);
 		expect( workflow ).toContain( `name: Update ${ defaults.instance } corpus` );
+		expect( workflow ).toContain( `        default: '${ defaults.release }'` );
+		expect( workflow ).toContain(
+			`INPUT_RELEASE: \${{ github.event.inputs.release || '${ defaults.release }' }}`
+		);
 	} );
 
 	test( 'corpus runbook documents the updater defaults', () => {
@@ -1030,6 +1984,10 @@ describe( 'update-docs-ai-search helpers', () => {
 		expect( runbook ).toContain( 'https://wordpress.org/news/' );
 		expect( runbook ).toContain( 'https://make.wordpress.org/ai/' );
 		expect( runbook ).toContain( '--recent-post-max-age-days' );
+		expect( runbook ).toContain( `--release=${ defaults.release }` );
+		expect( runbook ).toContain(
+			'WordPress 7.1 block.json metadata reference Gutenberg 23.8'
+		);
 	} );
 
 	test( 'workflow requires explicit opt-in before updating Cloudflare instance config', () => {
@@ -1143,11 +2101,171 @@ describe( 'update-docs-ai-search helpers', () => {
 			{ accountId: 'account', apiToken: 'token' }
 		);
 
-		expect( result ).toEqual( { skipped: false, pending: 0, errors: [] } );
+		expect( result ).toMatchObject( {
+			skipped: false,
+			pending: 0,
+			errors: [],
+			polls: 1,
+			initialActive: 0,
+			bestActive: 0,
+			finalActive: 0,
+			extended: false,
+		} );
 		expect( global.fetch.mock.calls[ 0 ][ 0 ] ).toContain( '/stats' );
 		expect(
 			global.fetch.mock.calls.filter( ( [ url ] ) => String( url ).includes( '/items?' ) )
 		).toHaveLength( 1 );
+	} );
+
+	test( 'pollWindow never lets the hard cap shorten an explicitly requested base window', () => {
+		expect( pollWindow( { pollSeconds: 600 } ) ).toEqual( {
+			baseMs: 600_000,
+			hardMs: 1_800_000,
+			graceMs: 120_000,
+			intervalMs: 5000,
+		} );
+		// An operator asking for a 3600s base must not be cut back to the 1800s default cap.
+		expect( pollWindow( { pollSeconds: 3600 } ).hardMs ).toBe( 3_600_000 );
+		expect(
+			pollWindow( { pollSeconds: 60, pollMaxSeconds: 90, pollProgressGraceSeconds: 10, pollIntervalSeconds: 2 } )
+		).toEqual( { baseMs: 60_000, hardMs: 90_000, graceMs: 10_000, intervalMs: 2000 } );
+	} );
+
+	test( 'pollUntilSettled retries the item sweep when /stats clears before the listing agrees', async () => {
+		// Regression guard for run 31462270794: /stats read zero while one desired key was
+		// still queued in the item listing. The old single-shot sweep failed the whole run on
+		// that momentary disagreement instead of re-checking inside the remaining window.
+		let itemsCall = 0;
+		global.fetch = settlementFetchMock( {
+			active: () => 0,
+			itemStatus: () => ( itemsCall++ === 0 ? 'queued' : 'completed' ),
+		} );
+
+		jest.useFakeTimers();
+		try {
+			const promise = pollUntilSettled(
+				new Set( [ 'desired-key' ] ),
+				pollOptions( { pollSeconds: 10 } ),
+				{ accountId: 'account', apiToken: 'token' }
+			);
+			await jest.advanceTimersByTimeAsync( 30_000 );
+			const result = await promise;
+
+			expect( result ).toMatchObject( { skipped: false, pending: 0, errors: [], polls: 2 } );
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	test( 'pollUntilSettled extends past the base window while the active count keeps falling', async () => {
+		let poll = 0;
+		global.fetch = settlementFetchMock( {
+			// 20 → 0 over twenty polls at one second each, so success lands well past the
+			// ten-second base window.
+			active: () => Math.max( 0, 20 - poll++ ),
+			itemStatus: () => 'completed',
+		} );
+
+		jest.useFakeTimers();
+		try {
+			const promise = pollUntilSettled(
+				new Set( [ 'desired-key' ] ),
+				pollOptions( { pollSeconds: 10, pollMaxSeconds: 120, pollProgressGraceSeconds: 5 } ),
+				{ accountId: 'account', apiToken: 'token' }
+			);
+			await jest.advanceTimersByTimeAsync( 120_000 );
+			const result = await promise;
+
+			expect( result ).toMatchObject( { pending: 0, errors: [], initialActive: 20, bestActive: 0 } );
+			expect( result.extended ).toBe( true );
+			expect( result.elapsedMs ).toBeGreaterThan( 10_000 );
+			expect( result.elapsedMs ).toBeLessThan( 120_000 );
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	test( 'pollUntilSettled stops a plateau after the progress grace instead of waiting out the cap', async () => {
+		global.fetch = settlementFetchMock( { active: () => 3, itemStatus: () => 'queued' } );
+
+		jest.useFakeTimers();
+		try {
+			const promise = pollUntilSettled(
+				new Set( [ 'desired-key' ] ),
+				// A ten-minute cap the plateau must NOT consume.
+				pollOptions( { pollSeconds: 10, pollMaxSeconds: 600, pollProgressGraceSeconds: 5 } ),
+				{ accountId: 'account', apiToken: 'token' }
+			);
+			await jest.advanceTimersByTimeAsync( 600_000 );
+			const result = await promise;
+
+			// A stuck item stays pending — extension never reclassifies it as settled.
+			expect( result.pending ).toBe( 1 );
+			expect( result.bestActive ).toBe( 3 );
+			expect( result.elapsedMs ).toBeLessThan( 30_000 );
+			expect( result.lastProgressAgeMs ).toBeGreaterThanOrEqual( 5000 );
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	test( 'pollUntilSettled enforces the hard cap even while still making progress', async () => {
+		let poll = 0;
+		global.fetch = settlementFetchMock( {
+			// Always a new low, so only the hard cap can stop this.
+			active: () => 1000 - poll++,
+			itemStatus: () => 'queued',
+		} );
+
+		jest.useFakeTimers();
+		try {
+			const promise = pollUntilSettled(
+				new Set( [ 'desired-key' ] ),
+				pollOptions( { pollSeconds: 10, pollMaxSeconds: 20, pollProgressGraceSeconds: 100_000 } ),
+				{ accountId: 'account', apiToken: 'token' }
+			);
+			await jest.advanceTimersByTimeAsync( 300_000 );
+			const result = await promise;
+
+			expect( result.pending ).toBe( 1 );
+			expect( result.elapsedMs ).toBeGreaterThanOrEqual( 20_000 );
+			expect( result.elapsedMs ).toBeLessThan( 30_000 );
+			expect( result.extended ).toBe( true );
+		} finally {
+			jest.useRealTimers();
+		}
+	} );
+
+	test( 'pollUntilSettled reports residual pending from a final item-level sweep', async () => {
+		// The loop's last observation is not authoritative: the returned pending count comes
+		// from a fresh sweep after the window closes.
+		let itemsCall = 0;
+		global.fetch = settlementFetchMock( {
+			active: () => 2,
+			// Every in-loop sweep is skipped (stats never clear); the final sweep is the only
+			// listing call, and it is what decides the reported pending count.
+			itemStatus: () => {
+				itemsCall += 1;
+				return 'completed';
+			},
+		} );
+
+		jest.useFakeTimers();
+		try {
+			const promise = pollUntilSettled(
+				new Set( [ 'desired-key' ] ),
+				pollOptions( { pollSeconds: 10, pollMaxSeconds: 20, pollProgressGraceSeconds: 5 } ),
+				{ accountId: 'account', apiToken: 'token' }
+			);
+			await jest.advanceTimersByTimeAsync( 60_000 );
+			const result = await promise;
+
+			expect( itemsCall ).toBe( 1 );
+			expect( result.pending ).toBe( 0 );
+			expect( result.errors ).toEqual( [] );
+		} finally {
+			jest.useRealTimers();
+		}
 	} );
 
 	test( 'processEntries dedupes canonical source identities before upload', async () => {

@@ -17,6 +17,7 @@ import { STORE_NAME } from '../store';
 import { BlockRecommendationsPanel } from './BlockRecommendationsPanel';
 import { getBlockRecommendationFreshness } from './block-recommendation-request';
 import SuggestionChips from './SuggestionChips';
+import { SURFACE_TONES } from '../components/surface-labels';
 import {
 	SETTINGS_PANEL_DELEGATIONS,
 	STYLE_PANEL_DELEGATIONS,
@@ -226,7 +227,7 @@ function SubPanelSuggestions( {
 				interactive={ false }
 				label={ label }
 				title={ title }
-				tone="Apply now"
+				tone={ SURFACE_TONES.APPLY }
 			/>
 		</InspectorControls>
 	);

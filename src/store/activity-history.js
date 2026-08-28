@@ -10,6 +10,7 @@ import {
 	recordedAttributeSnapshotMatchesCurrent,
 } from './update-helpers';
 import { getBlockStructuralActivityUndoState } from '../utils/block-structural-actions';
+import { __ } from '@wordpress/i18n';
 
 const ACTIVITY_STORAGE_PREFIX = 'flavor-agent:activity:';
 // v4: per-surface bucketing (was a single 20-entry cap across all surfaces).
@@ -22,10 +23,15 @@ const MAX_ACTIVITY_HISTORY_PER_SURFACE = 20;
 // sessionStorage growth (8 surfaces × 20 = 160 entries × N scopes) from
 // exceeding browser quotas in long-running sessions.
 const MAX_ACTIVITY_HISTORY_PER_SCOPE = 80;
-const LEGACY_TEMPLATE_UNDO_ERROR =
-	'This template action was recorded before refresh-safe undo support and cannot be undone automatically.';
+const LEGACY_TEMPLATE_UNDO_ERROR = __(
+	'This template action was recorded before refresh-safe undo support and cannot be undone automatically.',
+	'flavor-agent'
+);
 
-export const ORDERED_UNDO_BLOCKED_ERROR = 'Undo blocked by newer AI actions.';
+export const ORDERED_UNDO_BLOCKED_ERROR = __(
+	'Undo blocked by newer AI actions.',
+	'flavor-agent'
+);
 
 let activitySequence = 0;
 
@@ -761,7 +767,10 @@ export function getBlockActivityUndoState( entry, blockEditorSelect = {} ) {
 			...existingUndo,
 			canUndo: false,
 			status: 'failed',
-			error: 'This block action is missing its recorded after state and cannot be undone automatically.',
+			error: __(
+				'This block action is missing its recorded after state and cannot be undone automatically.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -776,7 +785,10 @@ export function getBlockActivityUndoState( entry, blockEditorSelect = {} ) {
 			...existingUndo,
 			canUndo: false,
 			status: 'failed',
-			error: 'The original block target for this AI action is missing.',
+			error: __(
+				'The original block target for this AI action is missing.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -802,7 +814,10 @@ export function getBlockActivityUndoState( entry, blockEditorSelect = {} ) {
 			...existingUndo,
 			canUndo: false,
 			status: 'failed',
-			error: 'The target block is no longer available to undo.',
+			error: __(
+				'The target block is no longer available to undo.',
+				'flavor-agent'
+			),
 		};
 	}
 
@@ -869,7 +884,10 @@ export function getBlockActivityUndoState( entry, blockEditorSelect = {} ) {
 		...existingUndo,
 		canUndo: false,
 		status: 'failed',
-		error: 'The target block changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+		error: __(
+			'The target block changed after Flavor Agent applied this suggestion and cannot be undone automatically.',
+			'flavor-agent'
+		),
 	};
 }
 
@@ -881,7 +899,7 @@ export function getResolvedActivityUndoState(
 	if ( ! entry ) {
 		return buildUndoState( new Date().toISOString(), {
 			status: 'failed',
-			error: 'The activity entry is unavailable.',
+			error: __( 'The activity entry is unavailable.', 'flavor-agent' ),
 		} );
 	}
 

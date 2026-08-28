@@ -1,13 +1,17 @@
 import { Button } from '@wordpress/components';
+import { __ } from '@wordpress/i18n';
 
 import { joinClassNames } from '../utils/format-count';
-import { getTonePillClassName } from './surface-labels';
+import { getTonePillClassName, getToneLabel } from './surface-labels';
+
+const DEFAULT_EYEBROW = __( 'Recommended Next Step', 'flavor-agent' );
 
 export default function RecommendationHero( {
-	eyebrow = 'Recommended Next Step',
+	eyebrow = DEFAULT_EYEBROW,
 	title = '',
 	description = '',
 	tone = '',
+	toneLabel = '',
 	why = '',
 	meta = null,
 	primaryActionLabel = '',
@@ -18,11 +22,13 @@ export default function RecommendationHero( {
 	children = null,
 	className = '',
 } ) {
+	const resolvedToneLabel = toneLabel || getToneLabel( tone );
+
 	if (
 		! eyebrow &&
 		! title &&
 		! description &&
-		! tone &&
+		! resolvedToneLabel &&
 		! why &&
 		! meta &&
 		! children
@@ -51,7 +57,7 @@ export default function RecommendationHero( {
 					) }
 				</div>
 				<div className="flavor-agent-card__meta">
-					{ tone && (
+					{ resolvedToneLabel && (
 						<span
 							className={ joinClassNames(
 								'flavor-agent-pill',
@@ -59,7 +65,7 @@ export default function RecommendationHero( {
 									'flavor-agent-pill--prominent'
 							) }
 						>
-							{ tone }
+							{ resolvedToneLabel }
 						</span>
 					) }
 					{ meta }

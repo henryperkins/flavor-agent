@@ -28,6 +28,8 @@ import {
 } from './recommendation-utils';
 
 const BADGE_ANCHOR_CLASS = 'flavor-agent-inserter-badge-anchor';
+const ANCHOR_RETRY_INTERVAL_MS = 250;
+const ANCHOR_RETRY_MAX_ATTEMPTS = 20;
 
 function getOrCreateBadgeAnchor( button ) {
 	if ( ! button?.parentElement ) {
@@ -109,6 +111,9 @@ export default function InserterBadge() {
 		}
 
 		let retryId = null;
+		let retryAttempts = 0;
+		let scheduledFrame = null;
+		let pendingRefresh = false;
 		const stopRetry = () => {
 			if ( retryId ) {
 				clearInterval( retryId );
@@ -116,17 +121,33 @@ export default function InserterBadge() {
 			}
 		};
 		const startRetry = () => {
-			if ( retryId || typeof setInterval !== 'function' ) {
+			if (
+				retryId ||
+				typeof setInterval !== 'function' ||
+				retryAttempts >= ANCHOR_RETRY_MAX_ATTEMPTS
+			) {
 				return;
 			}
 
-			retryId = setInterval( refreshAnchor, 250 );
+			retryId = setInterval( () => {
+				retryAttempts += 1;
+
+				if ( retryAttempts >= ANCHOR_RETRY_MAX_ATTEMPTS ) {
+					// The toggle is not on this screen. Stop polling rather
+					// than spinning for the rest of the editor session; the
+					// MutationObserver still picks it up if it appears.
+					stopRetry();
+				}
+
+				refreshAnchor();
+			}, ANCHOR_RETRY_INTERVAL_MS );
 		};
 		const refreshAnchor = () => {
 			const button = findInserterToggle();
 			const nextAnchor = getOrCreateBadgeAnchor( button );
 
 			if ( nextAnchor ) {
+				retryAttempts = 0;
 				stopRetry();
 			} else {
 				startRetry();
@@ -146,6 +167,45 @@ export default function InserterBadge() {
 			setAnchor( nextAnchor );
 		};
 
+		// Editor DOM mutations arrive in bursts (typing, selection, toolbar
+		// state). Coalesce on the *leading* edge: the first mutation of a burst
+		// resolves the anchor immediately — so a toggle that just mounted is
+		// picked up without a frame of lag — and the rest of the burst collapses
+		// into at most one trailing sweep. A burst of N records costs 2 selector
+		// sweeps instead of N.
+		const scheduleRefreshAnchor = () => {
+			if ( scheduledFrame !== null ) {
+				pendingRefresh = true;
+				return;
+			}
+
+			refreshAnchor();
+
+			if ( typeof window?.requestAnimationFrame !== 'function' ) {
+				return;
+			}
+
+			scheduledFrame = window.requestAnimationFrame( () => {
+				scheduledFrame = null;
+
+				if ( pendingRefresh ) {
+					pendingRefresh = false;
+					refreshAnchor();
+				}
+			} );
+		};
+		const cancelScheduledRefresh = () => {
+			if (
+				scheduledFrame !== null &&
+				typeof window?.cancelAnimationFrame === 'function'
+			) {
+				window.cancelAnimationFrame( scheduledFrame );
+			}
+
+			scheduledFrame = null;
+			pendingRefresh = false;
+		};
+
 		refreshAnchor();
 
 		const observerTarget = document.body || document.documentElement;
@@ -153,17 +213,21 @@ export default function InserterBadge() {
 			typeof window !== 'undefined' ? window.MutationObserver : null;
 		const observer =
 			observerTarget && MutationObserverConstructor
-				? new MutationObserverConstructor( refreshAnchor )
+				? new MutationObserverConstructor( scheduleRefreshAnchor )
 				: null;
 
+		// `childList` only: the anchor's placement depends on whether the
+		// toggle button is in the tree, never on its attributes. Observing
+		// attributes across the whole editor body fires on nearly every
+		// keystroke and selection change for no benefit.
 		observer?.observe( observerTarget, {
-			attributes: true,
 			childList: true,
 			subtree: true,
 		} );
 
 		return () => {
 			observer?.disconnect();
+			cancelScheduledRefresh();
 			stopRetry();
 			clearAnchor();
 		};
@@ -173,11 +237,14 @@ export default function InserterBadge() {
 		return null;
 	}
 
+	// No `title`: the badge is `pointer-events: none` so it can never be
+	// hovered, which made the native tooltip dead markup. The same copy reaches
+	// assistive tech through `aria-label`, and the shelf's own loading/error
+	// notices carry it for sighted users.
 	return createPortal(
 		<output
 			className={ badgeState.className }
 			aria-label={ badgeState.ariaLabel }
-			title={ badgeState.tooltip }
 		>
 			{ badgeState.content }
 		</output>,

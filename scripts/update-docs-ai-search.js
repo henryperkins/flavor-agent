@@ -7,7 +7,7 @@ const path = require( 'node:path' );
 
 const DEFAULT_INSTANCE = 'wp-dev-docs';
 const DEFAULT_PUBLIC_SEARCH_URL = 'https://101d836c-480b-4b39-b14e-505a6aa58f47.search.ai.cloudflare.com/search';
-const DEFAULT_RELEASE = '7-0';
+const DEFAULT_RELEASE = '7-1';
 const DEFAULT_OUTPUT_DIR = path.resolve( __dirname, '..', 'output', 'docs-ai-search' );
 const LEGACY_ITEM_KEY_PREFIX = 'wp-dev-docs-';
 const USER_AGENT = 'Flavor Agent Developer Docs AI Search Updater (+https://github.com/henryperkins/flavor-agent)';
@@ -28,9 +28,39 @@ const BUILD_ERROR_ATTENTION_RATIO = 0.02;
 // standalone `# title` H1 that produced title-only first chunks). The version is
 // folded into the content hash, so every changed item mints a new key and
 // re-uploads on the next `--full` run. Superseded same-source generations are
-// pruned after the replacement key settles.
+// pruned only on eligible non-targeted runs after the replacement key settles.
 const DOC_LAYOUT_VERSION = 2;
-const VALIDATION_QUERY = 'WordPress developer documentation block.json metadata reference for WordPress 7.0';
+const VALIDATION_QUERIES = Object.freeze( {
+	'7-1': 'WordPress 7.1 block.json metadata reference Gutenberg 23.8',
+} );
+// Cloudflare AI Search resyncs its retrieval index asynchronously after items are
+// ingested, and `pollUntilSettled` only proves item-level settlement — not that the
+// public index has caught up. A single-shot check therefore races the resync and can
+// see an empty or partially rebuilt index (HTTP 200, zero or degraded chunks, because
+// `return_on_failure` reports retrieval failure as success). Retry across a bounded
+// window so only a persistently unhealthy corpus fails the run.
+const VALIDATION_ATTEMPTS = 5;
+const VALIDATION_RETRY_BASE_MS = 10_000;
+const VALIDATION_SOURCE_MAX_AGE_DAYS = {
+	'developer-docs': 90,
+	'make-core': 21,
+	'developer-blog': 45,
+	'make-ai': 21,
+	'wordpress-news': 21,
+};
+const VALIDATION_RELEASE_FLOORS = {
+	'7-0': Date.parse( '2026-05-20T00:00:00Z' ),
+	'7-1': Date.parse( '2026-08-19T00:00:00Z' ),
+};
+// Ingest settlement is eventually consistent in two separate places: the instance /stats
+// counters clear before the item listing agrees, and one slow item can trail a large
+// upload batch. The base --poll-seconds window is extended while the run is still making
+// progress, up to a hard cap. Extension is driven by new lows in the active count, so a
+// plateau expires on its own and a permanently stuck item still terminates with pending
+// > 0 — waiting longer is never allowed to redefine an incomplete ingest as success.
+const POLL_INTERVAL_SECONDS = 5;
+const POLL_MAX_SECONDS = 1800;
+const POLL_PROGRESS_GRACE_SECONDS = 120;
 
 const METADATA_SCHEMA = [
 	{ field_name: 'source_url', data_type: 'text' },
@@ -47,7 +77,7 @@ Usage:
   node scripts/update-docs-ai-search.js [options]
 
 Options:
-  --release=<slug>       Active WordPress major release slug, e.g. 7-0.
+  --release=<slug>       Active WordPress major release slug, e.g. 7-1.
   --instance=<id>        AI Search instance ID. Defaults to env or wp-dev-docs.
   --public-url=<url>     Public /search endpoint used for validation.
   --source-url=<url>     Restrict the run to specific trusted URLs (replaces sitemap
@@ -63,7 +93,10 @@ Options:
   --dry-run              Discover and build payloads without Cloudflare writes.
   --delete-stale         Opt in to deleting stale managed docs items. Off by default and
                          always skipped for --limit, --source-url/--source-file, and any
-                         run with discovery/build/upload/poll/validation problems.
+                         run with discovery/build/upload/poll problems. A validation
+                         failure that still returned chunks is a warning and does not
+                         block pruning; a validation response with zero chunks blocks
+                         both deletion paths (reason: validation-unavailable).
   --no-delete            Force stale deletion off (overrides --delete-stale).
   --full                 Re-fetch every discovered URL even if unchanged since the
                          last ingest (bypasses the sitemap-lastmod incremental skip).
@@ -71,7 +104,23 @@ Options:
                          trigger an instance-wide Cloudflare resync; leave off for
                          normal corpus updates.
   --skip-configure       Compatibility no-op; configuration is skipped by default.
-  --poll-seconds=<n>     Poll uploaded items before validation. Default: 180.
+  --poll-seconds=<n>     Base settlement window for uploaded items, before validation.
+                         Default: 180 (the workflow passes 600).
+  --poll-interval-seconds=<n>  Delay between settlement polls. Default: 5.
+  --poll-max-seconds=<n> Hard cap on the settlement window. The base window is extended
+                         past --poll-seconds only while the active item count keeps
+                         reaching new lows, never beyond this cap. Default: 1800.
+  --poll-progress-grace-seconds=<n>  Once past the base window, give up this long after
+                         the last new low in the active count. A plateau therefore
+                         expires instead of waiting out the hard cap. Default: 120.
+  --validation-attempts=<n>  Total public endpoint validation attempts before the run is
+                         marked needs-attention (default 5, exponential backoff from 10s:
+                         10/20/40/80). Retries ride out the asynchronous Cloudflare index
+                         resync that follows ingest. After the budget is exhausted one
+                         further diagnostic probe runs without return_on_failure to
+                         record Cloudflare's real error; it is not a validation attempt.
+                         Success requires current stable docs plus current Make/Core or
+                         Developer Blog evidence under the runbook freshness windows.
   --output=<dir>         Write summary artifacts here.
   --help, -h             Show this message.
 
@@ -94,6 +143,11 @@ function parseArgs( argv ) {
 		deleteStale: false,
 		configureInstance: false,
 		pollSeconds: 180,
+		pollIntervalSeconds: POLL_INTERVAL_SECONDS,
+		pollMaxSeconds: POLL_MAX_SECONDS,
+		pollProgressGraceSeconds: POLL_PROGRESS_GRACE_SECONDS,
+		validationAttempts: VALIDATION_ATTEMPTS,
+		validationRetryDelayMs: VALIDATION_RETRY_BASE_MS,
 		fullRefetch: false,
 		outputDir: DEFAULT_OUTPUT_DIR,
 	};
@@ -161,6 +215,27 @@ function parseArgs( argv ) {
 			case 'poll-seconds':
 				options.pollSeconds = normalizeNonNegativeInteger( value, 'poll-seconds' );
 				break;
+			case 'poll-interval-seconds':
+				options.pollIntervalSeconds = Math.max(
+					1,
+					normalizeNonNegativeInteger( value, 'poll-interval-seconds' )
+				);
+				break;
+			case 'poll-max-seconds':
+				options.pollMaxSeconds = normalizeNonNegativeInteger( value, 'poll-max-seconds' );
+				break;
+			case 'poll-progress-grace-seconds':
+				options.pollProgressGraceSeconds = normalizeNonNegativeInteger(
+					value,
+					'poll-progress-grace-seconds'
+				);
+				break;
+			case 'validation-attempts':
+				options.validationAttempts = Math.max(
+					1,
+					normalizeNonNegativeInteger( value, 'validation-attempts' )
+				);
+				break;
 			case 'output':
 				options.outputDir = path.resolve( value );
 				break;
@@ -187,7 +262,7 @@ function normalizeNonNegativeInteger( value, label ) {
 function normalizeRelease( value ) {
 	const release = String( value || '' ).trim().toLowerCase();
 	if ( ! /^[0-9]+-[0-9]+$/.test( release ) ) {
-		throw new Error( 'Release slug must look like 7-0.' );
+		throw new Error( 'Release slug must look like 7-1.' );
 	}
 	return release;
 }
@@ -1677,9 +1752,11 @@ function findSupersededSourceItems( items, desiredKeys, desiredSourceIdentities,
 // Stale deletion is the one destructive step, so it runs only for a full, demonstrably
 // healthy run. Targeted runs (explicit --source-url/--source-file), an out-of-ratio build
 // failure, and any upload or poll problem disable it so a degraded discovery cannot
-// wipe the corpus. Public endpoint validation still marks the run as needing attention,
-// but it must not block stale deletion because stale generations can be the reason
-// validation is noisy in the first place.
+// wipe the corpus. Public endpoint validation that returned *some* results still marks
+// the run as needing attention without blocking stale deletion, because stale generations
+// can be the reason validation is noisy in the first place. Zero chunks is different: the
+// retrieval index answered with nothing, so the run learned nothing about corpus health
+// and must not prune blind.
 function resolveStaleDeletion( run ) {
 	if ( run.dryRun ) {
 		return { delete: false, reason: 'dry-run' };
@@ -1731,10 +1808,38 @@ function resolveStaleDeletion( run ) {
 	) {
 		return { delete: false, reason: 'prepared-count-regression' };
 	}
+	if ( run.validationOk !== true && ! ( run.validationChunkCount > 0 ) ) {
+		return { delete: false, reason: 'validation-unavailable' };
+	}
 	if ( run.validationOk !== true ) {
 		return { delete: true, reason: 'validation-warning' };
 	}
 	return { delete: true, reason: 'healthy' };
+}
+
+// Deleting superseded same-source generations is the *other* destructive path, and it runs
+// before resolveStaleDeletion(). Item-level settlement proves the replacement was ingested,
+// not that it is retrievable, so this must apply the same retrieval-evidence rule as
+// resolveStaleDeletion(): with a dark index (zero chunks) we cannot tell whether dropping
+// the old generation leaves the source with no searchable copy at all. Keep the two
+// resolvers' `validation-unavailable` behavior in lockstep.
+function resolveSameSourceDeletion( run ) {
+	if ( run.dryRun ) {
+		return { delete: false, reason: 'dry-run' };
+	}
+	if ( run.explicitSources ) {
+		return { delete: false, reason: 'targeted-run' };
+	}
+	if ( run.pollSkipped ) {
+		return { delete: false, reason: 'replacement-not-settled' };
+	}
+	if ( run.uploadErrors > 0 || run.pollPending > 0 || run.pollErrors > 0 ) {
+		return { delete: false, reason: 'replacement-not-settled' };
+	}
+	if ( ! ( run.validationChunkCount > 0 ) ) {
+		return { delete: false, reason: 'validation-unavailable' };
+	}
+	return { delete: true, reason: 'settled-current-sources' };
 }
 
 function resolveSummaryStatus( run ) {
@@ -1759,45 +1864,123 @@ function resolveSummaryStatus( run ) {
 	return 'ok';
 }
 
+function pollWindow( options ) {
+	const baseSeconds = options.pollSeconds;
+	const capSeconds = Number.isFinite( options.pollMaxSeconds )
+		? options.pollMaxSeconds
+		: POLL_MAX_SECONDS;
+	const graceSeconds = Number.isFinite( options.pollProgressGraceSeconds )
+		? options.pollProgressGraceSeconds
+		: POLL_PROGRESS_GRACE_SECONDS;
+	const intervalSeconds = Number.isFinite( options.pollIntervalSeconds ) && options.pollIntervalSeconds > 0
+		? options.pollIntervalSeconds
+		: POLL_INTERVAL_SECONDS;
+
+	return {
+		baseMs: baseSeconds * 1000,
+		// A cap below the base window would silently shorten an explicitly requested poll.
+		hardMs: Math.max( baseSeconds, capSeconds ) * 1000,
+		graceMs: Math.max( 0, graceSeconds ) * 1000,
+		intervalMs: intervalSeconds * 1000,
+	};
+}
+
+// Wait for every desired key to reach a terminal, non-error state. The instance /stats
+// counters are only a cheap first gate: they can read zero while the item listing still
+// reports a key as queued, so the item-level sweep is retried inside the window rather
+// than being a single shot that fails the run on a momentary disagreement.
+//
+// Past the base window the poll keeps going only while it is demonstrably converging —
+// each new low in the active count restarts the progress grace — and never past the hard
+// cap. That preserves the zero-pending contract: extension buys time for a slow ingest,
+// it never reclassifies a stuck one as settled.
 async function pollUntilSettled( desiredKeys, options, auth ) {
 	if ( options.dryRun || options.pollSeconds <= 0 || desiredKeys.size === 0 ) {
 		return { skipped: true, pending: 0, errors: [] };
 	}
 
-	const deadline = Date.now() + options.pollSeconds * 1000;
+	const { baseMs, hardMs, graceMs, intervalMs } = pollWindow( options );
+	const startedAt = Date.now();
 	let lastStats = null;
-	while ( Date.now() < deadline ) {
-		lastStats = await getInstanceStats( options, auth );
-		if ( statsActiveCount( lastStats ) !== 0 ) {
-			await delay( 5000 );
-			continue;
-		}
+	let polls = 0;
+	let initialActive = null;
+	let bestActive = Infinity;
+	let lastProgressAt = startedAt;
+	let finalActive = 0;
+	let terminal = false;
 
-		const latest = await listBuiltinItems( options, auth );
-		const settlement = evaluateSettlement( latest, desiredKeys );
-
-		// Keys that never appear (dropped write / eventual-consistency lag) are not
-		// "pending" in the listing, so success requires zero missing keys; item-level
-		// error/skip statuses must also clear, or a degraded index would settle as "ok".
-		if ( isSettlementComplete( settlement ) ) {
-			return { skipped: false, pending: 0, errors: settlement.errors };
-		}
-
+	const telemetry = () => {
+		const elapsedMs = Date.now() - startedAt;
 		return {
-			skipped: false,
-			pending: settlement.missing.length + settlement.pending.length,
-			errors: settlement.errors,
-			stats: lastStats,
+			polls,
+			elapsedMs,
+			initialActive,
+			bestActive: Number.isFinite( bestActive ) ? bestActive : null,
+			finalActive,
+			lastProgressAgeMs: Date.now() - lastProgressAt,
+			extended: elapsedMs > baseMs,
 		};
+	};
+
+	for ( ;; ) {
+		polls += 1;
+		lastStats = await getInstanceStats( options, auth );
+		let active = statsActiveCount( lastStats );
+
+		if ( active === 0 ) {
+			const latest = await listBuiltinItems( options, auth );
+			const settlement = evaluateSettlement( latest, desiredKeys );
+
+			// Keys that never appear (dropped write / eventual-consistency lag) are not
+			// "pending" in the listing, so success requires zero missing keys; item-level
+			// error/skip statuses must also clear, or a degraded index would settle as "ok".
+			if ( isSettlementComplete( settlement ) ) {
+				finalActive = 0;
+				bestActive = 0;
+				if ( initialActive === null ) {
+					initialActive = 0;
+				}
+				return {
+					skipped: false,
+					pending: 0,
+					errors: settlement.errors,
+					...telemetry(),
+				};
+			}
+
+			// error/skipped are terminal states; more waiting cannot clear them.
+			terminal = settlement.errors.length > 0;
+			active = settlement.missing.length + settlement.pending.length;
+		}
+
+		if ( initialActive === null ) {
+			initialActive = active;
+		}
+		if ( active < bestActive ) {
+			bestActive = active;
+			lastProgressAt = Date.now();
+		}
+		finalActive = active;
+
+		const now = Date.now();
+		if ( terminal || now >= hardMs + startedAt ) {
+			break;
+		}
+		if ( now >= baseMs + startedAt && now - lastProgressAt >= graceMs ) {
+			break;
+		}
+		await delay( intervalMs );
 	}
 
 	const latest = await listBuiltinItems( options, auth );
 	const { missing, pending, errors } = evaluateSettlement( latest, desiredKeys );
+	finalActive = missing.length + pending.length;
 	return {
 		skipped: false,
-		pending: missing.length + pending.length,
+		pending: finalActive,
 		errors,
 		stats: lastStats,
+		...telemetry(),
 	};
 }
 
@@ -1811,31 +1994,44 @@ function delay( ms ) {
 	return new Promise( ( resolve ) => setTimeout( resolve, ms ) );
 }
 
-async function validatePublicEndpoint( options ) {
+function validationRequestBody( options, returnOnFailure ) {
+	const retrieval = {
+		retrieval_type: 'hybrid',
+		max_num_results: 8,
+		match_threshold: 0.2,
+		context_expansion: 1,
+		fusion_method: 'rrf',
+	};
+	// `return_on_failure` makes Cloudflare answer a failed retrieval with HTTP 200 and no
+	// chunks. That is what the validation loop wants (a retryable soft signal), but the
+	// final diagnostic probe drops it so a persistent failure reports its real error.
+	if ( returnOnFailure ) {
+		retrieval.return_on_failure = true;
+	}
+	return JSON.stringify( {
+		messages: [
+			{
+				role: 'user',
+				content:
+					VALIDATION_QUERIES[ options.release ] ||
+					`WordPress developer documentation block.json metadata reference for WordPress ${ options.release.replace(
+						'-',
+						'.'
+					) }`,
+			},
+		],
+		ai_search_options: { retrieval },
+	} );
+}
+
+async function validationProbe( options, returnOnFailure ) {
 	const response = await fetchWithTimeout( options.publicUrl, {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',
 			'User-Agent': USER_AGENT,
 		},
-		body: JSON.stringify( {
-			messages: [
-				{
-					role: 'user',
-					content: VALIDATION_QUERY.replace( '7.0', options.release.replace( '-', '.' ) ),
-				},
-			],
-			ai_search_options: {
-				retrieval: {
-					retrieval_type: 'hybrid',
-					max_num_results: 8,
-					match_threshold: 0.2,
-					context_expansion: 1,
-					fusion_method: 'rrf',
-					return_on_failure: true,
-				},
-			},
-		} ),
+		body: validationRequestBody( options, returnOnFailure ),
 	} );
 	const text = await response.text();
 	let data;
@@ -1846,32 +2042,247 @@ async function validatePublicEndpoint( options ) {
 	}
 	const result = data?.result && typeof data.result === 'object' ? data.result : data;
 	const chunks = Array.isArray( result?.chunks ) ? result.chunks : [];
-	const urls = chunks.map( extractChunkUrl ).filter( Boolean );
-	const sourceTypes = [ ...new Set( urls.map( classifySourceUrl ).filter( Boolean ) ) ];
+	const checkedAtMs = Number.isFinite( options.now ) ? options.now : Date.now();
+	const evidence = chunks.map( ( chunk ) =>
+		validationEvidenceForChunk( chunk, options.release, checkedAtMs )
+	);
+	const urls = evidence.map( ( item ) => item.url ).filter( Boolean );
+	const sourceTypes = [ ...new Set( evidence.map( ( item ) => item.sourceType ).filter( Boolean ) ) ];
+	const currentSourceTypes = [
+		...new Set( evidence.filter( ( item ) => item.current ).map( ( item ) => item.sourceType ) ),
+	];
+	const freshness = {
+		checkedAt: new Date( checkedAtMs ).toISOString(),
+		developerDocs: currentSourceTypes.includes( 'developer-docs' ),
+		releaseCycle: currentSourceTypes.some( ( type ) =>
+			[ 'make-core', 'developer-blog' ].includes( type )
+		),
+	};
 
 	return {
 		status: response.status,
 		chunkCount: chunks.length,
 		sourceTypes,
+		currentSourceTypes,
 		urls: urls.slice( 0, 8 ),
-		ok: response.ok && chunks.length > 0 && sourceTypes.includes( 'developer-docs' ),
+		evidence: evidence.slice( 0, 8 ),
+		freshness,
+		ok:
+			response.ok &&
+			chunks.length > 0 &&
+			freshness.developerDocs &&
+			freshness.releaseCycle,
+		responseText: text,
 	};
+}
+
+// Probe the public endpoint until it proves the corpus is retrievable, or the attempt
+// budget runs out. Every non-ok outcome is retryable: the index resync that follows
+// ingest surfaces as zero chunks or a degraded, non-developer-docs result set rather
+// than as a transport error, so there is nothing else to discriminate on.
+async function validatePublicEndpoint( options ) {
+	const maxAttempts = Math.max(
+		1,
+		Number.isInteger( options.validationAttempts ) && options.validationAttempts > 0
+			? options.validationAttempts
+			: VALIDATION_ATTEMPTS
+	);
+	const retryDelayMs = Number.isFinite( options.validationRetryDelayMs )
+		? Math.max( 0, options.validationRetryDelayMs )
+		: VALIDATION_RETRY_BASE_MS;
+
+	let last;
+	for ( let attempt = 1; attempt <= maxAttempts; attempt += 1 ) {
+		try {
+			last = await validationProbe( options, true );
+		} catch ( error ) {
+			const checkedAtMs = Number.isFinite( options.now ) ? options.now : Date.now();
+			last = {
+				status: 0,
+				chunkCount: 0,
+				sourceTypes: [],
+				currentSourceTypes: [],
+				urls: [],
+				evidence: [],
+				freshness: {
+					checkedAt: new Date( checkedAtMs ).toISOString(),
+					developerDocs: false,
+					releaseCycle: false,
+				},
+				ok: false,
+				error: error?.message || String( error ),
+			};
+		}
+		delete last.responseText;
+		last.attempts = attempt;
+		if ( last.ok ) {
+			return last;
+		}
+		if ( attempt < maxAttempts ) {
+			console.warn(
+				`Public endpoint validation attempt ${ attempt }/${ maxAttempts } was not usable ` +
+					`(status ${ last.status }, ${ last.chunkCount } chunks); retrying after index resync.`
+			);
+			await delay( retryDelayMs * 2 ** ( attempt - 1 ) );
+		}
+	}
+
+	// Persistent failure: ask once more without `return_on_failure` so the summary records
+	// Cloudflare's actual retrieval error instead of a silent HTTP 200 with no chunks.
+	try {
+		const diagnostic = await validationProbe( options, false );
+		last.diagnostic = {
+			status: diagnostic.status,
+			chunkCount: diagnostic.chunkCount,
+			body: String( diagnostic.responseText || '' ).slice( 0, 500 ),
+		};
+	} catch ( error ) {
+		last.diagnostic = { error: error?.message || String( error ) };
+	}
+
+	return last;
 }
 
 function extractChunkUrl( chunk ) {
 	if ( ! chunk || typeof chunk !== 'object' ) {
 		return '';
 	}
-	const item = chunk.item && typeof chunk.item === 'object' ? chunk.item : {};
-	const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+	const metadata = chunkMetadata( chunk );
 	for ( const key of [ 'source_url', 'sourceUrl', 'url', 'original_url', 'originalUrl', 'permalink' ] ) {
 		if ( typeof metadata[ key ] === 'string' && metadata[ key ].trim() ) {
 			return metadata[ key ].trim();
 		}
 	}
-	const text = typeof chunk.text === 'string' ? chunk.text : '';
-	const match = text.match( /(?:source_url|original_url):\s*(?:"([^"]+)"|([^\n]+))/i );
-	return ( match?.[ 1 ] || match?.[ 2 ] || '' ).trim();
+	return '';
+}
+
+function chunkMetadata( chunk ) {
+	if ( ! chunk || typeof chunk !== 'object' ) {
+		return {};
+	}
+	const item = chunk.item && typeof chunk.item === 'object' ? chunk.item : {};
+	const itemMetadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
+	const frontmatterMetadata = chunkFrontmatterMetadata( chunk );
+	return {
+		...frontmatterMetadata,
+		...itemMetadata,
+		source_url:
+			metadataValue( itemMetadata, [
+				'source_url',
+				'sourceUrl',
+				'url',
+				'original_url',
+				'originalUrl',
+				'permalink',
+			] ) || metadataValue( frontmatterMetadata, [ 'source_url', 'original_url' ] ),
+		retrieved_at:
+			metadataValue( itemMetadata, [ 'retrieved_at', 'retrievedAt' ] ) ||
+			metadataValue( frontmatterMetadata, [ 'retrieved_at' ] ),
+		published_at:
+			metadataValue( itemMetadata, [ 'published_at', 'publishedAt' ] ) ||
+			metadataValue( frontmatterMetadata, [ 'published_at' ] ),
+	};
+}
+
+function metadataValue( metadata, keys ) {
+	for ( const key of keys ) {
+		const value = metadata[ key ];
+		if ( value !== undefined && value !== null && String( value ).trim() ) {
+			return value;
+		}
+	}
+	return '';
+}
+
+function chunkFrontmatterMetadata( chunk ) {
+	const text = typeof chunk?.text === 'string' ? chunk.text : '';
+	const match = text.match( /^---\s*\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/ );
+	if ( ! match ) {
+		return {};
+	}
+
+	const supported = new Set( [ 'source_url', 'original_url', 'retrieved_at', 'published_at' ] );
+	const metadata = {};
+	for ( const line of match[ 1 ].split( /\r?\n/ ) ) {
+		const field = line.match( /^([a-z_]+):\s*(?:"([^"]*)"|'([^']*)'|([^#]*?))\s*$/i );
+		if ( field && supported.has( field[ 1 ].toLowerCase() ) ) {
+			metadata[ field[ 1 ].toLowerCase() ] = ( field[ 2 ] ?? field[ 3 ] ?? field[ 4 ] ?? '' ).trim();
+		}
+	}
+	return metadata;
+}
+
+function normalizedTimestamp( value ) {
+	const timestamp = parseTimestampMs( value );
+	return Number.isFinite( timestamp ) ? new Date( timestamp ).toISOString() : '';
+}
+
+function validationEvidenceForChunk( chunk, release, checkedAtMs ) {
+	const metadata = chunkMetadata( chunk );
+	const extractedUrl = extractChunkUrl( chunk );
+	const url = normalizeTrustedUrl( extractedUrl );
+	const sourceType = classifySourceUrl( url );
+	const retrievedAt = normalizedTimestamp( metadata.retrieved_at || metadata.retrievedAt || '' );
+	const publishedAt = normalizedTimestamp( metadata.published_at || metadata.publishedAt || '' );
+	const evidence = {
+		url,
+		sourceType,
+		retrievedAt,
+		publishedAt,
+		current: false,
+		basis: 'unsupported-source',
+	};
+	if ( ! url ) {
+		evidence.basis = 'invalid-source-url';
+		return evidence;
+	}
+	if ( sourceType !== 'developer-docs' && ! isCorpusDocumentUrl( url ) ) {
+		evidence.basis = 'ineligible-source-url';
+		return evidence;
+	}
+
+	if ( sourceType === 'developer-docs' ) {
+		if ( ! retrievedAt ) {
+			evidence.basis = 'missing-retrieved-at';
+			return evidence;
+		}
+		const retrievedAtMs = parseTimestampMs( retrievedAt );
+		if ( retrievedAtMs > checkedAtMs ) {
+			evidence.basis = 'future-retrieved-at';
+			return evidence;
+		}
+		evidence.current =
+			retrievedAtMs >=
+			checkedAtMs - VALIDATION_SOURCE_MAX_AGE_DAYS[ sourceType ] * DAY_MS;
+		evidence.basis = evidence.current ? 'retrieved-at' : 'stale-retrieved-at';
+		return evidence;
+	}
+
+	if ( Object.hasOwn( VALIDATION_SOURCE_MAX_AGE_DAYS, sourceType ) ) {
+		if ( ! publishedAt ) {
+			evidence.basis = 'missing-published-at';
+			return evidence;
+		}
+		const publishedAtMs = parseTimestampMs( publishedAt );
+		if ( publishedAtMs > checkedAtMs ) {
+			evidence.basis = 'future-published-at';
+			return evidence;
+		}
+		const rollingCutoff =
+			checkedAtMs - VALIDATION_SOURCE_MAX_AGE_DAYS[ sourceType ] * DAY_MS;
+		const releaseFloor = VALIDATION_RELEASE_FLOORS[ release ];
+		if ( publishedAtMs >= rollingCutoff ) {
+			evidence.current = true;
+			evidence.basis = 'published-at';
+		} else if ( Number.isFinite( releaseFloor ) && publishedAtMs >= releaseFloor ) {
+			evidence.current = true;
+			evidence.basis = 'release-floor';
+		} else {
+			evidence.basis = 'stale-published-at';
+		}
+	}
+
+	return evidence;
 }
 
 function classifySourceUrl( value ) {
@@ -1889,6 +2300,12 @@ function classifySourceUrl( value ) {
 	}
 	if ( url.hostname === 'make.wordpress.org' && url.pathname.startsWith( '/core/' ) ) {
 		return 'make-core';
+	}
+	if ( url.hostname === 'make.wordpress.org' && url.pathname.startsWith( '/ai/' ) ) {
+		return 'make-ai';
+	}
+	if ( url.hostname === 'wordpress.org' && url.pathname.startsWith( '/news/' ) ) {
+		return 'wordpress-news';
 	}
 	return '';
 }
@@ -2130,14 +2547,18 @@ async function main() {
 	const buildErrorCount = processed.buildErrors.length;
 	const pollPending = poll.pending || 0;
 	const pollErrorCount = Array.isArray( poll.errors ) ? poll.errors.length : 0;
-	const settledReplacementKeys = ! options.dryRun &&
-		poll.skipped !== true &&
-		uploadErrorCount === 0 &&
-		pollPending === 0 &&
-		pollErrorCount === 0;
+	const sameSourceDeletion = resolveSameSourceDeletion( {
+		dryRun: options.dryRun,
+		explicitSources: explicitSourcesRequested( options ),
+		pollSkipped: poll.skipped === true,
+		uploadErrors: uploadErrorCount,
+		pollPending,
+		pollErrors: pollErrorCount,
+		validationChunkCount: validation.chunkCount,
+	} );
 	const deletedItemIds = new Set();
 
-	if ( auth && settledReplacementKeys ) {
+	if ( auth && sameSourceDeletion.delete ) {
 		const superseded = findSupersededSourceItems(
 			existingItems,
 			processed.desiredKeys,
@@ -2171,6 +2592,7 @@ async function main() {
 		pollPending,
 		pollErrors: pollErrorCount,
 		validationOk: validation.ok,
+		validationChunkCount: validation.chunkCount,
 		previousManifestCount,
 	} );
 
@@ -2218,9 +2640,22 @@ async function main() {
 		sameSourceDeletion: {
 			performed: sameSourceDeleted.length > 0,
 			deleted: sameSourceDeleted.length,
-			reason: settledReplacementKeys ? 'settled-current-sources' : 'replacement-not-settled',
+			reason: sameSourceDeletion.reason,
 		},
 		staleDeletion: { performed: deletion.delete, reason: deletion.reason },
+		// Settlement trajectory, not just its endpoint: without this a residual pending item
+		// is indistinguishable from a stuck one, which is exactly what run 31462270794 left
+		// unanswerable.
+		settlement: {
+			skipped: poll.skipped === true,
+			polls: poll.polls ?? null,
+			elapsedMs: poll.elapsedMs ?? null,
+			initialActive: poll.initialActive ?? null,
+			bestActive: poll.bestActive ?? null,
+			finalActive: poll.finalActive ?? null,
+			lastProgressAgeMs: poll.lastProgressAgeMs ?? null,
+			extended: poll.extended ?? false,
+		},
 		counts: {
 			uploaded: processed.uploaded.length,
 			skipped: processed.skipped.length,
@@ -2267,6 +2702,8 @@ module.exports = {
 	evaluateSettlement,
 	isSettlementComplete,
 	listBuiltinItems,
+	pollWindow,
+	resolveSameSourceDeletion,
 	resolveStaleDeletion,
 	resolveSummaryStatus,
 	extractTitle,

@@ -7,6 +7,7 @@ const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import RecommendationHero from '../RecommendationHero';
+import { SURFACE_TONES } from '../surface-labels';
 
 const { getContainer, getRoot } = setupReactTest();
 
@@ -32,7 +33,7 @@ describe( 'RecommendationHero', () => {
 				<RecommendationHero
 					title="Refresh spacing and alignment"
 					description="This suggestion is safe to apply on the current block."
-					tone="Apply now"
+					tone={ SURFACE_TONES.APPLY }
 					why="It updates only local attributes and preserves existing content."
 					primaryActionLabel="Apply"
 					onPrimaryAction={ onPrimaryAction }

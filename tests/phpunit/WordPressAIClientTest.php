@@ -249,13 +249,28 @@ final class WordPressAIClientTest extends TestCase {
 		);
 	}
 
-	public function test_chat_routes_through_ai_service_with_supported_generation_options(): void {
+	public function test_chat_routes_directly_through_ai_client_prompt(): void {
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"Use the accent color."}';
 
 		$result = WordPressAIClient::chat(
 			'WordPress Gutenberg block styling and configuration assistant.',
-			'Recommend a better block.',
+			'Recommend a better block.'
+		);
+
+		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
+		$this->assertSame( [], WordPressTestState::$ai_service_calls );
+		$this->assertSame( [ 'Recommend a better block.' ], WordPressTestState::$ai_client_prompt_calls );
+		$this->assertSame( 'core_function', WordPressTestState::$last_ai_client_prompt['transport'] ?? null );
+	}
+
+	public function test_chat_maps_sanitized_generation_options_to_ai_client_model_config(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
+
+		$result = WordPressAIClient::chat(
+			'System.',
+			'User.',
 			null,
 			null,
 			null,
@@ -271,64 +286,30 @@ final class WordPressAIClientTest extends TestCase {
 				'logprobs'          => true,
 				'top_logprobs'      => 5,
 				'ignored_option'    => 'must not pass through',
-			],
-			'flavor-agent/recommend-block'
-		);
-
-		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
-		$this->assertCount( 1, WordPressTestState::$ai_service_calls );
-		$this->assertSame( 'Recommend a better block.', WordPressTestState::$ai_service_calls[0]['prompt'] );
-		$this->assertSame(
-			[
-				'system_instruction' => 'WordPress Gutenberg block styling and configuration assistant.',
-				'candidate_count'    => 2,
-				'max_tokens'         => 500,
-				'temperature'        => 0.3,
-				'top_p'              => 0.8,
-				'top_k'              => 40,
-				'stop_sequences'     => [ 'END', '123' ],
-				'presence_penalty'   => 0.1,
-				'frequency_penalty'  => 0.2,
-				'logprobs'           => true,
-				'top_logprobs'       => 5,
-			],
-			WordPressTestState::$ai_service_calls[0]['options']
-		);
-		$this->assertArrayNotHasKey( 'ignored_option', WordPressTestState::$ai_service_calls[0]['options'] );
-	}
-
-	public function test_chat_preserves_model_options_when_ai_service_throws(): void {
-		WordPressTestState::$ai_client_supported            = true;
-		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
-		WordPressTestState::$ai_service_call_throws         = new \RuntimeException( 'AI service unavailable' );
-
-		$result = WordPressAIClient::chat(
-			'System.',
-			'User.',
-			null,
-			null,
-			null,
-			[
-				'temperature' => 0.4,
-				'max_tokens'  => 250,
 			]
 		);
 
 		$this->assertSame( '{"explanation":"OK."}', $result );
 		$this->assertSame(
-			0.4,
-			WordPressTestState::$last_ai_client_prompt['model_config']['temperature'] ?? null
-		);
-		$this->assertSame(
-			250,
-			WordPressTestState::$last_ai_client_prompt['model_config']['max_tokens'] ?? null
+			[
+				'candidateCount'   => 2,
+				'maxTokens'        => 500,
+				'temperature'      => 0.3,
+				'topP'             => 0.8,
+				'topK'             => 40,
+				'stopSequences'    => [ 'END', '123' ],
+				'presencePenalty'  => 0.1,
+				'frequencyPenalty' => 0.2,
+				'logprobs'         => true,
+				'topLogprobs'      => 5,
+			],
+			WordPressTestState::$last_ai_client_prompt['model_config'] ?? null
 		);
 	}
 
-	public function test_chat_applies_preferred_text_models_to_ai_client_prompt_fallback(): void {
+	public function test_chat_applies_preferred_text_models_to_direct_ai_client_prompt(): void {
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
-		WordPressTestState::$ai_service_call_throws         = new \RuntimeException( 'AI service unavailable' );
 		WordPressTestState::$preferred_text_models          = [
 			'openai:gpt-5-mini',
 			'anthropic:claude-sonnet-4.6',
@@ -912,7 +893,7 @@ final class WordPressAIClientTest extends TestCase {
 
 		// Snapshot before active_chat_request_meta(), whose support probe builds
 		// a prompt of its own.
-		$prompt_builds = count( WordPressTestState::$ai_service_calls );
+		$prompt_builds = count( WordPressTestState::$ai_client_prompt_calls );
 
 		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
 

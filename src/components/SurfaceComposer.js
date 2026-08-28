@@ -7,6 +7,7 @@
 import { Button, TextareaControl } from '@wordpress/components';
 
 import { joinClassNames } from '../utils/format-count';
+import { __ } from '@wordpress/i18n';
 
 function matchesSubmitShortcut( event, submitShortcut ) {
 	if ( ! submitShortcut || submitShortcut === 'none' ) {
@@ -28,8 +29,8 @@ export default function SurfaceComposer( {
 	prompt = '',
 	onPromptChange,
 	onFetch,
-	placeholder = 'Describe what you want to achieve.',
-	label = 'What are you trying to achieve?',
+	placeholder = __( 'Describe what you want to achieve.', 'flavor-agent' ),
+	label = __( 'What are you trying to achieve?', 'flavor-agent' ),
 	hideLabelFromVision = false,
 	rows = 3,
 	help = '',
@@ -43,7 +44,7 @@ export default function SurfaceComposer( {
 	onStarterPromptClick = null,
 	meta = null,
 	fetchLabel = 'Get Suggestions',
-	loadingLabel = 'Getting suggestions\u2026',
+	loadingLabel = __( 'Getting suggestions\u2026', 'flavor-agent' ),
 	fetchVariant = 'primary',
 	fetchIcon = null,
 	isLoading = false,
@@ -130,7 +131,7 @@ export default function SurfaceComposer( {
 							: ''
 					) }
 					role="group"
-					aria-label="Starter prompts"
+					aria-label={ __( 'Starter prompts', 'flavor-agent' ) }
 				>
 					{ starterPrompts.map( ( starterPrompt ) => (
 						<Button

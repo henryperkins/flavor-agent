@@ -37,6 +37,7 @@ import {
 	MANUAL_IDEAS_LABEL,
 	REFRESH_ACTION_LABEL,
 	REVIEW_LANE_LABEL,
+	SURFACE_TONES,
 } from '../components/surface-labels';
 import NavigationRecommendations from './NavigationRecommendations';
 import SuggestionChips from './SuggestionChips';
@@ -1073,7 +1074,7 @@ export function BlockRecommendationsContent( {
 			) }
 
 			<SurfaceComposer
-				title="Ask Flavor Agent"
+				title={ __( 'Ask Flavor Agent', 'flavor-agent' ) }
 				prompt={ currentPrompt }
 				onPromptChange={ handlePromptChange }
 				onFetch={ handleFetch }
@@ -1111,7 +1112,7 @@ export function BlockRecommendationsContent( {
 			{ executableBlockSuggestions.length > 0 && (
 				<RecommendationLane
 					title={ APPLY_NOW_LABEL }
-					tone={ isStaleResult ? '' : APPLY_NOW_LABEL }
+					tone={ isStaleResult ? '' : SURFACE_TONES.APPLY }
 					count={ executableBlockSuggestions.length }
 					countNoun="suggestion"
 					description={
@@ -1128,7 +1129,7 @@ export function BlockRecommendationsContent( {
 					<SuggestionChips
 						clientId={ clientId }
 						suggestions={ executableBlockSuggestions }
-						label="AI block suggestions"
+						label={ __( 'AI block suggestions', 'flavor-agent' ) }
 						currentRequestSignature={ currentRequestSignature }
 						currentRequestInput={ currentRequestInput }
 						disabled={
@@ -1141,7 +1142,7 @@ export function BlockRecommendationsContent( {
 			{ reviewBlockSuggestions.length > 0 && (
 				<RecommendationLane
 					title={ REVIEW_LANE_LABEL }
-					tone={ isStaleResult ? '' : REVIEW_LANE_LABEL }
+					tone={ isStaleResult ? '' : SURFACE_TONES.REVIEW }
 					count={ reviewBlockSuggestions.length }
 					countNoun="suggestion"
 					description={
@@ -1178,18 +1179,26 @@ export function BlockRecommendationsContent( {
 
 			{ settingsSuggestions.length > 0 && (
 				<RecommendationLane
-					title="Settings suggestions"
-					tone={ isStaleResult ? '' : APPLY_NOW_LABEL }
+					title={ __( 'Settings suggestions', 'flavor-agent' ) }
+					tone={ isStaleResult ? '' : SURFACE_TONES.APPLY }
 					count={ settingsSuggestions.length }
 					countNoun="suggestion"
 					description={
-						isStaleResult ? '' : 'Settings changes apply here only.'
+						isStaleResult
+							? ''
+							: __(
+									'Settings changes apply here only.',
+									'flavor-agent'
+							  )
 					}
 				>
 					<SuggestionChips
 						clientId={ clientId }
 						suggestions={ settingsSuggestions }
-						label="AI settings suggestions"
+						label={ __(
+							'AI settings suggestions',
+							'flavor-agent'
+						) }
 						currentRequestSignature={ currentRequestSignature }
 						currentRequestInput={ currentRequestInput }
 						disabled={
@@ -1205,18 +1214,23 @@ export function BlockRecommendationsContent( {
 
 			{ styleSuggestions.length > 0 && (
 				<RecommendationLane
-					title="Style suggestions"
-					tone={ isStaleResult ? '' : APPLY_NOW_LABEL }
+					title={ __( 'Style suggestions', 'flavor-agent' ) }
+					tone={ isStaleResult ? '' : SURFACE_TONES.APPLY }
 					count={ styleSuggestions.length }
 					countNoun="suggestion"
 					description={
-						isStaleResult ? '' : 'Style changes apply here only.'
+						isStaleResult
+							? ''
+							: __(
+									'Style changes apply here only.',
+									'flavor-agent'
+							  )
 					}
 				>
 					<SuggestionChips
 						clientId={ clientId }
 						suggestions={ styleSuggestions }
-						label="AI style suggestions"
+						label={ __( 'AI style suggestions', 'flavor-agent' ) }
 						currentRequestSignature={ currentRequestSignature }
 						currentRequestInput={ currentRequestInput }
 						disabled={
@@ -1414,7 +1428,7 @@ function ReviewSuggestionCard( {
 						</span>
 						<span className="flavor-agent-pill">{ typeLabel }</span>
 						<span className="flavor-agent-pill">
-							Validator computed
+							{ __( 'Validator computed', 'flavor-agent' ) }
 						</span>
 					</div>
 				</div>
@@ -1465,10 +1479,17 @@ function ReviewSuggestionCard( {
 						className="flavor-agent-card__description-status"
 						role="status"
 					>
-						<strong>Selected structural review</strong>
+						<strong>
+							{ __(
+								'Selected structural review',
+								'flavor-agent'
+							) }
+						</strong>
 						<p>
-							This review is scoped to the current block, request
-							token, and request signature.
+							{ __(
+								'This review is scoped to the current block, request token, and request signature.',
+								'flavor-agent'
+							) }
 						</p>
 					</div>
 					{ canApplyReviewedStructure && (
@@ -1516,7 +1537,7 @@ function AdvisorySuggestionCard( { suggestion } ) {
 								{ typeLabel }
 							</span>
 							<span className="flavor-agent-pill">
-								Validator computed
+								{ __( 'Validator computed', 'flavor-agent' ) }
 							</span>
 						</div>
 					) }
@@ -1579,7 +1600,7 @@ function getAdvisorySuggestionTypeLabel( suggestion ) {
 export function BlockRecommendationsPanel( props ) {
 	return (
 		<PanelBody
-			title="AI Recommendations"
+			title={ __( 'AI Recommendations', 'flavor-agent' ) }
 			initialOpen={ false }
 			icon={ icon }
 		>
@@ -1623,12 +1644,15 @@ export function BlockRecommendationsDocumentPanel() {
 	return (
 		<PluginDocumentSettingPanel
 			name="flavor-agent-block-recommendations"
-			title="AI Recommendations"
+			title={ __( 'AI Recommendations', 'flavor-agent' ) }
 		>
 			<BlockRecommendationsContent
 				clientId={ rememberedClientId }
-				eyebrow="Last Selected Block"
-				introCopy="Using the last selected block until selection returns."
+				eyebrow={ __( 'Last Selected Block', 'flavor-agent' ) }
+				introCopy={ __(
+					'Using the last selected block until selection returns.',
+					'flavor-agent'
+				) }
 			/>
 		</PluginDocumentSettingPanel>
 	);

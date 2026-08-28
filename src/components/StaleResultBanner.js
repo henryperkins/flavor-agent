@@ -10,12 +10,18 @@
  */
 import { Button } from '@wordpress/components';
 import { caution } from '@wordpress/icons';
+import { __ } from '@wordpress/i18n';
 
 import { joinClassNames } from '../utils/format-count';
 import { REFRESH_ACTION_LABEL } from './surface-labels';
 
+const DEFAULT_STALE_MESSAGE = __(
+	'Context has changed since the last request. Refresh before relying on the previous results.',
+	'flavor-agent'
+);
+
 export default function StaleResultBanner( {
-	message = 'Context has changed since the last request. Refresh before relying on the previous results.',
+	message = DEFAULT_STALE_MESSAGE,
 	onRefresh,
 	isRefreshing = false,
 	refreshLabel = REFRESH_ACTION_LABEL,

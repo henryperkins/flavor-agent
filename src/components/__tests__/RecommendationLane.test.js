@@ -3,6 +3,7 @@ const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import RecommendationLane from '../RecommendationLane';
+import { SURFACE_TONES } from '../surface-labels';
 
 const { getContainer, getRoot } = setupReactTest();
 
@@ -12,7 +13,7 @@ describe( 'RecommendationLane', () => {
 			getRoot().render(
 				<RecommendationLane
 					title="Review first"
-					tone="Review first"
+					tone={ SURFACE_TONES.REVIEW }
 					count={ 2 }
 					countNoun="suggestion"
 					description="These changes can run safely in place."
