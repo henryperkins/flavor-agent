@@ -16,14 +16,11 @@ const DEFAULT_THEME_SLUG = 'flavor-agent-e2e';
 // via FLAVOR_AGENT_WP70_COMPANION_PLUGINS only when a spec needs it. Entries
 // accept a `slug@version` form so a gate can pin exactly what it verified.
 const DEFAULT_COMPANION_PLUGINS = [ 'ai' ];
-// The Gutenberg plugin line the editor gates target when they run against it.
-// 23.7.1 rather than 23.7.0: 23.7.0 was superseded two days later by the
-// 23.7.1 security release. Gutenberg is opt-in — the default run exercises the
-// editor that ships in the pinned WordPress image, so installing it by default
-// would silently change what every existing WP 7.0 gate verifies. Enable with
-// `--with-gutenberg` or FLAVOR_AGENT_WP70_GUTENBERG, either of which also
-// accepts an explicit version to test another point on the line.
-const DEFAULT_GUTENBERG_VERSION = '23.7.1';
+// The default plugin-backed editor gate targets the latest Gutenberg release,
+// alongside a distinct bundled-editor gate for WordPress 7.0+. Keep this pin in
+// sync with the package cohort in package.json and the CI/browser evidence.
+// Explicit older versions remain available only for diagnostic runs.
+const DEFAULT_GUTENBERG_VERSION = '23.9.0';
 
 function getWp70HarnessConfig(
 	rootDir = path.resolve( __dirname, '..' ),
@@ -34,9 +31,17 @@ function getWp70HarnessConfig(
 	const baseURL =
 		process.env.FLAVOR_AGENT_WP70_URL ||
 		`http://127.0.0.1:${ wordpressPort }`;
-	const gutenbergVersion = parseGutenbergVersion(
-		options.gutenberg ?? process.env.FLAVOR_AGENT_WP70_GUTENBERG
-	);
+	let requestedGutenberg = DEFAULT_GUTENBERG_VERSION;
+
+	if ( process.env.FLAVOR_AGENT_WP70_GUTENBERG !== undefined ) {
+		requestedGutenberg = process.env.FLAVOR_AGENT_WP70_GUTENBERG;
+	}
+
+	if ( options.gutenberg !== undefined ) {
+		requestedGutenberg = options.gutenberg;
+	}
+
+	const gutenbergVersion = parseGutenbergVersion( requestedGutenberg );
 
 	return {
 		rootDir,
@@ -280,7 +285,7 @@ async function waitForHttp( harness ) {
 			}
 
 			consecutiveSuccesses = 0;
-		} catch ( error ) {
+		} catch {
 			// The container may be up before Apache is fully reachable.
 			consecutiveSuccesses = 0;
 		}
@@ -459,9 +464,13 @@ function teardownWp70Harness() {
  * @return {string|undefined} Raw flag value, or undefined when absent.
  */
 function readGutenbergFlag( argv ) {
-	const flag = argv.find( ( argument ) =>
-		argument.startsWith( '--with-gutenberg' )
-	);
+	const flag = argv
+		.filter(
+			( argument ) =>
+				argument === '--with-gutenberg' ||
+				argument.startsWith( '--with-gutenberg=' )
+		)
+		.at( -1 );
 
 	if ( flag === undefined ) {
 		return undefined;

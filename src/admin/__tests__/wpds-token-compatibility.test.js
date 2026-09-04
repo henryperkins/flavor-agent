@@ -1,4 +1,5 @@
 /* eslint-disable @wordpress/no-unknown-ds-tokens */
+const { execFileSync } = require( 'child_process' );
 const fs = require( 'fs' );
 const path = require( 'path' );
 
@@ -105,12 +106,18 @@ describe( 'WPDS token compatibility', () => {
 		);
 
 		// Mirrors the bare-specifier branch of postcss.config.js's resolver,
-		// so this fails if the build's resolution stops honoring `exports`.
-		expect(
-			require.resolve( '@wordpress/theme/design-tokens.css', {
-				paths: [ path.join( SRC_DIR, 'admin' ) ],
-			} )
-		).toBe( exportedFile );
+		// in a native Node process so Jest's CSS module mapper cannot replace the
+		// resolved stylesheet with its style mock.
+		const nativeResolvedFile = execFileSync(
+			process.execPath,
+			[ '-p', "require.resolve('@wordpress/theme/design-tokens.css')" ],
+			{
+				cwd: path.join( SRC_DIR, 'admin' ),
+				encoding: 'utf8',
+			}
+		).trim();
+
+		expect( nativeResolvedFile ).toBe( exportedFile );
 		expect( fs.existsSync( exportedFile ) ).toBe( true );
 	} );
 

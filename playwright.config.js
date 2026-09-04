@@ -1,9 +1,11 @@
 const path = require( 'path' );
 const fs = require( 'fs' );
 const { defineConfig } = require( '@playwright/test' );
+const { DEFAULT_GUTENBERG_VERSION } = require( './scripts/wp70-e2e' );
 
 const rootDir = __dirname;
 const port = Number( process.env.PLAYWRIGHT_PORT || 9402 );
+const baseURL = `http://127.0.0.1:${ port }`;
 const pluginDir = rootDir;
 const muPluginDir = path.join( rootDir, 'tests/e2e/playground-mu-plugin' );
 const playgroundTmpDir = path.join( rootDir, 'output/playground-tmp' );
@@ -28,6 +30,7 @@ module.exports = defineConfig( {
 		flavorAgentHarness: 'playground',
 	},
 	testDir: path.join( rootDir, 'tests/e2e' ),
+	globalSetup: path.join( rootDir, 'tests/e2e/playground.global-setup.js' ),
 	// `__tests__` under tests/e2e belongs to Jest (`npm run test:unit`), which
 	// matches any file there. Playwright's default testMatch would also collect
 	// `*.test.js` from it and fail at load time on Jest globals.
@@ -43,7 +46,7 @@ module.exports = defineConfig( {
 	grepInvert: /@wp70-site-editor/,
 	outputDir: path.join( rootDir, 'output/playwright' ),
 	use: {
-		baseURL: `http://127.0.0.1:${ port }`,
+		baseURL,
 		trace: 'retain-on-failure',
 		screenshot: 'only-on-failure',
 		video: 'off',
@@ -61,7 +64,7 @@ module.exports = defineConfig( {
 			'npx @wp-playground/cli@3.1.51 server',
 			`--port ${ port }`,
 			'--wp=7.1',
-			'--login',
+			'--blueprint tests/e2e/playground-blueprint.json',
 			`--mount-dir ${ quoteShellArg(
 				pluginDir
 			) } /wordpress/wp-content/plugins/flavor-agent`,
@@ -78,7 +81,10 @@ module.exports = defineConfig( {
 			TMP: playgroundTmpDir,
 			TEMP: playgroundTmpDir,
 		},
-		port,
+		// Version the process-readiness marker so a locally reused Playground from
+		// an older pin cannot satisfy it. Global setup then makes a cookie-aware
+		// request to the MU-plugin's live active-version check.
+		url: `${ baseURL }/flavor-agent-gutenberg-${ DEFAULT_GUTENBERG_VERSION }-ready.txt`,
 		// Locally this keeps the ~1 minute cold boot out of every run. In CI it
 		// must be off: a reused server can be serving a stale mount, which
 		// would record a green against code the run never actually exercised.

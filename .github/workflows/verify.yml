@@ -152,28 +152,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
-    # First CI landing for a harness that has only ever run locally. Flip this
-    # to false once it has gone green on master, so it becomes a real gate.
-    continue-on-error: true
-
     strategy:
-      # Independent editor targets: a red Gutenberg leg must not cancel the
-      # bundled leg, because they answer different questions.
+      # These targets are independent compatibility gates, so preserve both
+      # results when either editor runtime fails.
       fail-fast: false
       matrix:
         editor:
-          # The editor that ships inside the pinned WordPress image.
           - label: bundled
-            bootstrap: npm run wp:e2e:wp70:bootstrap
-          # The Gutenberg plugin line, pinned so a green run names exactly what
-          # it verified. Runs the documented npm script rather than setting
-          # FLAVOR_AGENT_WP70_GUTENBERG directly, so a break in that entry
-          # point surfaces here instead of only when someone runs it locally.
-          - label: gutenberg-23.7.1
-            bootstrap: npm run wp:e2e:wp70:bootstrap:gutenberg
+            gutenberg: "false"
+          - label: gutenberg-23.9.0
+            gutenberg: "23.9.0"
 
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      FLAVOR_AGENT_WP70_GUTENBERG: ${{ matrix.editor.gutenberg }}
+      # The DHI default requires registry authentication. CI uses the documented
+      # public fallback; this changes only the database image, not the pinned
+      # WordPress/Gutenberg runtime under test.
+      MARIADB_IMAGE: mariadb:11.4
 
     steps:
       - name: Check out repository
@@ -217,10 +213,14 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Provision the WordPress 7.1 harness
-        run: ${{ matrix.editor.bootstrap }}
+        run: npm run wp:e2e:wp70:bootstrap
 
       - name: Run the WordPress 7.1 Site Editor suite
         run: npm run test:e2e:wp70
+        env:
+          # Global setup still verifies/provisions the selected editor, but the
+          # explicit provision above already produced a clean per-leg database.
+          FLAVOR_AGENT_WP70_RESET: "0"
 
       - name: Tear down the WordPress 7.1 harness
         if: always()

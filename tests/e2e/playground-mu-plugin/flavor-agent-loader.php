@@ -146,6 +146,58 @@ add_action(
 );
 
 add_action(
+	'rest_api_init',
+	static function (): void {
+		register_rest_route(
+			'flavor-agent-e2e/v1',
+			'/editor-readiness',
+			[
+				'methods'             => 'GET',
+				'permission_callback' => '__return_true',
+				'args'                => [
+					'gutenberg' => [
+						'required'          => true,
+						'sanitize_callback' => 'sanitize_text_field',
+					],
+				],
+				'callback'            => static function (WP_REST_Request $request) {
+					$expected_version = (string) $request->get_param('gutenberg');
+					$plugin_file      = 'gutenberg/gutenberg.php';
+					$plugin_path      = WP_PLUGIN_DIR . '/' . $plugin_file;
+					$active_plugins   = (array) get_option('active_plugins', []);
+					$plugin_data      = file_exists($plugin_path)
+						? get_file_data($plugin_path, [ 'Version' => 'Version' ])
+						: [];
+					$installed_version = (string) ($plugin_data['Version'] ?? '');
+					$is_active         = in_array($plugin_file, $active_plugins, true);
+
+					if (! $is_active || $installed_version !== $expected_version) {
+						return new WP_Error(
+							'flavor_agent_e2e_editor_not_ready',
+							'The expected Gutenberg editor runtime is not active.',
+							[
+								'status'    => 503,
+								'expected'  => $expected_version,
+								'installed' => $installed_version,
+								'active'    => $is_active,
+							]
+						);
+					}
+
+					return rest_ensure_response(
+						[
+							'status'            => 'ready',
+							'gutenberg_version' => $installed_version,
+						]
+					);
+				},
+			]
+		);
+	},
+	0
+);
+
+add_action(
 	'init',
 	static function (): void {
 		register_block_style(

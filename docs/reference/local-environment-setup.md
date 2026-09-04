@@ -216,16 +216,21 @@ The bootstrap installs and activates the `ai` plugin from WordPress.org because 
 
 ### Gutenberg browser gate
 
-The default harness runs the editor that ships inside the pinned WordPress image, so Gutenberg is opt-in — installing it by default would silently change what every existing WP 7.0 gate verifies.
+Flavor Agent's public support floor remains WordPress `7.0+`, including the editor bundled with a supported WordPress release. Separately, the plugin tracks compatibility with the latest Gutenberg plugin release. The default Site Editor run installs the repository-pinned latest Gutenberg version on the pinned WordPress image, while an explicit bundled-editor run covers the standard WordPress installation. Update the Gutenberg pin with the direct `@wordpress/*` package cohort whenever a newer release becomes the compatibility target.
+
+The fast Playground harness follows the same boundary through `tests/e2e/playground-blueprint.json`, which installs and activates the exact release before writing a version-specific process-readiness marker. Playwright global setup then makes a cookie-aware request to a mounted test-only MU-plugin route that returns success only while that exact Gutenberg version is active. The marker rejects a locally reused Playground from an older pin, while the live check rejects a deactivated or replaced plugin, so a smoke run cannot silently exercise the wrong editor.
+
+The Playwright command owns bootstrap through its global setup. Select the editor runtime on that command so a non-default selection remains in effect when the test process provisions the stack:
 
 ```bash
-npm run wp:e2e:wp70:bootstrap:gutenberg   # pinned Gutenberg (23.7.1) + WP 7.0.0
-npm run test:e2e:wp70
+npm run test:e2e:wp70                                      # Gutenberg 23.9.0 + WordPress 7.1.0
+FLAVOR_AGENT_WP70_GUTENBERG=0 npm run test:e2e:wp70        # WordPress 7.1.0 bundled editor
+FLAVOR_AGENT_WP70_GUTENBERG=23.7.1 npm run test:e2e:wp70   # Historical diagnostic only
 ```
 
-`--with-gutenberg=<version>` (or `FLAVOR_AGENT_WP70_GUTENBERG`) targets another point on the line; use `23.6.2` rather than `23.6.0` for the 23.6 line, and `23.7.1` rather than `23.7.0`, because each earlier tag was superseded. Bootstrap prints the WordPress image and the resolved companion list — copy both into the compatibility record in `gutenberg-feature-tracking.md`, since "ran against Gutenberg" without a version is not evidence.
+The standalone `npm run wp:e2e:wp70:bootstrap`, `npm run wp:e2e:wp70:bootstrap:bundled`, and `npm run wp:e2e:wp70:bootstrap:gutenberg` commands remain useful for provisioning or inspection. A later Playwright process must receive the same `FLAVOR_AGENT_WP70_GUTENBERG` value when it should preserve a bundled or historical selection. Bootstrap prints the WordPress image and resolved companion list — copy both into the compatibility record in `gutenberg-feature-tracking.md`, since "ran against Gutenberg" without a version is not evidence.
 
-CI runs both targets: the `e2e-wp70` job is a matrix over `bundled` (the editor inside the pinned WordPress image) and `gutenberg-23.7.1`, with `fail-fast: false` so one red leg does not cancel the other. Both legs are still `continue-on-error: true` while the harness earns its place as a gate, so read the job log rather than the check badge — a failing step inside a `continue-on-error` job still reports success.
+CI runs a required `e2e-wp70` matrix with a WordPress 7.1 bundled-editor leg and an exact Gutenberg 23.9.0 leg. It sets `MARIADB_IMAGE=mariadb:11.4` because the DHI default requires registry authentication on an otherwise public runner; that fallback changes only the database image, not the pinned WordPress or selected editor runtime. Explicit older Gutenberg plugin versions remain diagnostic. Current dated pass counts belong in `gutenberg-feature-tracking.md`; configuring a required leg is not itself fresh execution evidence.
 
 Current Site Editor browser specs exercise Flavor Agent editor behavior and selected Abilities API routes, but they do not validate the dedicated MCP server or the AI plugin Settings UI. Use the representative local runtime for MCP/AI-plugin manual checks, or extend `scripts/wp70-e2e.js` only when adding a dedicated MCP or AI-plugin Playwright spec.
 

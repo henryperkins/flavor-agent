@@ -1,6 +1,6 @@
 # Flavor Agent -- Source of Truth
 
-> Last updated: 2026-08-25
+> Last updated: 2026-09-04
 > Version: 0.1.0
 > Support floor: WordPress 7.0+, PHP 8.2+
 
@@ -206,7 +206,7 @@ Earlier planning iterations described a broader 5-phase roadmap. Since then, the
 3. **Inserter DOM discovery is still markup-coupled (mitigated)**: `inserter-dom.js` centralizes container (5), search-input (4), and toolbar toggle selectors and now fails closed to `null` when the expected editor structure is absent, so caller cleanup is isolated to one module.
 4. **Pattern settings compatibility is explicit and fail-closed**: `pattern-settings.js` probes future stable `blockPatterns` / `blockPatternCategories` / `getAllowedPatterns` paths when present, but current Gutenberg trunk still exposes `__experimentalAdditional*`, `__experimental*`, and `__experimentalGetAllowedPatterns` as the live baseline. The adapter returns an empty scoped result plus diagnostics instead of widening to an `all-patterns-fallback` result when contextual selectors are unavailable.
 5. **Theme-token source resolution is now merged rather than over-promoted**: `theme-settings.js` isolates raw settings reads and now uses stable sources when available while filling only missing branches from `__experimentalFeatures`. Flavor Agent still targets WordPress 7.0+, so block attribute role detection reads only the stable `role` key and no longer preserves deprecated `__experimentalRole` compatibility.
-6. **Browser coverage is split across two harnesses, both on WordPress `7.1`**: Playground is the fast smoke path (`--wp=7.1` on a pinned `@wp-playground/cli`), while a dedicated Docker-backed Site Editor harness owns refresh/drift-sensitive flows. The split is by harness capability, not by WordPress version — the earlier `6.9.4` Playground pin dated from when 7.0 was a beta whose editor runtime broke before plugin bootstrap, and no longer applies. The default `npm run test:e2e` command aggregates both harnesses and the checked-in smoke suite covers navigation plus `wp_template_part`, but the Site Editor half still requires Docker on PATH. That harness pins the exact stable image `wordpress:7.1.0-php8.2-apache` via `FLAVOR_AGENT_WP70_BASE_IMAGE`, deliberately holding the plugin's `Requires PHP: 8.2` floor under browser coverage while the dev container runs PHP 8.3; the canonical tag and override instructions live in `docs/reference/local-environment-setup.md`.
+6. **Browser coverage preserves the WordPress `7.0+` support contract and separately tracks the latest Gutenberg plugin**: on WordPress `7.1`, Playground is the fast exact-Gutenberg-`23.9.0` smoke path, while the Docker-backed Site Editor CI gate has required legs for both the editor bundled with WordPress `7.1` and exact Gutenberg `23.9.0`. The Docker harness owns refresh/drift-sensitive flows. The default `npm run test:e2e` command aggregates Playground and the latest-Gutenberg Docker target; the bundled Docker target is selected explicitly and remains required in CI. Older Gutenberg plugin releases are diagnostic only. The Docker harness pins `wordpress:7.1.0-php8.2-apache` via `FLAVOR_AGENT_WP70_BASE_IMAGE`, holding the plugin's `Requires PHP: 8.2` floor under browser coverage while the dev container runs PHP 8.3; canonical commands and diagnostic overrides live in `docs/reference/local-environment-setup.md`.
 7. **Activity history is still only a first governance-console slice**: The new `Settings > AI Activity` page provides a recent DataViews timeline with external apply approval/rejection, request diagnostics, attestation discovery for eligible style/template/template-part applies, structured before/after state summaries for privileged users, a linked-row banner, selected-row target/focused-view/related-row actions, passive evidence badges, and a first rich visual diff layer for style-governance rows, but broader observability workflow beyond the stored timeline remains open.
 8. **Uninstall cleanup is explicit and option-focused**: `uninstall.php` clears Flavor Agent cron hooks plus the static sync/core-roadmap transient keys, drops the plugin-owned activity table, and deletes registered plugin-owned provider, embedding, Qdrant, Cloudflare AI Search, docs runtime, pattern index, activity, guideline, and experiment options. Dynamic docs grounding cache transients are not bulk-deleted by the uninstall handler.
 9. **Provider-backed verification is still environment-dependent**: Live recommendation verification depends on whichever text-generation runtime is configured in `Settings > Connectors`, plus plugin-owned embedding credentials and the selected pattern storage backend, and should be rerun whenever those paths change.
@@ -320,9 +320,10 @@ npm run lint:js                      # ESLint on src/
 npm run lint:plugin                  # Plugin validation wrapper
 npm run check:docs                   # Live-doc freshness checks
 npm run test:unit -- --runInBand     # Jest unit tests
-npm run test:e2e                     # Default Playwright smoke coverage (Playground + Site Editor harness)
-npm run test:e2e:playground          # Fast WP 7.1 Playground smoke harness
-npm run test:e2e:wp70                # Docker-backed WP 7.1 Site Editor harness
+npm run test:e2e                     # Default latest-Gutenberg coverage (Playground + Docker Site Editor)
+npm run test:e2e:playground          # Fast WP 7.1 + Gutenberg 23.9.0 Playground smoke harness
+npm run test:e2e:wp70                # Docker-backed WP 7.1 + Gutenberg 23.9.0 by default
+FLAVOR_AGENT_WP70_GUTENBERG=0 npm run test:e2e:wp70 # Docker-backed WP 7.1 bundled-editor coverage
 node scripts/verify.js --skip-e2e    # Baseline non-browser release gate for cross-surface changes
 npm run wp:start                     # Local Docker stack up
 npm run wp:rebuild                   # Pull base image, rebuild, and start the local stack

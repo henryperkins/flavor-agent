@@ -11,7 +11,9 @@ Use it when you need to answer:
 
 ## Status
 
-Updated: 2026-08-26.
+Updated: 2026-09-04.
+
+2026-09-04 — Rebased the latest Gutenberg target to `23.9.0` without changing the public WordPress `7.0+` support floor: direct `@wordpress/*` dependencies use the matching tag cohort, Playground and the default Docker target install the exact plugin release, and the required Docker CI matrix covers both the WordPress `7.1` bundled editor and Gutenberg `23.9.0`. Older Gutenberg plugin versions are diagnostic only. Fresh local evidence covers both targets: 17/17 on WordPress 7.1 Playground with exact Gutenberg `23.9.0`, 32/32 on the pinned WordPress 7.1 Docker image with exact Gutenberg `23.9.0`, and 32/32 on that Docker image with the bundled editor.
 
 2026-08-26 — Retired completed plans, specs, WP 7.0 research snapshots, personal demo runbooks, and superseded validation artifacts from the working tree. Live contracts stay in `docs/features/` and `docs/reference/`. Git history retains the retired files.
 
@@ -104,7 +106,7 @@ These are verification or release-readiness tasks rather than product implementa
 | Task | Source | Notes |
 | --- | --- | --- |
 | Done — the Docker-backed Site Editor browser harness runs the official stable image, pinned to `wordpress:7.1.0-php8.2-apache`. | `STATUS.md`; `docs/reference/local-environment-setup.md` | Keep Docker available wherever the Site Editor harness is expected to run. |
-| Keep Gutenberg alignment current against `docs/reference/gutenberg-feature-tracking.md`. | `docs/reference/gutenberg-feature-tracking.md`; `STATUS.md` | Current representative browser evidence is the 2026-08-26 WordPress 7.1 Playwright pair. Remaining watch items: Global Styles `textShadow` feature-parity, live Navigation submenu UI, and Gutenberg's React 19 `inert` console warning (upstream). |
+| Keep bundled-editor and latest-Gutenberg alignment current against `docs/reference/gutenberg-feature-tracking.md`. | `docs/reference/gutenberg-feature-tracking.md`; `STATUS.md` | The public support floor remains WordPress 7.0+. Direct dependencies, Playground, and the default Docker target are aligned to Gutenberg 23.9.0; the required Docker CI matrix also retains the WordPress 7.1 bundled-editor leg. Fresh 2026-09-04 evidence is 17/17 on the latest-Gutenberg Playground target plus 32/32 on each Docker editor leg. Older Gutenberg plugin versions are diagnostic. Remaining watch items: Global Styles `textShadow` feature-parity, live Navigation submenu UI, and Gutenberg's React 19 `inert` console warning (upstream). |
 | Re-run the Connector Approvals post-approval smoke when a representative text-generation provider and AI plugin state are available. | `docs/reference/wordpress-ai-roadmap-tracking.md` | Verify the pending approval caller records `flavor-agent/flavor-agent.php`; keep the artifact honest when the stack returns `missing_text_generation_provider`. |
 | Keep provider-backed live recommendation validation explicit. | `docs/SOURCE_OF_TRUTH.md`; `STATUS.md` | Live recommendation proof depends on configured Connectors plus plugin-owned embedding and retrieval credentials. |
 | Complete the remaining WordPress.org screenshot set around the governance-console proof. | `README.md`; `docs/releases/v0.1.0.md`; `docs/releases/v0.1.0-proof-assets.md`; `docs/reference/release-submission-and-review.md` | `docs/screenshots/activity-audit.png` and `docs/screenshots/content-recommendation.png` exist. Still missing: Inspector recommendation, Global Styles or Style Book review, template review, pattern inserter, and settings readiness stills. |
