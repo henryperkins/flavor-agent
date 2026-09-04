@@ -4,9 +4,11 @@
 - **Approved:** 2026-08-27
 - **Series:** 1 of 5
 - **Date:** 2026-08-27
+- **Updated:** 2026-09-04
 - **Normative upstream:** `docs/superpowers/specs/2026-08-27-webmcp-recommendation-protocol-design.md`
-- **Upstream snapshot:** commit `f8aae3014cc0b7009d6384e632f8fd303202be8e`, blob `8fead468cbe128d763bec1d1634ee394d136051f`
-- **Implementation baseline:** commit `f8aae3014cc0b7009d6384e632f8fd303202be8e`
+- **Normative upstream working-tree fingerprint:** Git blob ID `96c61937cece860315716a8cb5ce1eca2d0c9638` (computed from the refreshed companion contract on 2026-09-04; not stored until those bytes are committed)
+- **WebMCP annotation source:** [`webmachinelearning/webmcp` commit `7b3f50f31848b529e69bedbbdf8da0edccba055f`](https://github.com/webmachinelearning/webmcp/commit/7b3f50f31848b529e69bedbbdf8da0edccba055f)
+- **Repository source anchor:** tracked `master` commit `4728d2a7588ff554293b60a900e387372b32f3a9`
 - **Scope:** Page-owned `RecommendationWorkspace`, bounded workspace-context capture, authenticated server-retained `RecommendationRun`, multi-surface generation, expiry projection, and run lifecycle storage
 
 ## 1. Purpose
@@ -96,11 +98,11 @@ The public payload never contains native operations, pattern markup, unrestricte
 
 ### 3.5 No public WebMCP registration in Spec 1
 
-Spec 1 reserves the imperative adapter seam but MUST NOT call `document.modelContext.registerTool()`. Unsupported browser behavior, registration lifecycle, closed tool schemas, and `AbortSignal` cleanup are Spec 5 concerns.
+Spec 1 reserves the imperative adapter seam but MUST NOT call `document.modelContext.registerTool()`, so no WebMCP tool descriptor or nested annotation metadata is registered or exposed. Unsupported browser behavior, registration lifecycle, closed tool schemas, the canonical protocol's three-field annotation matrix, and `AbortSignal` cleanup are Spec 5 concerns.
 
-## 4. Current baseline and integration constraints
+## 4. Current source and integration constraints
 
-The implementation starts from these repository facts:
+The implementation starts from the anchored repository facts below:
 
 | Area | Current state | Spec 1 treatment |
 |---|---|---|
@@ -1754,7 +1756,7 @@ Spec 1 is implemented only when all of the following are true:
 13. Run reads project time without database writes or page-store dispatches.
 14. Activation, upgrade, deactivation, prune, multisite storage context, and uninstall behavior have automated coverage.
 15. Existing recommendation UI, activity storage, apply/approval, and undo behavior remain unchanged.
-16. No WebMCP tools are registered and no partial protocol capability is advertised.
+16. No `registerTool` call occurs, no WebMCP tool is exposed, and no partial protocol capability is advertised.
 17. All section 19 verification evidence is recorded against one immutable implementation candidate, with any unavailable harness explicitly classified.
 
 ## 21. Handoff contracts to later specifications
@@ -1803,8 +1805,9 @@ Spec 5 receives:
 - pure workspace/run read projections
 - all later selection/apply/status/undo workflow services
 - the shared version manifest and JSON Schemas
+- the canonical protocol section 16 per-tool `readOnlyHint`, `untrustedContentHint`, and `consequentialHint` records
 
-It registers exactly eight imperative WebMCP tools once per supported page lifecycle, cleans them up with an `AbortSignal`, returns concise JSON only after visible state settles, and fails closed when any prerequisite is unavailable.
+It registers exactly eight imperative WebMCP tools once per supported page lifecycle with the canonical annotation records, cleans them up with an `AbortSignal`, returns concise JSON only after visible state settles, and fails closed when any prerequisite is unavailable. Only `complete_recommendation_undo_request` is registered with `consequentialHint: true`; pending apply-request creation and the other six tools use `false`. These hints never replace WordPress authorization or the protocol's confirmation rules.
 
 ## 22. Canonical protocol prerequisite accounting
 
@@ -1824,24 +1827,24 @@ No P0 row is considered globally complete merely because its Spec 1 subset is im
 
 ## 23. Source anchors
 
-The local source anchors below were verified on 2026-08-27 against immutable commit `f8aae3014cc0b7009d6384e632f8fd303202be8e`.
+The repository source anchors below were reverified on 2026-09-04 against tracked `master` commit `4728d2a7588ff554293b60a900e387372b32f3a9`. The protocol row separately fingerprints the final edited companion-contract bytes using Git's blob-hash algorithm; until committed, that value is reproducible with `git hash-object` but is neither stored nor claimed to be reachable from the repository source-anchor commit.
 
-| File | Snapshot blob | Grounding |
+| File | Git blob ID or working-tree fingerprint | Grounding |
 |---|---|---|
-| `docs/superpowers/specs/2026-08-27-webmcp-recommendation-protocol-design.md` | `8fead468cbe128d763bec1d1634ee394d136051f` | Normative workspace, context, run, expiry, and prerequisite contract |
-| `src/store/index.js` | `a4366e0b5b5fd9f413b333e1979a8f59a2035833` | Existing single store, per-surface state, and registration at lines 140–255 and 4500–4514 |
+| `docs/superpowers/specs/2026-08-27-webmcp-recommendation-protocol-design.md` | `96c61937cece860315716a8cb5ce1eca2d0c9638` | Working-tree fingerprint for the normative workspace, context, run, expiry, prerequisites, and WebMCP annotation contract |
+| `src/store/index.js` | `af96d00dfb1924ff9cb88d5c1b0c7b349eece9ed` | Existing single store; per-surface default state at lines 140–187, surface contract at lines 198–255, and registration at lines 4845–4847 |
 | `src/index.js` | `9ce29db3b4f73ed86fa19bb0514c47166484e484` | One editor plugin mount and component bootstrap at lines 15–48 |
-| `src/inspector/BlockRecommendationsPanel.js` | `4676cd0b59414725ee2524da82dd0f5b9c02f168` | Component-local block selection at lines 544–594 |
+| `src/inspector/BlockRecommendationsPanel.js` | `117cee61ee562e492721e1377d1a8c646cbc7ea9` | Component-local block selection at lines 555–605 |
 | `src/store/executable-surfaces.js` | `3278881f178f47d43f810078ef540a32c16b9155` | Current surface definitions and reusable per-surface runtime patterns |
 | `src/store/abilities-client.js` | `ea6a0e43f9980c3c1629cab1be7fa13ad022ef4c` | Existing client Ability execution and REST fallback |
-| `assets/abilities-bridge.js` | `1f501f9969462303e7bb9156f310c7164e6cdf8a` | Existing page Ability bridge; not a run/workspace owner |
-| `inc/Abilities/Registration.php` | `fa73c1ba44a1a08ff589b974a961d4168ea056b4` | Eight recommendation Abilities at lines 154–197 and governed lanes at lines 205–243 |
+| `assets/abilities-bridge.js` | `0def3bff3da693e8f1141560ca9ee93b89379b5a` | Existing page Ability bridge at lines 47–76; not a run/workspace owner |
+| `inc/Abilities/Registration.php` | `1e0b723b50aee8967809e9078e00a10caa8448f3` | Eight recommendation Abilities at lines 154–197 and governed lanes at lines 205–243 |
 | `inc/Abilities/RecommendationAbilityExecution.php` | `a146abaced0a98b889dba0783fe6be0c4d0cf248` | Shared recommendation execution, request metadata, and diagnostics |
 | `inc/AI/Abilities/RecommendationAbility.php` | `89a725a079b9a84ebd5bec184fe7663a47673184` | Canonical Ability class execution/permission callbacks |
 | `inc/Activity/Repository.php` | `90ea756087019785e353a814a9b05ad8b7105cfe` | Existing custom-table schema/install/prune conventions at lines 10–135 |
 | `inc/Activity/ActivityStorageContext.php` | `378234abe86122bc2abc67f3e61de8c0a97f3aa8` | Immutable database/blog ownership precedent |
 | `inc/REST/Agent_Controller.php` | `6dbac95ed63740233df2f704fff4f44ca7eb7bf5` | Existing authenticated route registration conventions |
-| `flavor-agent.php` | `f4fddec6bc73d73881df40d5ef71d4dde07da24e` | Activation, deactivation, init, and REST hooks at lines 73–145 |
+| `flavor-agent.php` | `cd601b8e178854376430c4636cc5738114094b72` | Activation/deactivation at lines 73–102; lifecycle and REST hooks at lines 105–145 |
 | `inc/UninstallOptions.php` | `8b4481c0a3b872feb9913e148b1477d60c94692f` | Plugin-owned option cleanup registry |
 | `uninstall.php` | `12af4e85ae68c5280bb5c0b7b0bf6687b7ee7c49` | Plugin-owned table and cron cleanup convention |
 | `docs/reference/cross-surface-validation-gates.md` | `0b934609874af8b7785f65fa4aa993265aa57648` | Required shared-contract and multi-surface evidence |
@@ -1868,4 +1871,4 @@ Current WordPress documentation confirms that `wp_get_ability()` returns the reg
 - Context receipts and context signatures are distinct. The server owns both final forms.
 - Public run data and private native bindings are stored separately and expire together.
 - Run reads project expiry without persistence; cron owns storage cleanup.
-- Spec 1 does not migrate checkbox state, calculate an apply plan, or expose WebMCP. Those omissions are explicit release blockers, not implicit fallback behavior.
+- Spec 1 does not migrate checkbox state, calculate an apply plan, call `registerTool`, or expose WebMCP tools. Those omissions are explicit release blockers, not implicit fallback behavior.

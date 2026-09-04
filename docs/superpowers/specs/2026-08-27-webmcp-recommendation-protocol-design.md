@@ -3,6 +3,8 @@
 - **Status:** Canonical design contract; runtime implementation is not part of this document
 - **Protocol version:** `1.0`
 - **Date:** 2026-08-27
+- **Updated:** 2026-09-04
+- **WebMCP annotation source:** [`webmachinelearning/webmcp` commit `7b3f50f31848b529e69bedbbdf8da0edccba055f`](https://github.com/webmachinelearning/webmcp/commit/7b3f50f31848b529e69bedbbdf8da0edccba055f) (`ToolAnnotations` snapshot, 2026-09-03)
 - **Scope:** Flavor Agent recommendation context, selection, review, governed apply status, and governed undo projected into an editor page through imperative WebMCP tools
 
 ## 1. Purpose
@@ -108,7 +110,7 @@ The recommendation workspace composes context configuration, one or more recomme
 
 The eight WebMCP tools expose the workflow to an agent in the current editor page. They MUST be registered through the imperative `document.modelContext.registerTool()` interface, registered once per page lifecycle, and removed with an `AbortSignal` when the owning UI unmounts or the editor scope changes.
 
-WebMCP annotations are behavioral hints. They are not authorization controls.
+Every tool descriptor MUST explicitly provide the complete section 16 annotation record: `readOnlyHint`, `untrustedContentHint`, and `consequentialHint`. In the pinned upstream contract, `consequentialHint: true` signals that executing the tool has significant, real-world, or non-reversible consequences and lets a client or agent selectively require user confirmation. All three annotations are behavioral hints, not authorization controls; Flavor Agent still enforces every permission and target boundary itself.
 
 ## 6. Wire conventions and identifiers
 
@@ -790,11 +792,13 @@ Failure:
 
 Tool names are stable for protocol 1.x.
 
+The annotation records below are complete. Implementations MUST NOT rely on upstream defaults. All eight tools may return generated or externally derived content and therefore use `untrustedContentHint: true`; only the two observational tools use `readOnlyHint: true`; and only the persistent undo operation uses `consequentialHint: true`.
+
 ### 16.1 `read_recommendation_workspace`
 
 **Kind:** read
 
-**Annotations:** `readOnlyHint: true`, `untrustedContentHint: true`
+**Annotations:** `readOnlyHint: true`, `untrustedContentHint: true`, `consequentialHint: false`
 
 Input:
 
@@ -810,7 +814,7 @@ Returns the selected protocol version, supported versions, current workspace sna
 
 **Kind:** configure/stage
 
-**Annotations:** `readOnlyHint: false`, `untrustedContentHint: true`
+**Annotations:** `readOnlyHint: false`, `untrustedContentHint: true`, `consequentialHint: false`
 
 Required input:
 
@@ -830,7 +834,7 @@ Returns the new workspace revision, normalized configuration, and any superseded
 
 **Kind:** complete a generation task
 
-**Annotations:** `readOnlyHint: false`, `untrustedContentHint: true`
+**Annotations:** `readOnlyHint: false`, `untrustedContentHint: true`, `consequentialHint: false`
 
 Required input:
 
@@ -850,7 +854,7 @@ The run becomes current only if `expectedWorkspaceRevision` still matches at ins
 
 **Kind:** configure/stage
 
-**Annotations:** `readOnlyHint: false`, `untrustedContentHint: true`
+**Annotations:** `readOnlyHint: false`, `untrustedContentHint: true`, `consequentialHint: false`
 
 Required input:
 
@@ -870,7 +874,7 @@ Validates and atomically replaces selection, then derives a new plan. It returns
 
 **Kind:** start/navigate within the supported product workflow
 
-**Annotations:** `readOnlyHint: false`, `untrustedContentHint: true`
+**Annotations:** `readOnlyHint: false`, `untrustedContentHint: true`, `consequentialHint: false`
 
 Required input:
 
@@ -891,7 +895,7 @@ It does not authorize apply, create an activity row, or mutate site content.
 
 **Kind:** complete a governed request-creation task
 
-**Annotations:** `readOnlyHint: false`, `untrustedContentHint: true`
+**Annotations:** `readOnlyHint: false`, `untrustedContentHint: true`, `consequentialHint: false`
 
 Required input:
 
@@ -929,7 +933,7 @@ Rules:
 
 **Kind:** read
 
-**Annotations:** `readOnlyHint: true`, `untrustedContentHint: true`
+**Annotations:** `readOnlyHint: true`, `untrustedContentHint: true`, `consequentialHint: false`
 
 Required input:
 
@@ -946,7 +950,7 @@ This tool MUST be a no-write projection. The current admin feed already demonstr
 
 **Kind:** complete a persistent reversal
 
-**Annotations:** `readOnlyHint: false`, `untrustedContentHint: true`
+**Annotations:** `readOnlyHint: false`, `untrustedContentHint: true`, `consequentialHint: true`
 
 Required input:
 
@@ -1251,11 +1255,11 @@ The five-level seam policy and WordPress permissions serve different purposes:
 - Host or product confirmation communicates user intent for destructive/persistent operations.
 - Ability `permission_callback` and executor checks authorize the authenticated user and exact target.
 - Context and Gutenberg `can*` checks are UX/preflight evidence.
-- WebMCP annotations help the host describe behavior.
+- WebMCP annotations help the host describe behavior. In particular, `consequentialHint: true` may cause a host to require confirmation, but it neither records nor proves that confirmation.
 
 None substitutes for another.
 
-`complete_recommendation_apply_request` creates a pending request and relies on a separate authorized admin approval before mutation. `complete_recommendation_undo_request` performs a persistent reversal and SHOULD receive explicit host/user confirmation, but a `confirmed: true` input would not be security and is intentionally absent.
+`complete_recommendation_apply_request` has `consequentialHint: false`: its invocation creates only a pending, reviewable request and relies on a separate authorized admin approval before target mutation. `complete_recommendation_undo_request` has `consequentialHint: true` because its invocation performs a persistent reversal and SHOULD receive explicit host/user confirmation, but a `confirmed: true` input would not be security and is intentionally absent.
 
 ## 24. Worked protocol 1.0 examples
 
@@ -1354,7 +1358,7 @@ These are required work items, not descriptive caveats. Protocol 1.0's eight-too
 
 After P0, implementation order is:
 
-1. register the eight closed-schema tools behind one protocol-capability gate
+1. register the eight closed-schema tools behind one protocol-capability gate, with the exact three-field annotation records in section 16
 2. connect them only to the completed workspace/run/projector/compiler primitives
 3. run the section 28 contract, repository, and browser evidence
 4. enable the capability only where every required Ability and editor dependency is available
@@ -1419,7 +1423,7 @@ Implementation is not conformant until the following evidence exists.
 - Registration is cleaned up with `AbortSignal`
 - Unsupported browsers and registration failures fail closed
 - Each execute callback waits for visible workspace state to settle before returning
-- Results are concise, JSON-serializable, and correctly annotated for read-only/untrusted behavior
+- Results are concise and JSON-serializable; every descriptor's complete annotation object exactly matches section 16, including `consequentialHint: true` only for `complete_recommendation_undo_request`
 - No raw Gutenberg selector/action or generic Ability executor is exposed
 
 ### 28.5 Repository gates
@@ -1449,28 +1453,30 @@ None of those semantics may be partially implemented under protocol 1.0 names.
 
 ## 30. Source anchors
 
-These anchors were verified locally on 2026-08-27 against immutable Git commit `b47a6a08e16336ace9f9fea8e841ca3323334b45`. Line 205 in `Registration.php` is the `external_apply_ability_classes()` declaration. The table supplies blob IDs so the reviewed bytes can be checked even when later line numbers drift.
+The upstream WebMCP annotation contract was verified on 2026-09-04 against [`webmachinelearning/webmcp` commit `7b3f50f31848b529e69bedbbdf8da0edccba055f`](https://github.com/webmachinelearning/webmcp/commit/7b3f50f31848b529e69bedbbdf8da0edccba055f), which adds `consequentialHint` to `ToolAnnotations` with a default of `false`.
+
+The repository anchors below were reverified on 2026-09-04 against tracked `master` commit `4728d2a7588ff554293b60a900e387372b32f3a9`. Line 205 in `Registration.php` is the `external_apply_ability_classes()` declaration. Blob IDs pin the reviewed committed bytes even when later line numbers drift.
 
 | File | Snapshot blob |
 |---|---|
-| `src/store/index.js` | `a4366e0b5b5fd9f413b333e1979a8f59a2035833` |
-| `src/inspector/BlockRecommendationsPanel.js` | `4676cd0b59414725ee2524da82dd0f5b9c02f168` |
+| `src/store/index.js` | `af96d00dfb1924ff9cb88d5c1b0c7b349eece9ed` |
+| `src/inspector/BlockRecommendationsPanel.js` | `117cee61ee562e492721e1377d1a8c646cbc7ea9` |
 | `src/store/activity-history.js` | `349280a2dae62ea3023accc3f173ff60475d7bc3` |
-| `inc/Abilities/Registration.php` | `fa73c1ba44a1a08ff589b974a961d4168ea056b4` |
+| `inc/Abilities/Registration.php` | `1e0b723b50aee8967809e9078e00a10caa8448f3` |
 | `inc/Abilities/StyleAbilities.php` | `c2225d792b4f99dbb48a2df6c9a64937317af2f8` |
 | `inc/Abilities/PostBlocksAbilities.php` | `f80c2857e7cdfe4e420d67f250de2f845933bf12` |
 | `inc/Attestation/StatementBuilder.php` | `f120990dda9b155c10b37be8c6e80dc20f7004f3` |
 | `inc/Activity/Repository.php` | `90ea756087019785e353a814a9b05ad8b7105cfe` |
 | `inc/Abilities/ApplyAbilities.php` | `7c93bc1f091a39ccb191bd5e2861ec554b1b85cd` |
 | `docs/reference/activity-state-machine.md` | `a3a4cd2835248f4fcf072757c4855ab643ce4efd` |
-| `docs/reference/abilities-and-routes.md` | `fcd157885048fe939ea1d87babe2e4a8a88687b9` |
+| `docs/reference/abilities-and-routes.md` | `825d3bcf47d3ee2a0be5ab169593eec4bdd89e51` |
 | `docs/reference/cross-surface-validation-gates.md` | `0b934609874af8b7785f65fa4aa993265aa57648` |
 
 Grounding details:
 
 - `src/store/index.js:1-6` — current recommendation state is per tab
 - `src/store/index.js:198-255` — current shared surface contract; pattern is missing
-- `src/inspector/BlockRecommendationsPanel.js:544-594` — block multi-select state is currently component-local
+- `src/inspector/BlockRecommendationsPanel.js:555-605` — block selected/applied key `Set` state and its local reset/toggle handling are currently component-local
 - `src/store/activity-history.js:404-468` — current entity/style scope-key conventions
 - `inc/Abilities/Registration.php:154-197` — eight recommendation Ability registrations
 - `inc/Abilities/Registration.php:205-243` — governed external apply/read/undo Ability registrations; line 200 is documentation and line 205 is the method declaration
@@ -1486,7 +1492,7 @@ Grounding details:
 - `docs/reference/abilities-and-routes.md` — current Ability schemas, permissions, dedicated MCP exposure, and REST decision route
 - `docs/reference/cross-surface-validation-gates.md` — required multi-surface release evidence
 
-The `docs/reference/abilities-and-routes.md` working-tree copy had unrelated local edits during this review, so the source table deliberately identifies its clean snapshot blob rather than claiming those uncommitted bytes as evidence.
+Each table row identifies committed snapshot bytes; uncommitted working-tree content is never source-anchor evidence.
 
 ## 31. Design decisions resolved by this document
 
@@ -1508,6 +1514,7 @@ The `docs/reference/abilities-and-routes.md` working-tree copy had unrelated loc
 - Exact negotiated-version input schemas stay closed; a newer client must fully down-convert after negotiating an older minor version.
 - `editor_busy` has an exact page guard; `workspace_busy` is not a protocol 1.0 response code.
 - Both `read_*` tools require pure expiry projection before registration.
+- Every WebMCP tool explicitly carries all three pinned annotations; only persistent undo is consequential, while pending apply-request creation is not target mutation and remains non-consequential.
 - New apply requests check run expiry at dereference and again immediately before row creation; exact pre-existing requests remain deduplicable after run expiry.
 - Mixed-surface examples are explicit sequential workflows, not cross-target atomic promises.
 - `editor_mutation` is replaced by `stage_only`, which is not WebMCP-applicable in protocol 1.0.

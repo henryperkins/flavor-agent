@@ -12,12 +12,12 @@
 
 ## Global Constraints
 
-- Begin execution from the commit containing this approved plan and spec. Record the immutable starting SHA, then re-resolve every named source anchor if the checkout has advanced.
-- Before creating the implementation worktree, stop unless the owner has committed the existing user changes to docs/reference/abilities-and-routes.md onto a known base, or exported them as a named patch and explicitly authorized applying that patch. A clean worktree from this plan commit will not contain those uncommitted edits, so silently editing the stale committed copy is forbidden. Keep the unrelated untracked plan and every other user-owned change untouched.
-- After that prerequisite is resolved, use superpowers:using-git-worktrees and start from the commit containing this approved plan/spec plus the owner's resolved documentation base.
+- Begin execution from the commit containing this refreshed plan and spec. Record the immutable starting SHA and verify every named runtime source anchor against the `4728d2a7588ff554293b60a900e387372b32f3a9` repository baseline; if the checkout has advanced, re-resolve and update every affected anchor before implementation.
+- Before creating the implementation worktree, inspect the current checkout and establish ownership for every overlapping path. User-owned changes that the implementation must include need a known committed base or a named exported patch plus explicit authorization; preserve every unrelated tracked or untracked change and never copy over or silently replace it.
+- After that ownership check is resolved, use superpowers:using-git-worktrees and start from the commit containing this refreshed plan/spec plus any explicitly authorized dependency.
 - Follow strict TDD for every production behavior: add a discriminating test, run it and observe the intended failure, implement the smallest complete behavior, then rerun the focused suite.
 - Edit source and tests only. Do not hand-edit build/ or dist/. Run npm run build before browser evidence because the Playwright harnesses do not compile src/.
-- Keep the current eight recommendation Abilities and 35 total Ability invariant. Do not create a ninth workflow Ability, add an MCP Adapter exposure, or register document.modelContext tools.
+- Keep the current eight recommendation Abilities and 35 total Ability invariant. Do not create a ninth workflow Ability, add an MCP Adapter exposure, call `document.modelContext.registerTool()`, or expose any WebMCP tool. Spec 5 owns tool descriptors and the protocol section 16 annotation matrix.
 - Preserve every legacy recommendation panel and its current checkbox/review owner. Spec 1 adds no product button and performs no dual write to shared selection, review, or apply-plan state.
 - Invoke recommendations only through the registered WP_Ability object returned by wp_get_ability(). Validate the fixed input before permission preflight, call execute(), then independently validate the output; never invoke recommender callbacks directly.
 - Keep preflight input distinct from the exact input WordPress authorized. Gate the post-normalization validation boundary against protected target drift, require a scoped `wp_before_execute_ability` witness for every ready result, retain only its closed `retainedAuthorizationInput`, and fail a short-circuited apparent success closed.
@@ -59,7 +59,7 @@
 | AC13 read projection performs no writes | Tasks 10–11 | Write-counter assertions |
 | AC14 lifecycle, prune, multisite, uninstall | Tasks 9–10 | Lifecycle/repository tests |
 | AC15 legacy recommendation/apply/undo unchanged | Tasks 5, 13, and 14 | Regression and browser evidence |
-| AC16 no public WebMCP capability | Tasks 1, 5, and 14 | Ability count and registration counter |
+| AC16 no public WebMCP capability | Tasks 1, 5, and 14 | Ability count and zero `registerTool` calls |
 | AC17 immutable-candidate verification ledger | Task 14 | Candidate SHA, evidence SHA, archive digest, and blocker status |
 
 ## File Structure
@@ -1694,7 +1694,7 @@ Then:
 - Create: tests/phpunit/VendorlessRecommendationRunBootstrapTest.php
 - Create: docs/reference/recommendation-workspace-and-runs.md
 - Create: docs/validation/2026-08-27-webmcp-workspace-run-foundation.md
-- Modify after the global dirty-doc prerequisite: docs/reference/abilities-and-routes.md
+- Modify after the global worktree-ownership guard: docs/reference/abilities-and-routes.md
 - Modify: docs/reference/js-frontend-architecture.md
 - Modify: docs/reference/php-backend-architecture.md
 - Modify: docs/FEATURE_SURFACE_MATRIX.md
@@ -1723,7 +1723,7 @@ Intercept only the fixed run route. Add ordinary Playground tests and @wp70-site
 - two out-of-order completions from one base revision install exactly one;
 - a forced partial run caches one result for every requested surface;
 - legacy panels still work and never dual-write shared selection;
-- a pre-bootstrap document.modelContext.registerTool counter remains zero.
+- a pre-bootstrap `document.modelContext.registerTool` counter remains zero.
 
 - [ ] **Step 2: Update stable product/developer documentation**
 
@@ -1736,9 +1736,9 @@ Document:
 - public/private retained payload boundary, 30-minute active TTL, 24-hour tombstone, and pure reads;
 - activation/cron storage and uninstall deletion disclosure;
 - unchanged legacy recommendation/apply/undo flows;
-- no public WebMCP tools until Spec 5.
+- no public WebMCP tools until Spec 5, which must register descriptors using the canonical protocol section 16 annotation matrix.
 
-Do not reach this step until the global prerequisite for the user's existing docs/reference/abilities-and-routes.md edits is satisfied and those edits are present in the implementation branch. Reconcile against that exact resolved content. Update route totals only from a fresh source count. Keep 35 Abilities and 15 MCP tool invariants.
+Apply the global worktree-ownership guard before editing docs/reference/abilities-and-routes.md. Reconcile against the exact authorized source content, update route totals only from a fresh source count, and keep the 35-Ability and 15-MCP-tool invariants.
 
 Replace stale dated evidence in cross-surface-validation-gates.md rather than appending contradictory claims. Add stable doc checks for the final route count, nine wire surfaces, eight recommendation Abilities, and zero public WebMCP tools.
 
