@@ -1,10 +1,10 @@
-# Flavor Agent Save-Persistence Outcomes 1.1
+# Flavor Agent Save-Persistence Outcomes 1.2
 
 - **Status:** Canonical design contract; no runtime implementation exists yet
-- **Contract version:** `1.1`
+- **Contract version:** `1.2`
 - **Date:** 2026-09-11
 - **Baseline commit:** `fd28015` (`master`)
-- **Revision:** `1.1` applies 28 findings from an adversarial verification pass over `1.0`
+- **Revision:** `1.1` applied 28 findings from an adversarial verification pass over `1.0`; `1.2` resolves 9 further correctness gaps (occurrence identity, cohort definitions, verification authority, undo evidence, verdict ordering, operation aggregation, the trash route, schema pinning)
 - **Scope:** What an Apply claims — to the editor who clicked it and to the operator reading the audit — and how persistence is proven
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** are normative.
@@ -88,10 +88,12 @@ Server-authored verdicts are authoritative. `save_failed` MUST NOT override, sup
 Terminality is **not uniform**:
 
 - `save_confirmed` and `save_discarded` are terminal.
-- `save_unverifiable` is **not** terminal. It settles one occurrence but leaves the apply in the eligible set, so a later save MAY produce a conclusive verdict. §6.3's eligible-set predicate is therefore *no `save_confirmed` and no `save_discarded`*.
-- An apply MAY accumulate multiple `save_unverifiable` rows, one per occurrence. `saveUnverifiableRate` counts **applies whose latest verdict is `save_unverifiable`**, not rows.
+- `save_unverifiable` is **not** terminal. It settles one occurrence but leaves the apply eligible, so a later save MAY produce a conclusive verdict.
+- An apply MAY accumulate multiple verdict rows, one per occurrence.
 
-An error returning after a successful write is not theoretical: `class-wp-rest-templates-controller.php:392-413` writes via `wp_update_post()` / `wp_insert_post()` and can still return an error from `update_additional_fields_for_object()` afterwards — and since `wp_after_insert_post()` is only called at `:421`, that path returns after the row was written but before verification would fire. A lost response can likewise follow a successful write.
+**Ordering is server-assigned, never job-completion order.** Each capture assigns a monotonic `save_sequence` per entity. A verdict is immutable for its own occurrence, but an apply's **resolved state** is the verdict of the highest `save_sequence` that produced one. A later save therefore supersedes an earlier conclusive verdict, and a deferred job finishing out of order MUST NOT change the resolved state. Without this, two saves freezing the same apply let completion order decide the answer.
+
+An error returning after a successful write is not theoretical, and the template controller shows why the precedence rule matters: `class-wp-rest-templates-controller.php:392` writes via `wp_update_post()` — which fires `wp_after_insert_post` internally (§6.1) — and `:412-415` can still return an error from `update_additional_fields_for_object()` afterwards. **Verification has already run by then.** A `save_confirmed` can therefore exist for a save whose response the client saw as a failure. A lost response can likewise follow a successful write.
 
 ### 5.3 Schema
 
@@ -104,6 +106,8 @@ Three nullable columns are added to the activity table:
 | `save_occurrence_id varchar(64) NULL` | Verdict → occurrence link |
 
 with `KEY save_lifecycle_link (linked_apply_activity_id, save_occurrence_id)`. The latter two are **immutable evidence**, not assurance state, so they do not conflict with D6 — which forbids a second *mutable assurance* column. Without them the §5.4 lookup degrades to a full-table JSON scan.
+
+`save_sequence` and `origin` (§6.8) are carried in the verdict payload rather than as columns: the link index already bounds the row set per apply, so ordering is resolved within that set without a fourth indexed column.
 
 `apply_lane` MUST NOT be read as evidence of verification (§3, item 2).
 
@@ -121,7 +125,18 @@ Achieved assurance MUST be derived from durable evidence, through one shared res
 1. `executionResult = 'applied'` alone MUST NOT establish persistence, for any lane.
 2. Reporting MUST load linked outcome rows by explicit apply/occurrence lookup, beyond the displayed page or date window. Because `Repository::delete_before()` (`:1568-1597`) prunes purely by `created_at`, verdict rows MUST be exempted from the prune while their linked apply row survives — otherwise requirement 3 is unsatisfiable.
 3. Historical rows without sufficient evidence remain `unknown`. Historical reports MUST replay the recorded verdict and MUST NOT re-check today's content.
-4. **Absence of a verdict MUST NOT be treated as evidence of non-persistence.** Applies with no terminal verdict — for any reason, not only historical `unknown` rows — are excluded from the numerator **and** denominator of every persistence rate, and counted only in `unverifiedCoverageCount` / `verificationCoverageRate`.
+4. **Absence of a verdict MUST NOT be treated as evidence of non-persistence.** Applies that were **never compared** — for any reason, not only historical `unknown` rows — are excluded from the numerator **and** denominator of every persistence rate, and counted only in `unverifiedCoverageCount` / `verificationCoverageRate`.
+
+**Cohorts.** Three cohorts are defined once and used consistently by §7.5 and §8.1. "Compared" is a property of having a verdict row, not of that verdict being conclusive:
+
+| Cohort | Definition |
+|---|---|
+| **eligible** | Meets §6.3's eligible predicate for at least one capture |
+| **compared** | Has ≥1 verdict row of any kind, including `save_unverifiable` |
+| **conclusive** | Resolved state (§5.2) is `save_confirmed` or `save_discarded` |
+| **never compared** | Eligible, but has no verdict row |
+
+`compared` and `never compared` partition `eligible`. `conclusive` is a subset of `compared`. An apply with only `save_unverifiable` rows is **compared but not conclusive** — it MUST NOT be counted as never compared, because it was in fact compared.
 
 ### 5.5 Authorship enforcement
 
@@ -149,7 +164,9 @@ Guards:
 
 **Double-fire is mandatory to handle.** `wp_after_insert_post` fires **twice** per REST save for `wp_template` and `wp_template_part`: `WP_REST_Templates_Controller::update_item()` calls `wp_update_post( wp_slash( (array) $changes ), false )` at `:392` — the `false` is `$wp_error`, leaving `$fire_after_hooks` at its default `true` — and then calls `wp_after_insert_post( $post, $update, $post_before )` explicitly at `:421`. Server-side idempotency (§6.8) is therefore mandatory, not optional.
 
-**Verification is NOT occurrence-gated.** When the hook fires for a save carrying no Flavor Agent occurrence header — Quick Edit, bulk edit, WP-CLI, a direct REST write, a second browser tab, another user, a revision restore — verification still runs and records a verdict with a `NULL` `save_occurrence_id` and `origin = unobserved`. Gating on the header would make the single most valuable discard signal, a colleague overwriting the AI change, permanently invisible, and would leave D2's question unanswerable.
+**Verification is NOT occurrence-gated.** When the hook fires for a save carrying no Flavor Agent occurrence header — Quick Edit, bulk edit, WP-CLI, a direct REST write, a second browser tab, another user, a revision restore — verification still runs. Gating on the header would make the single most valuable discard signal, a colleague overwriting the AI change, permanently invisible.
+
+**Every server-observed save gets its own occurrence ID.** The server generates one at capture when no client header is present; it MUST NOT reuse `NULL`. Snapshot keys (§6.8) and verdict idempotency both include `save_occurrence_id`, so a shared `NULL` would make two headerless saves collide and let the required in-place update overwrite earlier evidence. Whether the client observed the save is recorded separately as `origin` (`observed` | `unobserved`), never by the identity's absence.
 
 ### 6.2 Reset-to-theme and trash routes
 
@@ -160,7 +177,11 @@ A reset arrives as an *update* request that executes a permanent delete (`class-
 
 `deleted_post` (`:3996`) MUST NOT be used — it fires before cache cleanup.
 
-The Site Editor's **non-force** template delete runs `wp_trash_post`, not `wp_delete_post` (`:551`), and only falls through to the delete pair when `EMPTY_TRASH_DAYS` is falsy. Both routes MUST be handled.
+**Trashing is a separate route from reset-to-theme, and is not a persistence event.** The Site Editor's non-force template delete runs `wp_trash_post`, not `wp_delete_post` (`:551`), falling through to the delete pair only when `EMPTY_TRASH_DAYS` is falsy. Ordinary trashing fires neither useful hook: `wp_after_insert_post` is skipped by §6.1's guard (content unchanged), and the delete pair does not run.
+
+Therefore trashing produces **no verdict**. The apply remains eligible, and an untrash followed by a save verifies normally. A `trashed_post` listener MAY record a coverage note; it MUST NOT record a verdict.
+
+`get_block_template()` MUST NOT be used to resolve a fallback after trashing. The singular lookup includes trash in its query — `'post_status' => array( 'auto-draft', 'draft', 'publish', 'trash' )` (`block-template-utils.php:1317`), unlike the plural `get_block_templates()` at `:1135` — so it would return the trashed override rather than the theme fallback. Reset-to-theme is unaffected, because its hard delete removes the row entirely.
 
 Deleting the override does not settle presence: WordPress then resolves the fallback, which MAY return a theme template, a registered plugin template, or `null`. `get_block_template()` runs an uncached `WP_Query`, so resolving inside `after_delete_post` is safe. The returned identity and `source` MUST be inspected.
 
@@ -174,7 +195,11 @@ Deleting the override does not settle presence: WordPress then resolves the fall
 
 ### 6.3 Eligible set, batching, continuation
 
-The **server-side eligible set** is: applies for this entity with no `save_confirmed` and no `save_discarded`, **and** whose `undo.status` is not `undone` (§6.9).
+The **server-side eligible set** is: applies for this entity with `apply_lane = 'editor-state'` whose resolved state (§5.2) for the current `save_sequence` is not yet conclusive.
+
+The lane filter is load-bearing: without it the set would include pending external-lane requests, which have not been written at all, and historical `NULL`-lane rows, whose origin is unknown.
+
+Undone applies **remain eligible** (§6.9). Excluding them would deny a later save the chance to record a truthful verdict.
 
 - A count limit bounds each **processing batch**, not the candidate set. Remaining work continues through a durable cursor/job, following the `flavor_agent_reindex_patterns` cron precedent. A bare `LIMIT` MUST NOT silently abandon candidates.
 - Deferred work MUST use the captured saved version, with the eligible set fixed at submission.
@@ -202,6 +227,17 @@ A resolving block path does not establish identity. `BlockTreeMutator::resolve()
 
 None of the three operation-based shapes is a single comparable block snapshot, so none MUST be compared as one. For template and template-part the verifier MUST establish identity from the target refs and per-operation `before` state, since no recorded signature exists.
 
+**Aggregating operations to one apply verdict.** An apply may carry several operations that persist independently. Per-operation results are always recorded (§6.8); the apply's verdict aggregates them:
+
+| Operation results | Apply verdict |
+|---|---|
+| all present | `save_confirmed` |
+| all absent | `save_discarded` |
+| mixed present and absent, none inconclusive | `save_discarded`, `reason = partial_persistence` |
+| any inconclusive | `save_unverifiable` |
+
+Partial persistence is not persistence of the recommendation, so it resolves to `save_discarded` rather than `save_confirmed` — but it is recorded with a distinct reason, because "half the operations survived" and "none survived" are different facts. This aggregation is at the **apply** level; §8.1's occurrence remark addresses a different level and does not settle it.
+
 ### 6.6 Normalization
 
 Editor attributes may originate from HTML or defaults, so raw `parse_blocks()` attributes are not universally equivalent to editor attributes.
@@ -210,17 +246,19 @@ The normalizer MUST take the **complete registered schema**, including `selector
 
 Only fields affected by the apply are compared. A missing known JSON path is not automatically inconclusive: it proves absence when a value was expected, and confirms success when the operation intended a deletion.
 
+**Schema inputs MUST be pinned alongside the content snapshot.** Deferred work (§6.3) freezes content but normalization depends on the *registered* block schema, which a plugin or theme update can change between capture and comparison — altering defaults or extraction rules without changing `verifierVersion`. The snapshot MUST therefore retain the resolved schema slice for each affected block type (`source`, `selector`, `attribute`, `query`, `default`). If a pinned slice is unavailable, the job MUST report `save_unverifiable` with `reason = schema_drift` rather than compare against a schema that has since moved.
+
 ### 6.7 Global Styles subject
 
 Verification concerns **saved user overrides in `wp_global_styles`**, comparing only paths affected by the apply. Effective inherited styles are out of contract; including them would let a `theme.json` change read as a discarded recommendation.
 
 ### 6.8 Evidence and idempotency
 
-Each verdict MUST record: the apply link, the save-occurrence ID **or `NULL` when the save was unobserved**, canonical entity identity, a content fingerprint, the verifier version, `reason`, per-operation results, and a **reference to** the retained comparison snapshot.
+Each verdict MUST record: the apply link, the save-occurrence ID (**always present** — §6.1), the `save_sequence`, `origin` (`observed` | `unobserved`), canonical entity identity, a content fingerprint, the verifier version, `reason`, per-operation results, and a **reference to** the retained comparison snapshot.
 
 Post ID and `post_modified_gmt` are insufficient: multiple writes can share a timestamp, and a theme fallback has no replacement post timestamp.
 
-**Snapshot lifecycle.** The comparison snapshot is a separate, earlier artifact, written at capture time keyed by `(saveOccurrenceId, entityType, entityRef)`, before any verdict exists. It is the input §6.3's deferred job reads. Snapshots are deleted once every apply frozen into their occurrence has a terminal verdict, or when the verification age limit expires, whichever comes first.
+**Snapshot lifecycle.** The comparison snapshot is a separate, earlier artifact, written at capture time keyed by `(saveOccurrenceId, entityType, entityRef)`, before any verdict exists. It holds the frozen content **and the pinned schema slice** (§6.6). It is the input §6.3's deferred job reads. Snapshots are deleted once every apply frozen into their occurrence has a conclusive verdict, or when the verification age limit expires, whichever comes first.
 
 **Idempotency.** Verdict rows are idempotent on `(applyId, saveOccurrenceId, verifierVersion)`. A second pass for the same tuple MUST update the existing record in place, never insert a second row.
 
@@ -228,12 +266,15 @@ Post ID and `post_modified_gmt` are insufficient: multiple writes can share a ti
 
 ### 6.9 Undo and verdicts
 
-Undo is durable, server-side, queryable state (`undo_state`, `inc/Activity/Repository.php:88`). Without a rule, D2 breaks in both directions: a confirmed-then-undone apply counts as persisted forever, and an undone-then-saved apply yields `save_discarded` for a change the user deliberately reverted.
+Undo is durable, server-side, queryable state (`undo_state`, `inc/Activity/Repository.php:88`) — but **editor undo does not save**. It dispatches `blockEditorDispatch.updateBlockAttributes()` and records the action; no `savePost`, `saveEditedEntityRecord`, or `apiFetch` appears anywhere in the undo path (`src/store/activity-undo.js`). If someone undoes a confirmed apply and closes the tab without saving, **WordPress still contains the confirmed change.**
 
-1. The §6.3 eligible-set predicate excludes applies whose `undo.status` is `undone`, so an undone-then-saved apply is never frozen and never yields `save_discarded`.
-2. An undo recorded **after** a terminal verdict invalidates that verdict for reporting. `Activity\PersistenceAssurance` MUST resolve `undone` ahead of `save_confirmed`.
-3. Undo is a fourth independent fact in §8.2's row model. A row MUST NOT render "Persisted" with no indication it was undone.
-4. Undone applies are excluded from **both** the numerator and denominator of `savePersistedRate` (§8.1).
+Undo and persistence are therefore two independent facts, and neither overrides the other:
+
+1. An undo recorded after a conclusive verdict **MUST NOT invalidate it**. "Confirmed at save S" and "undone in editor" are both true and are preserved together. Treating undo as invalidation would report the saved effect as removed when it demonstrably was not.
+2. Reporting that the saved effect was removed requires **persistence evidence** — a later verdict at a higher `save_sequence` (§5.2). Until that exists, the resolved state stands.
+3. Undone applies remain eligible (§6.3), so a subsequent save can record that later verdict.
+4. When an undone apply does resolve to `save_discarded`, the undo fact attributes it as a **deliberate revert** rather than an external overwrite. Both reach `save_discarded`; only the undo record distinguishes them.
+5. Undo is a fourth independent fact in §8.2's row model. A row MUST NOT render "Persisted" without surfacing the undo, and MUST NOT render the apply as gone on the strength of an undo alone.
 
 ## 7. Client-side attempt reporting
 
@@ -247,7 +288,11 @@ An attempt begins when a qualifying entity save request is **submitted**. Openin
 
 Tracking follows the **physical entity being persisted**. Global Styles and Style Book applies targeting the same `wp_global_styles` record share one occurrence. Templates and template parts saved together each receive their own.
 
-At submission the client freezes a **client-side candidate set**: applies recorded in this session for the entity being persisted, for which the client holds no cached terminal verdict. This is explicitly best-effort and MAY be a superset of the server's eligible set (§6.3). The server intersects the two and **the server's result is authoritative**. This tracking is independent of the active scope and of the paginated activity display.
+At submission the client freezes a **client-side candidate set**: applies recorded in this session for the entity being persisted, for which the client holds no cached conclusive verdict. It is explicitly best-effort, and it governs **attempt attribution only** — which applies receive `save_attempted` / `save_failed`.
+
+It MUST NOT constrain verification. The server's eligible set (§6.3) alone decides what is verified. Intersecting the two would drop applies the current session never saw — those made in another session or by another user — which is exactly the population §6.1 requires verification to cover. The client set may therefore be a subset, a superset, or neither; the server does not consult it.
+
+This tracking is independent of the active scope and of the paginated activity display.
 
 ### 7.3 Correlation
 
@@ -268,11 +313,15 @@ Multi-entity Site Editor saves are **not batched**. `saveDirtyEntities` dispatch
 
 Attempt events are persisted in a retryable outbox surviving scope changes, independent of activity-display trimming, deduplicated by `(saveOccurrenceId, applyId, event)`. Telemetry failure MUST NOT block or change WordPress's save result.
 
-If an apply has not reached server storage when §6.3 freezes its candidates, **no verdict row is written**. The gap is derived at read time by `Activity\PersistenceAssurance` as *(applies with a `save_attempted` for this occurrence) minus (applies with a terminal verdict for this occurrence)*, and surfaced as missing coverage. It MUST NOT be retrospectively attached to that saved version; the apply remains eligible for a later save.
+If an apply has not reached server storage when §6.3 freezes its candidates, **no verdict row is written**. The gap is derived at read time by `Activity\PersistenceAssurance` as the **never compared** cohort of §5.4: applies that were eligible but have no verdict row of any kind.
+
+It is **not** derived by subtracting conclusive verdicts. Doing so would count an apply holding `save_unverifiable` as never compared, when it was compared and found inconclusive — two states §6.4 exists to keep apart. The derivation is also server-denominated, not client-denominated, so an unobserved save's verdict cannot push coverage above 100%.
+
+Missing coverage MUST NOT be retrospectively attached to that saved version; the apply remains eligible for a later save.
 
 ### 7.6 Reconciliation
 
-Verdicts are fetched through explicit apply/occurrence lookup, with bounded retries while server work is queued. Request status, persistence verdict, and missing coverage are kept separate. In-flight attempts retain their identity across navigation. An apply the client froze but the server had already settled is reported with the existing verdict, **not re-verified**.
+Verdicts are fetched through explicit apply/occurrence lookup, with bounded retries while server work is queued. Request status, persistence verdict, and missing coverage are kept separate. In-flight attempts retain their identity across navigation. An apply the client froze but the server had already resolved at an equal or higher `save_sequence` is reported with the existing verdict, **not re-verified**.
 
 ## 8. Reporting and surfaces
 
@@ -284,14 +333,18 @@ Therefore: **save-lifecycle outcome rows MUST be excluded from the learning-repo
 
 | Metric | Numerator | Denominator |
 |---|---|---|
-| `saveAttemptedOccurrences` | distinct `saveOccurrenceId` with ≥1 `save_attempted` | — (count) |
-| `savePersistedRate` | applies whose latest verdict is `save_confirmed` | applies with a terminal verdict, excluding undone |
-| `saveDiscardedRate` | applies whose latest verdict is `save_discarded` | applies with a terminal verdict, excluding undone |
-| `saveUnverifiableRate` | applies whose latest verdict is `save_unverifiable` | applies with any verdict |
-| `verificationCoverageRate` | applies with any verdict | applies with ≥1 `save_attempted` |
-| `unverifiedCoverageCount` | per §7.5 derivation | — (count) |
+| `saveAttemptedOccurrences` | distinct occurrence IDs with ≥1 `save_attempted` | — (count) |
+| `savePersistedRate` | **conclusive** applies resolved `save_confirmed` | **conclusive** |
+| `saveDiscardedRate` | **conclusive** applies resolved `save_discarded` | **conclusive** |
+| `saveUnverifiableRate` | **compared** applies not in **conclusive** | **compared** |
+| `verificationCoverageRate` | **compared** | **eligible** |
+| `unverifiedCoverageCount` | **never compared** | — (count) |
 
-All are **per-apply** except `saveAttemptedOccurrences`. Mixed-verdict occurrences therefore need no scoring rule.
+Cohorts are as defined in §5.4, and "resolved" is the highest-`save_sequence` verdict per §5.2. Two consequences are deliberate: `verificationCoverageRate` is denominated on the server's eligible set, not on client attempts, so an unobserved save's verdict cannot push it above 100%; and `saveUnverifiableRate` is denominated on **compared**, so it is well-defined even though §5.4 requirement 4 excludes never-compared applies from the persistence rates.
+
+Undo does not enter any denominator. An apply confirmed at save S and later undone in the editor remains persisted until persistence evidence says otherwise (§6.9).
+
+All are **per-apply** except `saveAttemptedOccurrences`; a mixed-verdict occurrence therefore needs no scoring rule. This does **not** settle operation-level aggregation within a single apply — §6.5 does.
 
 `applyConversionRateByLane` is **not** a like-for-like comparison — the lanes do not share a surface mix (§2), and external-lane rows never reach `applyConversionRate` at all (§3) — and MUST be labelled as such wherever surfaced.
 
@@ -301,7 +354,9 @@ Value stability and shape stability differ: adding keys changes the returned sha
 
 `Activity\PersistenceAssurance` resolves **server-side only**. The activity REST payload gains resolved, read-only fields per row (`persistenceVerdict`, `verificationCoverage`, `requestStatus`, `undoState`); `src/admin/activity-log-utils.js` MUST render them verbatim and MUST NOT re-derive them, in contrast to the existing client-side derivation at `:1590-1629`.
 
-The existing single status badge stays as request status; the other facts render as separate adjacent indicators. `save_unverifiable` and *not verified* render distinctly. A row MUST NOT render "Persisted" without surfacing an undo (§6.9).
+The existing single status badge stays as request status; the other facts render as separate adjacent indicators. `save_unverifiable` and *not verified* render distinctly.
+
+Undo and persistence render as **independent** facts. A row MUST NOT show "Persisted" without surfacing an undo, and MUST NOT show the change as gone on the strength of an undo alone — because an editor undo does not save (§6.9).
 
 ### 8.3 Editor-time claim
 
@@ -311,10 +366,10 @@ Exact wording, i18n, and interaction with `buildToastForActivity` are implementa
 
 ## 9. Verification
 
-Scenarios: selective saves, **partial failure across a multi-entity save**, draft autosaves, repeated saves, edits during an in-flight save, reset-to-theme, **trash / untrash / status transitions**, **an unobserved external save (Quick Edit, WP-CLI, second session, another user)**, **undo before and after a verdict**, scope changes, telemetry retries, and a lost response after successful server persistence.
+Scenarios: selective saves; partial failure across a multi-entity save; draft autosaves; repeated saves; edits during an in-flight save; reset-to-theme; trash / untrash / status transitions; an unobserved external save (Quick Edit, WP-CLI, second session, another user); **two consecutive headerless saves of the same entity** (distinct occurrence IDs, no evidence overwrite); **undo before a verdict, undo after a conclusive verdict, and undo followed by closing without saving**; **two saves freezing the same apply with deferred jobs completing out of order**; **an apply whose operations partially persist**; **a block schema changing between capture and deferred comparison**; scope changes; telemetry retries; and a lost response after successful server persistence.
 
 - **PHP:** per-surface comparators; hook guards; the `before_delete_post` / `after_delete_post` pair; the trash route; **`wp_after_insert_post` double-fire idempotency**; batch continuation; evidence-record shape; REST authorship rejection; the static authorship flag. **`tests/phpunit/RecommendationOutcomeEvaluationTest.php:27-40` pins `evaluate()`'s exact return with `assertSame` and will fail on the added keys** — extend it to assert the new keys' defaults so the contract stays pinned.
-- **JS:** attempt controller; middleware scoping; candidate freeze; outbox dedup on `(saveOccurrenceId, applyId, event)`; per-entity (not per-batch-member) handling.
+- **JS:** attempt controller; middleware scoping; candidate freeze; outbox dedup on `(saveOccurrenceId, applyId, event)`; per-entity (not per-batch-member) handling; that the candidate set never suppresses server verification.
 
 `docs/reference/cross-surface-validation-gates.md` applies in full, plus `npm run check:docs` — which covers `docs/reference/shared-internals.md:83`, documenting `OUTCOME_EVENTS`.
 
