@@ -31,6 +31,8 @@ services:
             start_period: 20s
         volumes:
             - db_data:/var/lib/mysql
+        mem_limit: 512m
+        cpus: 1.0
 
     # DHI's MariaDB entrypoint provisions the root account only: it has no
     # MARIADB_DATABASE/MARIADB_USER handling and no /docker-entrypoint-initdb.d
@@ -99,11 +101,13 @@ services:
             - ./tests/e2e/wp70-themes/flavor-agent-classic:/var/www/html/wp-content/themes/flavor-agent-classic
             - ./tests/e2e/wp70-themes/flavor-agent-child:/var/www/html/wp-content/themes/flavor-agent-child
         working_dir: /var/www/html
+        mem_limit: 1g
+        cpus: 2.0
 
     # No Docker Hardened Image is published for phpMyAdmin, so this stays on the
-    # Docker Official image.
+    # Docker Official image, pinned to a digest for reproducibility.
     phpmyadmin:
-        image: phpmyadmin:5-apache
+        image: phpmyadmin:5-apache@sha256:3a8a8d6b5289091f959ba0293f21163b3a2fc5741991a53de70b3497fe8d31db
         restart: unless-stopped
         depends_on:
             db:
@@ -114,6 +118,8 @@ services:
             PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
         ports:
             - '${PHPMYADMIN_PORT:-8889}:80'
+        mem_limit: 256m
+        cpus: 0.5
 
 volumes:
     db_data:
