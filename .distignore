@@ -2,6 +2,7 @@
 .codex
 .cursor
 .agents
+.superpowers
 .devcontainer
 .github
 .git
@@ -11,6 +12,7 @@
 eslint.config.js
 .gitignore
 .distignore
+.deployignore
 .env*
 .mcp.json
 .npmrc

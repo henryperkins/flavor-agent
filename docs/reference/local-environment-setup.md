@@ -329,6 +329,16 @@ If the host cannot access Docker volume paths, run `npm run verify -- --skip=lin
 
 On Windows with Docker Desktop, the Linux Docker volume path is usually not visible to host PHP/WP-CLI. Set `PLUGIN_CHECK_USE_DOCKER=1` in `.env` to run the same staged Plugin Check command inside the `wordpress` container after `npm run wp:start` and the WordPress install/bootstrap steps have completed. This keeps Plugin Check as an active gate without requiring host access to `/var/lib/docker/volumes`.
 
+## Production Packages And WordPress.com Deployments
+
+`npm run lint:plugin` checks a staged release filtered by `.distignore`. It does not certify a source checkout copied directly into a live plugin directory. A report containing `tests/`, `tools/`, `docker/`, development dotfiles, or test-only PHP stubs means those files are present in the installation being checked.
+
+Build installable ZIPs with `npm run dist` (on Windows, `node scripts/run-bash.js scripts/build-dist.sh`). Use the resulting `dist/flavor-agent.zip` when uploading or replacing the installed plugin. GitHub's source-code ZIP contains development files and omits the gitignored `build/` assets.
+
+WordPress.com GitHub deployments use [`.deployignore`](https://wordpress.com/support/github-deployments/#exclude-files-from-deployment), which works in both Simple and Advanced modes. Keep it aligned with `.distignore`; `.distignore` alone is not a WordPress.com deployment filter. Preserve `inc/`, `assets/`, `build/`, `languages/`, `shared/`, and the generated runtime autoloader. This plugin needs Advanced mode with the existing `.github/workflows/wpcom.yml` workflow to build its editor/admin assets and regenerate Composer metadata before publishing the `wpcom` artifact. Exclusions do not turn a Simple source deployment into a built release.
+
+Adding exclusions prevents future copies; it is not evidence that previously deployed development files were removed. If the installed directory already contains them, replace the plugin through the ZIP upload/update flow, then run Plugin Check on that installation. Avoid deleting the plugin through wp-admin as a cleanup step: that invokes `uninstall.php` and can remove plugin data. Do not switch back to Simple source deployments after installing the built ZIP, since they can mix new source with stale generated assets.
+
 ## Build, Stop, And Reset
 
 Build the plugin once before testing in WordPress, since `build/` is gitignored:
