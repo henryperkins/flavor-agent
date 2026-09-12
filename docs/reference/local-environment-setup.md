@@ -228,6 +228,15 @@ FLAVOR_AGENT_WP70_GUTENBERG=0 npm run test:e2e:wp70        # WordPress 7.1.0 bun
 FLAVOR_AGENT_WP70_GUTENBERG=23.7.1 npm run test:e2e:wp70   # Historical diagnostic only
 ```
 
+These commands reset the isolated harness by default. With `FLAVOR_AGENT_WP70_RESET=0`, selecting `0` or `false` skips Gutenberg installation but does not deactivate an already active copy. Before a bundled-editor run in a reused stack, explicitly deactivate Gutenberg in that harness and verify its status is `inactive`; verify it again after the run. For the default harness project/container:
+
+```bash
+docker exec flavor-agent-wp70-wordpress-1 wp plugin deactivate gutenberg --allow-root
+docker exec flavor-agent-wp70-wordpress-1 wp plugin get gutenberg --fields=version,status --format=json --allow-root
+```
+
+Use the corresponding harness container when overriding the Compose project name. An environment flag alone is not proof of the active editor runtime.
+
 The standalone `npm run wp:e2e:wp70:bootstrap`, `npm run wp:e2e:wp70:bootstrap:bundled`, and `npm run wp:e2e:wp70:bootstrap:gutenberg` commands remain useful for provisioning or inspection. A later Playwright process must receive the same `FLAVOR_AGENT_WP70_GUTENBERG` value when it should preserve a bundled or historical selection. Bootstrap prints the WordPress image and resolved companion list — copy both into the compatibility record in `gutenberg-feature-tracking.md`, since "ran against Gutenberg" without a version is not evidence.
 
 CI runs a required `e2e-wp70` matrix with a WordPress 7.1 bundled-editor leg and an exact Gutenberg 23.9.0 leg. It sets `MARIADB_IMAGE=mariadb:11.4` because the DHI default requires registry authentication on an otherwise public runner; that fallback changes only the database image, not the pinned WordPress or selected editor runtime. Explicit older Gutenberg plugin versions remain diagnostic. Current dated pass counts belong in `gutenberg-feature-tracking.md`; configuring a required leg is not itself fresh execution evidence.

@@ -5,10 +5,19 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Activity\GovernanceLearningReport;
+use FlavorAgent\Activity\PersistenceOccurrenceRepository;
+use FlavorAgent\Activity\PersistenceOutcome;
 use FlavorAgent\Activity\RecommendationOutcomeMetrics;
+use FlavorAgent\Activity\Repository;
+use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
 final class GovernanceLearningReportTest extends TestCase {
+
+	protected function setUp(): void {
+		parent::setUp();
+		WordPressTestState::reset();
+	}
 
 	public function test_builds_bounded_report_with_summary_parity_and_groups(): void {
 		$entries = [
@@ -103,6 +112,7 @@ final class GovernanceLearningReportTest extends TestCase {
 		$this->assertSame( $metrics['shownCount'], $report['summary']['shownCount'] );
 		$this->assertSame( $metrics['reviewSelectionRate'], $report['summary']['reviewSelectionRate'] );
 		$this->assertSame( $metrics['applyConversionRate'], $report['summary']['applyConversionRate'] );
+		$this->assertSame( $metrics['patternInsertionRate'], $report['summary']['patternInsertionRate'] );
 		$this->assertSame( $metrics['validationBlockedRate'], $report['summary']['validationBlockedRate'] );
 		$this->assertSame( 1.0, $report['summary']['undoRate'] );
 		$this->assertSame( 0.6667, $report['summary']['insertFailedRate'] );
@@ -150,6 +160,84 @@ final class GovernanceLearningReportTest extends TestCase {
 		$this->assertTrue( $report['truncated'] );
 		$this->assertSame( 1, $report['summary']['shownCount'] );
 		$this->assertSame( [], $report['groups']['patternTraits'] );
+	}
+
+	public function test_summary_and_group_rows_keep_persistence_metrics_after_lifecycle_sample_exclusion(): void {
+		WordPressTestState::$current_user_id = 7;
+		Repository::install();
+		PersistenceOccurrenceRepository::install();
+		$entries = [];
+		foreach ( [ 'persisted', 'discarded', 'uncompared' ] as $id ) {
+			$entry = Repository::create(
+				[
+					'id'        => $id,
+					'type'      => 'apply_suggestion',
+					'surface'   => 'block',
+					'applyLane' => 'editor-state',
+					'target'    => [
+						'blockName' => 'core/heading',
+						'blockPath' => [ 0 ],
+					],
+					'before'    => [ 'attributes' => [ 'level' => 2 ] ],
+					'after'     => [ 'attributes' => [ 'level' => 3 ] ],
+					'document'  => [
+						'scopeKey' => 'post:42',
+						'postType' => 'post',
+						'entityId' => '42',
+					],
+				]
+			);
+			$this->assertIsArray( $entry );
+			$entries[] = $entry;
+		}
+		$snapshot = PersistenceOccurrenceRepository::capture(
+			[
+				'saveOccurrenceId' => 'report-save',
+				'origin'           => 'unobserved',
+				'entity'           => [
+					'type'     => 'post',
+					'postType' => 'post',
+					'ref'      => '42',
+					'postId'   => 42,
+				],
+				'content'          => '',
+				'schemas'          => [],
+				'reason'           => 'saved',
+			]
+		);
+		$this->assertIsArray( $snapshot );
+		$this->assertIsArray(
+			PersistenceOutcome::write_verdict(
+				$entries[0],
+				$snapshot,
+				[
+					'event'      => 'save_confirmed',
+					'reason'     => 'present',
+					'operations' => [],
+				]
+			)
+		);
+		$this->assertIsArray(
+			PersistenceOutcome::write_verdict(
+				$entries[1],
+				$snapshot,
+				[
+					'event'      => 'save_discarded',
+					'reason'     => 'absent',
+					'operations' => [],
+				]
+			)
+		);
+		$report = GovernanceLearningReport::build( $entries );
+		$this->assertSame( 3, $report['sampleSize'] );
+		foreach ( [ $report['summary'], self::find_group( $report, 'surfaces', 'block' ), self::find_group( $report, 'operationTypes', 'apply_suggestion' ) ] as $row ) {
+			$this->assertSame( 0, $row['saveAttemptedOccurrences'] );
+			$this->assertSame( 0.5, $row['savePersistedRate'] );
+			$this->assertSame( 0.5, $row['saveDiscardedRate'] );
+			$this->assertSame( 0.0, $row['saveUnverifiableRate'] );
+			$this->assertSame( 0.6667, $row['verificationCoverageRate'] );
+			$this->assertSame( 1, $row['unverifiedCoverageCount'] );
+		}
 	}
 
 	/**

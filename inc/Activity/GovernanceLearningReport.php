@@ -95,9 +95,23 @@ final class GovernanceLearningReport {
 			'shownCount'            => (int) ( $metrics['shownCount'] ?? 0 ),
 			'reviewSelectionRate'   => (float) ( $metrics['reviewSelectionRate'] ?? 0.0 ),
 			'applyConversionRate'   => (float) ( $metrics['applyConversionRate'] ?? 0.0 ),
+			'patternInsertionRate'  => (float) ( $metrics['patternInsertionRate'] ?? 0.0 ),
 			'undoRate'              => self::rate( $counts['undoneApplyCount'], $counts['applyCount'] ),
 			'validationBlockedRate' => (float) ( $metrics['validationBlockedRate'] ?? 0.0 ),
 			'insertFailedRate'      => self::rate( $counts['insertFailedCount'], $counts['patternEngagementAttemptCount'] ),
+			...self::persistence_metrics( $metrics ),
+		];
+	}
+
+	/** Keep saved-state cohorts identical in the summary and every report group. */
+	private static function persistence_metrics( array $metrics ): array {
+		return [
+			'saveAttemptedOccurrences' => (int) ( $metrics['saveAttemptedOccurrences'] ?? 0 ),
+			'savePersistedRate'        => (float) ( $metrics['savePersistedRate'] ?? 0.0 ),
+			'saveDiscardedRate'        => (float) ( $metrics['saveDiscardedRate'] ?? 0.0 ),
+			'saveUnverifiableRate'     => (float) ( $metrics['saveUnverifiableRate'] ?? 0.0 ),
+			'verificationCoverageRate' => (float) ( $metrics['verificationCoverageRate'] ?? 0.0 ),
+			'unverifiedCoverageCount'  => (int) ( $metrics['unverifiedCoverageCount'] ?? 0 ),
 		];
 	}
 
@@ -222,6 +236,7 @@ final class GovernanceLearningReport {
 				'undoRate'               => self::rate( $counts['undoneApplyCount'], $counts['applyCount'] ),
 				'validationBlockedRate'  => (float) ( $metrics['validationBlockedRate'] ?? 0.0 ),
 				'insertFailedRate'       => self::rate( $counts['insertFailedCount'], $counts['patternEngagementAttemptCount'] ),
+				...self::persistence_metrics( $metrics ),
 			];
 
 			if ( '' !== $group['representativeActivityId'] ) {

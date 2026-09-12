@@ -113,6 +113,10 @@ Use it when you need to answer:
 
 ## Activity Route Notes
 
+- Save persistence adds a bounded read mode to the existing activity path: `GET /flavor-agent/v1/activity?applyIds=<comma-separated IDs>&saveOccurrenceId=<ID>` returns resolved original applies plus `pending`, after checking every apply's contextual permission. It accepts at most 50 IDs and never returns private saved-content snapshots. This explicit mode is separate from omitted-scope global audit reads.
+- New editor applies carry immutable `applyLane: "editor-state"`; governed external requests carry `"server-executed"`; missing historical lanes remain unknown. Save lifecycle rows add `linkedApplyActivityId` and `saveOccurrenceId`. Client POST accepts only `save_attempted` / `save_failed` observations for the current user's stored apply. The three server verdicts and client attempts to set the server execution lane are rejected.
+- Activity REST reads add server-resolved `persistenceVerdict`, `verificationCoverage`, `requestStatus`, and `undoState`. Linked evidence is resolved beyond the displayed page/date window. The learning report excludes save-lifecycle rows before its existing sample limit and adds the six [save persistence metrics](../features/save-persistence-outcomes.md#metrics).
+
 - Activity creation and admin decisions remain REST routes. Activity read/list/undo for governed external applies are exposed as abilities via `get-activity`, `list-activity`, and `undo-activity`.
 - `POST /flavor-agent/v1/activity` persists the request provenance that the admin audit projection exposes later: backend/provider label, model, provider path, configuration owner, credential source, selected provider, route, ability, prompt, and reference. Token usage and request latency are not part of that columnized provenance projection — they live only inside the `request.ai` JSON blob of `request_diagnostic` rows (latency always, as server-measured elapsed milliseconds; token usage only when the AI provider returns it) and are never recorded on the five apply rows.
 - The repository projects the admin-audit fields it needs for filtering into schema-versioned table columns (`admin_post_type`, `admin_operation_type`, `admin_provider`, `admin_provider_path`, `admin_configuration_owner`, `admin_credential_source`, `admin_selected_provider`, `admin_request_ability`, `admin_request_route`, `admin_request_reference`, `admin_request_prompt`, and related identifiers) so `Settings > AI Activity` does not need to decode every historical `request_json` payload to filter by provenance.
@@ -822,6 +826,8 @@ The client sends live slot data including `assignedParts`, `emptyAreas`, and `al
 The POST response shape is backend-neutral because it only reports queue status. The GET response returns the live `runtimeState` plus `requestMeta.route` for settings polling. The persisted `flavor_agent_pattern_index_state` records `pattern_backend`, Qdrant state fields for Qdrant, and `cloudflare_ai_search_namespace`, `cloudflare_ai_search_instance`, plus `cloudflare_ai_search_signature` for Cloudflare AI Search. Managed pattern-storage instances use Cloudflare's `default` namespace.
 
 ### Activity Entry Shape
+
+The example below remains valid historical input. New editor apply entries additionally set `applyLane: "editor-state"`; additive read-only assurance fields are returned by the activity REST reads, not accepted as client verification claims. Save outcome linkage and private snapshot retention are described in [save persistence outcomes](../features/save-persistence-outcomes.md).
 
 ```json
 {

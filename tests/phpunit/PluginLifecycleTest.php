@@ -251,6 +251,7 @@ final class PluginLifecycleTest extends TestCase {
 			[
 				PatternIndex::CRON_HOOK,
 				ActivityRepository::PRUNE_CRON_HOOK,
+				'flavor_agent_verify_saved_applies',
 				ActivityRepository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK,
 				// Legacy docs warm crons stay cleared by literal name on deactivation.
 				'flavor_agent_prewarm_docs',

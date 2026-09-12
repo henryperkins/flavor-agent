@@ -126,7 +126,7 @@ describe( 'SuggestionChips', () => {
 		expect(
 			getContainer().querySelector( '.flavor-agent-inline-feedback' )
 				?.textContent
-		).toBe( 'AppliedUse accent color' );
+		).toBe( 'Changed in editorUse accent color' );
 	} );
 
 	test( 'prefers the live block request metadata passed from the main panel when applying', async () => {
@@ -488,7 +488,7 @@ describe( 'SuggestionChips', () => {
 		expect(
 			getContainer().querySelector( '.flavor-agent-inline-feedback' )
 				?.textContent
-		).toBe( 'AppliedUse accent color' );
+		).toBe( 'Changed in editorUse accent color' );
 		expect( getContainer().querySelector( 'button' )?.disabled ).toBe(
 			true
 		);
@@ -562,7 +562,7 @@ describe( 'SuggestionChips', () => {
 		);
 		expect( checkbox.disabled ).toBe( true );
 		expect( checkbox.checked ).toBe( true );
-		expect( getContainer().textContent ).toContain( 'Applied' );
+		expect( getContainer().textContent ).toContain( 'Changed in editor' );
 		expect(
 			getContainer().querySelector( '.flavor-agent-chip-row__values' )
 		).toBeNull();

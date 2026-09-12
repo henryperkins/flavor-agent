@@ -877,6 +877,35 @@ describe( 'StyleBookRecommender', () => {
 		);
 	} );
 
+	test( 'qualifies a Style Book undo as an editor change', () => {
+		const undo = { canUndo: false, status: 'undone', error: null };
+		mockGetGlobalStylesActivityUndoState.mockReturnValue( undo );
+		currentStoreState = {
+			...currentStoreState,
+			activityLog: [
+				{
+					id: 'activity-1',
+					surface: 'style-book',
+					suggestion: 'Refine paragraph rhythm',
+					target: {
+						globalStylesId: '17',
+						blockName: 'core/paragraph',
+						blockTitle: 'Paragraph',
+					},
+					undo,
+				},
+			],
+			undoStatus: 'success',
+			lastUndoneActivityId: 'activity-1',
+		};
+		act( () => {
+			getRoot().render( <StyleBookRecommender /> );
+		} );
+		expect( sidebar.textContent ).toContain(
+			'Previous Style Book block styles restored in the editor.'
+		);
+	} );
+
 	test( 'keeps an inline Style Book apply success notice after review closes', () => {
 		currentStoreState = {
 			...currentStoreState,
@@ -931,9 +960,7 @@ describe( 'StyleBookRecommender', () => {
 			sidebar.querySelectorAll( '[data-status-notice="true"]' )
 		);
 		const applySuccessNotice = notices.find( ( element ) =>
-			element.textContent.includes(
-				'Flavor Agent applied the selected Style Book change.'
-			)
+			element.textContent.includes( 'Style Book updated in the editor.' )
 		);
 
 		expect( applySuccessNotice ).toBeDefined();

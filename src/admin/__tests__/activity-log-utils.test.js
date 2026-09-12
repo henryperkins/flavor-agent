@@ -220,6 +220,115 @@ describe( 'activity log utils', () => {
 		expect( entries[ 1 ].statusLabel ).toBe( 'Applied' );
 	} );
 
+	test( 'renders the four server assurance fields without deriving them from legacy status or undo', () => {
+		const assurance = {
+			requestStatus: {
+				state: 'save_failed',
+				label: 'Save request failed (server)',
+			},
+			persistenceVerdict: {
+				state: 'save_confirmed',
+				label: 'Persisted at last comparison',
+				saveSequence: 4,
+			},
+			verificationCoverage: {
+				state: 'compared',
+				label: 'Compared with saved content (server)',
+				conclusive: true,
+			},
+			undoState: { state: 'undone', label: 'Undone in editor (server)' },
+		};
+		const [ entry ] = normalizeActivityEntries( [
+			createEntry( {
+				...assurance,
+				status: 'blocked',
+				admin: { statusLabel: 'Undo blocked' },
+				undo: { status: 'available', canUndo: true },
+			} ),
+		] );
+
+		for ( const [ field, value ] of Object.entries( assurance ) ) {
+			expect( entry[ field ] ).toBe( value );
+		}
+		expect( entry.status ).toBe( 'save_failed' );
+		expect( entry.statusLabel ).toBe( assurance.requestStatus.label );
+		expect( entry.persistenceVerdictLabel ).toBe(
+			assurance.persistenceVerdict.label
+		);
+		expect( entry.verificationCoverageLabel ).toBe(
+			assurance.verificationCoverage.label
+		);
+		expect( entry.undoStateLabel ).toBe( assurance.undoState.label );
+		expect( entry.undoStatusLabel ).toBe( assurance.undoState.label );
+	} );
+
+	test( 'keeps unverified coverage distinct from a server comparison that could not verify persistence', () => {
+		const [ missing, unverified, unverifiable ] = normalizeActivityEntries(
+			[
+				createEntry( {
+					executionResult: 'applied',
+					undo: { status: 'undone' },
+				} ),
+				createEntry( {
+					persistenceVerdict: {
+						state: 'unknown',
+						label: 'Persistence unknown',
+					},
+					verificationCoverage: {
+						state: 'not_verified',
+						label: 'Not verified',
+					},
+				} ),
+				createEntry( {
+					persistenceVerdict: {
+						state: 'save_unverifiable',
+						label: 'Could not verify saved change',
+					},
+					verificationCoverage: {
+						state: 'compared',
+						label: 'Compared with saved content',
+					},
+				} ),
+			]
+		);
+
+		expect( missing.persistenceVerdictLabel ).toBe( 'Persistence unknown' );
+		expect( missing.verificationCoverageLabel ).toBe(
+			'Verification coverage unknown'
+		);
+		expect( missing.undoStateLabel ).toBe( 'Undo state unknown' );
+		expect( unverified.persistenceVerdictLabel ).toBe(
+			'Persistence unknown'
+		);
+		expect( unverified.verificationCoverageLabel ).toBe( 'Not verified' );
+		expect( unverifiable.persistenceVerdictLabel ).toBe(
+			'Could not verify saved change'
+		);
+		expect( unverifiable.verificationCoverageLabel ).toBe(
+			'Compared with saved content'
+		);
+	} );
+
+	test( 'preserves reported save metrics without recomputing them from the sampled activity rows', () => {
+		const summary = {
+			patternInsertionRate: 0.2,
+			saveAttemptedOccurrences: 11,
+			savePersistedRate: 0.75,
+			saveDiscardedRate: 0.25,
+			saveUnverifiableRate: 0.1,
+			verificationCoverageRate: 0.8,
+			unverifiedCoverageCount: 3,
+		};
+		const report = normalizeGovernanceLearningReport( {
+			version: 'governance-learning-report-v1',
+			sampleSize: 0,
+			summary,
+			groups: {},
+		} );
+
+		expect( report.summary ).toMatchObject( summary );
+	} );
+
 	test( 'normalizeActivityEntries renders request diagnostics as review-only rows', () => {
 		const entries = normalizeActivityEntries( [
 			createEntry( {

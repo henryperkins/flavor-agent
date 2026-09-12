@@ -1460,6 +1460,14 @@ async function enableSiteEditorGlobalStylesSidebar( page ) {
 		( selector ) => Boolean( document.querySelector( selector ) ),
 		GLOBAL_STYLES_SIDEBAR_SELECTOR
 	);
+	// The Styles sidebar can render before the template canvas hydrates. Its
+	// blocks are part of the recommendation context, so request only after the
+	// non-empty harness template has loaded instead of immediately going stale.
+	await page.waitForFunction( () => {
+		const blockEditor = window.wp?.data?.select( 'core/block-editor' );
+
+		return ( blockEditor?.getBlocks?.() || [] ).length > 0;
+	} );
 }
 
 async function getGlobalStylesState( page ) {
@@ -4591,6 +4599,9 @@ test( '@wp70-site-editor global styles surface keeps stale results visible but d
 		.click();
 
 	await expect.poll( () => styleRequests.length ).toBe( 1 );
+	expect(
+		styleRequests[ 0 ].styleContext.templateStructure.length
+	).toBeGreaterThan( 0 );
 	await expect(
 		recommendationsPanel
 			.getByText( 'Adjust canvas tone and rhythm' )

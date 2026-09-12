@@ -34,18 +34,30 @@ const DEFAULT_SUCCESS_MS = 6000;
 const DEFAULT_ERROR_MS = 8000;
 
 const SURFACE_TITLE_BY_KEY = Object.freeze( {
-	block: __( 'Block updated', 'flavor-agent' ),
-	template: __( 'Template applied', 'flavor-agent' ),
-	'template-part': __( 'Template part applied', 'flavor-agent' ),
-	'global-styles': __( 'Global styles updated', 'flavor-agent' ),
-	'style-book': __( 'Style Book updated', 'flavor-agent' ),
+	block: __( 'Block updated in editor (not saved)', 'flavor-agent' ),
+	template: __( 'Template updated in editor (not saved)', 'flavor-agent' ),
+	'template-part': __(
+		'Template part updated in editor (not saved)',
+		'flavor-agent'
+	),
+	'global-styles': __(
+		'Global styles updated in editor (not saved)',
+		'flavor-agent'
+	),
+	'style-book': __(
+		'Style Book updated in editor (not saved)',
+		'flavor-agent'
+	),
 } );
 const SURFACE_TITLE_ALIASES = Object.freeze( {
 	templatePart: 'template-part',
 	globalStyles: 'global-styles',
 	styleBook: 'style-book',
 } );
-const FALLBACK_SURFACE_TITLE = __( 'Update applied', 'flavor-agent' );
+const FALLBACK_SURFACE_TITLE = __(
+	'Editor updated (not saved)',
+	'flavor-agent'
+);
 const UNDO_LABEL = __( 'Undo', 'flavor-agent' );
 
 let nextLocalToastId = 0;

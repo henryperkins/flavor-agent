@@ -131,6 +131,7 @@ final class RecommendationOutcomeMetrics {
 			'applyConversionRate'       => self::rate( $shown_apply_set_count, $shown_count ),
 			'reviewApplyConversionRate' => self::rate( $review_apply_set_count, $selected_count ),
 			'unlinkedApplyCount'        => $unlinked_apply_count,
+			...PersistenceAssurance::metrics( $entries ),
 		];
 	}
 

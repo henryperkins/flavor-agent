@@ -11,6 +11,12 @@ import {
 } from './update-helpers';
 import { getBlockStructuralActivityUndoState } from '../utils/block-structural-actions';
 import { __ } from '@wordpress/i18n';
+import {
+	EDITOR_APPLY_TYPES,
+	getSavePersistenceAssurance,
+	refreshSavePersistenceCandidates,
+	registerSavePersistenceCandidate,
+} from './save-persistence';
 
 const ACTIVITY_STORAGE_PREFIX = 'flavor-agent:activity:';
 // v4: per-surface bucketing (was a single 20-entry cap across all surfaces).
@@ -265,6 +271,7 @@ function normalizePersistedActivityEntry(
 	const timestamp = normalizeActivityTimestamp( entry.timestamp );
 	const normalizedEntry = {
 		...entry,
+		...getSavePersistenceAssurance( entry.id ),
 		schemaVersion:
 			Number.isInteger( entry.schemaVersion ) && entry.schemaVersion > 0
 				? entry.schemaVersion
@@ -568,6 +575,7 @@ export function readPersistedActivityLog( scopeKey ) {
 }
 
 export function writePersistedActivityLog( scopeKey, entries ) {
+	refreshSavePersistenceCandidates( entries );
 	if ( ! scopeKey || ! canUseSessionStorage() ) {
 		return;
 	}
@@ -606,6 +614,8 @@ export function createActivityEntry( {
 	requestMeta = null,
 	recommendation = null,
 	document = null,
+	linkedApplyActivityId = null,
+	saveOccurrenceId = null,
 	timestamp = new Date().toISOString(),
 } ) {
 	activitySequence += 1;
@@ -643,7 +653,7 @@ export function createActivityEntry( {
 			  } )
 			: buildUndoState( normalizedTimestamp );
 
-	return {
+	const entry = {
 		id: `activity-${ Date.now() }-${ activitySequence }`,
 		schemaVersion: ACTIVITY_STORAGE_VERSION,
 		type,
@@ -668,6 +678,11 @@ export function createActivityEntry( {
 				: {} ),
 		},
 		document,
+		...( EDITOR_APPLY_TYPES.has( type )
+			? { applyLane: 'editor-state' }
+			: {} ),
+		...( linkedApplyActivityId ? { linkedApplyActivityId } : {} ),
+		...( saveOccurrenceId ? { saveOccurrenceId } : {} ),
 		timestamp: normalizedTimestamp,
 		executionResult,
 		undo,
@@ -677,6 +692,8 @@ export function createActivityEntry( {
 			syncType: 'create',
 		} ),
 	};
+	registerSavePersistenceCandidate( entry );
+	return entry;
 }
 
 export function isLocalActivityEntry( entry ) {

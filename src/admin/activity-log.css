@@ -1318,6 +1318,38 @@ body.settings_page_flavor-agent-activity {
 
 .flavor-agent-activity-log__status {
   padding: 4px 10px;
+  background: var(--wpds-color-background-surface-neutral, var(--wpds-color-bg-surface-neutral, #f8f8f8));
+  color: var(--flavor-agent-activity-log-text);
+}
+
+.flavor-agent-activity-log__assurance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.flavor-agent-activity-log__assurance-indicator {
+  min-width: 0;
+  padding: 3px 7px;
+  border: 1px solid var(--flavor-agent-activity-log-border-soft);
+  border-radius: var(--wpds-border-radius-sm, 2px);
+  background: var(--wpds-color-background-surface-neutral, var(--wpds-color-bg-surface-neutral, #f8f8f8));
+  color: var(--flavor-agent-activity-log-text);
+  font-size: var(--wpds-font-size-sm, 12px);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.flavor-agent-activity-log__assurance-indicator[data-state="save_confirmed"] {
+  background: var(--wpds-color-background-surface-success-weak, var(--wpds-color-bg-surface-success-weak, #eaffed));
+  color: var(--wpds-color-foreground-content-success-weak, var(--wpds-color-fg-content-success-weak, #007f30));
+}
+
+.flavor-agent-activity-log__assurance-indicator[data-state="save_unverifiable"] {
+  background: var(--wpds-color-background-surface-warning-weak, var(--wpds-color-bg-surface-warning-weak, #fff7e0));
+  color: var(--wpds-color-foreground-content-warning-weak, var(--wpds-color-fg-content-warning-weak, #926300));
 }
 
 .flavor-agent-activity-log__status.is-applied {
@@ -1330,7 +1362,8 @@ body.settings_page_flavor-agent-activity {
   color: var(--wpds-color-foreground-content-neutral-weak, var(--wpds-color-fg-content-neutral-weak, #6d6d6d));
 }
 
-.flavor-agent-activity-log__status.is-review {
+.flavor-agent-activity-log__status.is-review,
+.flavor-agent-activity-log__status.is-save_attempted {
   background: var(--wpds-color-background-surface-info-weak, var(--wpds-color-bg-surface-info-weak, #eff6fc));
   color: var(--wpds-color-foreground-content-info-weak, var(--wpds-color-fg-content-info-weak, #135e96));
 }
@@ -1351,7 +1384,8 @@ body.settings_page_flavor-agent-activity {
   color: var(--wpds-color-foreground-content-warning-weak, var(--wpds-color-fg-content-warning-weak, #926300));
 }
 
-.flavor-agent-activity-log__status.is-failed {
+.flavor-agent-activity-log__status.is-failed,
+.flavor-agent-activity-log__status.is-save_failed {
   background: var(--wpds-color-background-surface-error-weak, var(--wpds-color-bg-surface-error-weak, #fff6f4));
   color: var(--wpds-color-foreground-content-error-weak, var(--wpds-color-fg-content-error-weak, #cc1818));
 }

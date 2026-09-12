@@ -2,6 +2,8 @@
 
 Use this with `docs/FEATURE_SURFACE_MATRIX.md` for the quick view and `docs/reference/abilities-and-routes.md` for the exact contract.
 
+New editor applies also participate in [save persistence outcomes](save-persistence-outcomes.md). Apply and Undo describe editor state; server-observed saved versions supply separate persistence and coverage evidence. The admin view consumes the server's request, persistence, coverage, and undo fields independently.
+
 ## Exact Surfaces
 
 - Inline editor activity: collapsed `Recent AI Actions` inside the block, template, and template-part recommendation panels; `Recent AI Style Actions` inside Global Styles; `Recent AI Style Book Actions` inside Style Book; and read-only `Recent Content Requests` inside the content panel only while the post/page content surface is supported and configured. Block request diagnostics can also appear inline in the block activity section when a request fails or returns no block-lane suggestions. Template and template-part sidebars show executable apply history only; their request diagnostics remain available through the admin approval/audit/attestation-discovery page.

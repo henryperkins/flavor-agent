@@ -18,7 +18,7 @@ function makeToast( overrides = {} ) {
 		id: `toast-${ Math.random().toString( 36 ).slice( 2 ) }`,
 		variant: 'success',
 		surface: 'block',
-		title: 'Block updated',
+		title: 'Block updated in editor (not saved)',
 		detail: 'core/heading · attr=fontWeight',
 		activityId: 'activity-1',
 		undoLabel: 'Undo',
@@ -174,46 +174,49 @@ describe( 'buildToastForActivity', () => {
 			suggestion: {},
 		} );
 
-		expect( result.title ).toBe( 'Block updated' );
+		expect( result.title ).toBe( 'Block updated in editor (not saved)' );
 		expect( result.undoLabel ).toBe( 'Undo' );
 		expect( i18n.__ ).toHaveBeenCalledWith(
-			'Block updated',
+			'Block updated in editor (not saved)',
 			'flavor-agent'
 		);
 		expect( i18n.__ ).toHaveBeenCalledWith(
-			'Template applied',
+			'Template updated in editor (not saved)',
 			'flavor-agent'
 		);
 		expect( i18n.__ ).toHaveBeenCalledWith(
-			'Template part applied',
+			'Template part updated in editor (not saved)',
 			'flavor-agent'
 		);
 		expect( i18n.__ ).toHaveBeenCalledWith(
-			'Global styles updated',
+			'Global styles updated in editor (not saved)',
 			'flavor-agent'
 		);
 		expect( i18n.__ ).toHaveBeenCalledWith(
-			'Style Book updated',
+			'Style Book updated in editor (not saved)',
 			'flavor-agent'
 		);
 		expect( i18n.__ ).toHaveBeenCalledWith(
-			'Update applied',
+			'Editor updated (not saved)',
 			'flavor-agent'
 		);
 		expect( i18n.__ ).toHaveBeenCalledWith( 'Undo', 'flavor-agent' );
 		expect(
 			i18n.__.mock.calls.filter(
-				( [ text ] ) => text === 'Template part applied'
+				( [ text ] ) =>
+					text === 'Template part updated in editor (not saved)'
 			)
 		).toHaveLength( 1 );
 		expect(
 			i18n.__.mock.calls.filter(
-				( [ text ] ) => text === 'Global styles updated'
+				( [ text ] ) =>
+					text === 'Global styles updated in editor (not saved)'
 			)
 		).toHaveLength( 1 );
 		expect(
 			i18n.__.mock.calls.filter(
-				( [ text ] ) => text === 'Style Book updated'
+				( [ text ] ) =>
+					text === 'Style Book updated in editor (not saved)'
 			)
 		).toHaveLength( 1 );
 	} );
@@ -239,7 +242,7 @@ describe( 'buildToastForActivity', () => {
 		expect( result ).toMatchObject( {
 			variant: 'success',
 			surface: 'block',
-			title: 'Block updated',
+			title: 'Block updated in editor (not saved)',
 			detail: 'core/heading · attr=fontWeight',
 			activityId: 'activity-42',
 			activityScopeKey: 'post:42',
@@ -266,14 +269,14 @@ describe( 'buildToastForActivity', () => {
 
 	it( 'maps each surface key to its title', () => {
 		const cases = [
-			[ 'block', 'Block updated' ],
-			[ 'template', 'Template applied' ],
-			[ 'templatePart', 'Template part applied' ],
-			[ 'template-part', 'Template part applied' ],
-			[ 'globalStyles', 'Global styles updated' ],
-			[ 'global-styles', 'Global styles updated' ],
-			[ 'styleBook', 'Style Book updated' ],
-			[ 'style-book', 'Style Book updated' ],
+			[ 'block', 'Block updated in editor (not saved)' ],
+			[ 'template', 'Template updated in editor (not saved)' ],
+			[ 'templatePart', 'Template part updated in editor (not saved)' ],
+			[ 'template-part', 'Template part updated in editor (not saved)' ],
+			[ 'globalStyles', 'Global styles updated in editor (not saved)' ],
+			[ 'global-styles', 'Global styles updated in editor (not saved)' ],
+			[ 'styleBook', 'Style Book updated in editor (not saved)' ],
+			[ 'style-book', 'Style Book updated in editor (not saved)' ],
 		];
 
 		for ( const [ surface, expectedTitle ] of cases ) {
@@ -294,7 +297,7 @@ describe( 'buildToastForActivity', () => {
 			suggestion: {},
 		} );
 
-		expect( result.title ).toBe( 'Update applied' );
+		expect( result.title ).toBe( 'Editor updated (not saved)' );
 	} );
 
 	it( 'template-part detail resolves for the camelCase surface alias', () => {

@@ -12,6 +12,41 @@ import {
 } from '../recommendation-outcomes';
 
 describe( 'recommendation outcomes', () => {
+	test.each( [ 'save_attempted', 'save_failed' ] )(
+		'builds linked %s telemetry without authoring an ID or persistence verdict',
+		( event ) => {
+			const entry = buildRecommendationOutcomeEntry( {
+				event,
+				surface: 'block',
+				document: { scopeKey: 'post:42' },
+				linkedApplyActivityId: 'apply-1',
+				saveOccurrenceId: 'save-1',
+			} );
+			expect( entry ).toMatchObject( {
+				linkedApplyActivityId: 'apply-1',
+				saveOccurrenceId: 'save-1',
+				after: { outcome: { event } },
+			} );
+			expect( entry.id ).toBeUndefined();
+			expect( entry.persistenceVerdict ).toBeUndefined();
+		}
+	);
+
+	test.each( [ 'save_confirmed', 'save_discarded', 'save_unverifiable' ] )(
+		'rejects client authorship of %s',
+		( event ) => {
+			expect(
+				buildRecommendationOutcomeEntry( {
+					event,
+					surface: 'block',
+					document: { scopeKey: 'post:42' },
+					linkedApplyActivityId: 'apply-1',
+					saveOccurrenceId: 'save-1',
+				} )
+			).toBeNull();
+		}
+	);
+
 	beforeEach( () => {
 		resetRecommendationOutcomeDedupeForTests();
 	} );

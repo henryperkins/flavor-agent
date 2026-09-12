@@ -965,81 +965,86 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		expect( text ).not.toContain( 'Generic block request failed.' );
 	} );
 
-	test( 'shows an undo action on apply success notices and dispatches undo for the latest block activity', () => {
-		currentState = createState( {
-			store: {
-				blockApplyStatuses: {
-					'block-1': 'success',
-				},
-				blockLastAppliedSuggestionKeys: {
-					'block-1': 'refresh-hero-copy',
-				},
-			},
-		} );
-
-		renderPanel();
-		currentState = createState( {
-			blockEditor: {
-				selectedBlockClientId: null,
-			},
-			store: {
-				blockApplyStatuses: {
-					'block-1': 'success',
-				},
-				blockLastAppliedSuggestionKeys: {
-					'block-1': 'refresh-hero-copy',
-				},
-				activityLog: [
-					{
-						id: 'activity-1',
-						surface: 'block',
-						suggestion: 'Refresh hero copy',
-						suggestionKey: 'refresh-hero-copy',
-						target: {
-							clientId: 'block-1',
-						},
-						undo: {
-							canUndo: true,
-							status: 'available',
-							error: null,
-						},
+	test.each( [ 'apply_suggestion', 'apply_block_structural_suggestion' ] )(
+		'shows an editor apply notice and dispatches undo for %s',
+		( type ) => {
+			currentState = createState( {
+				store: {
+					blockApplyStatuses: {
+						'block-1': 'success',
 					},
-				],
-			},
-		} );
+					blockLastAppliedSuggestionKeys: {
+						'block-1': 'refresh-hero-copy',
+					},
+				},
+			} );
 
-		renderPanel();
+			renderPanel();
+			currentState = createState( {
+				blockEditor: {
+					selectedBlockClientId: null,
+				},
+				store: {
+					blockApplyStatuses: {
+						'block-1': 'success',
+					},
+					blockLastAppliedSuggestionKeys: {
+						'block-1': 'refresh-hero-copy',
+					},
+					activityLog: [
+						{
+							id: 'activity-1',
+							type,
+							surface: 'block',
+							suggestion: 'Refresh hero copy',
+							suggestionKey: 'refresh-hero-copy',
+							target: {
+								clientId: 'block-1',
+							},
+							undo: {
+								canUndo: true,
+								status: 'available',
+								error: null,
+							},
+						},
+					],
+				},
+			} );
 
-		expect( getContainer().textContent ).toContain(
-			'Applied Refresh hero copy.'
-		);
-		expect(
-			getContainer().textContent.match( /Refresh hero copy/g )
-		).toHaveLength( 1 );
-		expect(
-			mockRenderAIActivitySection.mock.calls[
-				mockRenderAIActivitySection.mock.calls.length - 1
-			][ 0 ]
-		).toEqual(
-			expect.objectContaining( {
-				description: 'Newest valid block action can be undone here.',
-				entries: expect.any( Array ),
-				resetKey: 'block-1',
-			} )
-		);
+			renderPanel();
 
-		const undoButton = Array.from(
-			getContainer().querySelectorAll( 'button' )
-		).find( ( element ) => element.textContent === 'Undo' );
+			expect( getContainer().textContent ).toContain(
+				'Applied Refresh hero copy in the editor.'
+			);
+			expect(
+				getContainer().textContent.match( /Refresh hero copy/g )
+			).toHaveLength( 1 );
+			expect(
+				mockRenderAIActivitySection.mock.calls[
+					mockRenderAIActivitySection.mock.calls.length - 1
+				][ 0 ]
+			).toEqual(
+				expect.objectContaining( {
+					description:
+						'Newest valid block action can be undone here.',
+					entries: expect.any( Array ),
+					resetKey: 'block-1',
+				} )
+			);
 
-		expect( undoButton ).toBeDefined();
+			const undoButton = Array.from(
+				getContainer().querySelectorAll( 'button' )
+			).find( ( element ) => element.textContent === 'Undo' );
 
-		act( () => {
-			undoButton.click();
-		} );
+			expect( undoButton ).toBeDefined();
 
-		expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
-	} );
+			act( () => {
+				undoButton.click();
+			} );
+
+			expect( mockUndoActivity ).toHaveBeenCalledWith( 'activity-1' );
+		}
+	);
 
 	test( 'shows an undo success notice with the authored suggestion label once', () => {
 		currentState = createState( {
@@ -1067,7 +1072,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		renderContent();
 
 		expect( getContainer().textContent ).toContain(
-			'Undid Refresh hero copy.'
+			'Undid Refresh hero copy in the editor.'
 		);
 		expect(
 			getContainer().textContent.match( /Refresh hero copy/g )
@@ -1077,8 +1082,8 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 	test( 'formats translated status sentences without translating or duplicating authored labels', () => {
 		i18n.__.mockImplementation( ( text ) => {
 			const translations = {
-				'Applied %s.': 'Translated applied: %s.',
-				'Undid %s.': 'Translated undone: %s.',
+				'Applied %s in the editor.': 'Translated applied: %s.',
+				'Undid %s in the editor.': 'Translated undone: %s.',
 				'Model-authored label': 'Incorrectly translated authored label',
 			};
 
@@ -1184,7 +1189,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		renderPanel();
 
 		expect( getContainer().textContent ).not.toContain(
-			'Applied Refresh hero copy.'
+			'Applied Refresh hero copy in the editor.'
 		);
 		expect(
 			getContainer().querySelector( '[data-status-notice="true"]' )
@@ -1237,7 +1242,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		renderPanel();
 
 		expect( getContainer().textContent ).not.toContain(
-			'Applied Refresh older copy.'
+			'Applied Refresh older copy in the editor.'
 		);
 		expect(
 			getContainer().querySelector( '[data-status-notice="true"]' )
@@ -2596,7 +2601,7 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 		renderPanel();
 
 		expect( getContainer().textContent ).not.toContain(
-			'Undid Refresh hero copy.'
+			'Undid Refresh hero copy in the editor.'
 		);
 		expect(
 			getContainer().querySelector( '[data-status-notice="true"]' )

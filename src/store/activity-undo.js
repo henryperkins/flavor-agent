@@ -150,12 +150,27 @@ function buildDocumentOperationBeforeState( operations = [] ) {
 	} );
 }
 
+function buildBlockPersistenceIdentity( blockName, preApplyAttributes ) {
+	if (
+		! preApplyAttributes ||
+		typeof preApplyAttributes !== 'object' ||
+		Array.isArray( preApplyAttributes )
+	) {
+		return null;
+	}
+	return {
+		name: blockName || '',
+		attributes: JSON.parse( JSON.stringify( preApplyAttributes ) ),
+	};
+}
+
 export function buildBlockActivityEntry( {
 	afterAttributes,
 	beforeAttributes,
 	blockContext,
 	blockPath = null,
 	clientId,
+	preApplyAttributes = null,
 	requestPrompt = '',
 	requestMeta = null,
 	requestToken = 0,
@@ -169,6 +184,10 @@ export function buildBlockActivityEntry( {
 			clientId,
 			blockName: blockContext?.name || '',
 			blockPath: Array.isArray( blockPath ) ? blockPath : [],
+			persistenceIdentity: buildBlockPersistenceIdentity(
+				blockContext?.name,
+				preApplyAttributes
+			),
 		},
 		suggestion: suggestion?.label || '',
 		suggestionKey: suggestion?.suggestionKey || null,
@@ -194,6 +213,7 @@ export function buildBlockBatchActivityEntry( {
 	clientId,
 	learningAttribution = null,
 	memberSuggestionKeys = [],
+	preApplyAttributes = null,
 	recommendationSetId = '',
 	requestPrompt = '',
 	requestMeta = null,
@@ -230,6 +250,10 @@ export function buildBlockBatchActivityEntry( {
 			clientId,
 			blockName: blockContext?.name || '',
 			blockPath: Array.isArray( blockPath ) ? blockPath : [],
+			persistenceIdentity: buildBlockPersistenceIdentity(
+				blockContext?.name,
+				preApplyAttributes
+			),
 			members,
 		},
 		suggestion: suggestion.label,

@@ -79,6 +79,19 @@ const LEARNING_REPORT_RATE_FIELDS = [
 	'validationBlockedRate',
 	'insertFailedRate',
 ];
+const LEARNING_REPORT_SUMMARY_COUNT_FIELDS = [
+	'shownCount',
+	'saveAttemptedOccurrences',
+	'unverifiedCoverageCount',
+];
+const LEARNING_REPORT_SUMMARY_RATE_FIELDS = [
+	...LEARNING_REPORT_RATE_FIELDS,
+	'patternInsertionRate',
+	'savePersistedRate',
+	'saveDiscardedRate',
+	'saveUnverifiableRate',
+	'verificationCoverageRate',
+];
 
 function normalizeLocale( locale = '' ) {
 	if ( typeof locale !== 'string' || ! locale.trim() ) {
@@ -291,11 +304,12 @@ export function normalizeGovernanceLearningReport( report ) {
 		return null;
 	}
 
-	const summary = {
-		shownCount: normalizeReportCount( report.summary.shownCount ),
-	};
+	const summary = {};
 
-	for ( const field of LEARNING_REPORT_RATE_FIELDS ) {
+	for ( const field of LEARNING_REPORT_SUMMARY_COUNT_FIELDS ) {
+		summary[ field ] = normalizeReportCount( report.summary[ field ] );
+	}
+	for ( const field of LEARNING_REPORT_SUMMARY_RATE_FIELDS ) {
 		summary[ field ] = normalizeReportRate( report.summary[ field ] );
 	}
 
@@ -1416,6 +1430,14 @@ function getUndoReason( status, resolvedUndo = null, entry = null ) {
 }
 
 function getUndoStatusLabel( status, resolvedUndo = null, entry = null ) {
+	if ( isPlainObject( entry?.undoState ) ) {
+		return getAssuranceLabel(
+			entry,
+			'undoState',
+			__( 'Undo state unknown', 'flavor-agent' )
+		);
+	}
+
 	if (
 		entry?.apply &&
 		[ 'pending', 'rejected', 'expired', 'failed' ].includes( status )
@@ -1568,7 +1590,21 @@ function getActivityDescription( entry, entityLabel, documentLabel ) {
 	return segments.filter( Boolean ).join( ' · ' );
 }
 
+// These labels are resolved by the server. A missing field is unknown, and
+// neither activity order nor an editor undo supplies save-verification evidence.
+function getAssuranceLabel( entry, field, fallback ) {
+	const label = entry?.[ field ]?.label;
+	return typeof label === 'string' && label.trim() ? label : fallback;
+}
+
 function getActivityStatus( entry, allEntries = [] ) {
+	if ( isPlainObject( entry?.requestStatus ) ) {
+		return typeof entry.requestStatus.state === 'string' &&
+			entry.requestStatus.state.trim()
+			? entry.requestStatus.state
+			: 'unknown';
+	}
+
 	const explicitStatus =
 		typeof entry?.status === 'string' ? entry.status.trim() : '';
 
@@ -1631,6 +1667,14 @@ function getActivityStatus( entry, allEntries = [] ) {
 }
 
 export function getActivityStatusLabel( entry, allEntries = [] ) {
+	if ( isPlainObject( entry?.requestStatus ) ) {
+		return getAssuranceLabel(
+			entry,
+			'requestStatus',
+			__( 'Request status unknown', 'flavor-agent' )
+		);
+	}
+
 	const status =
 		typeof entry === 'string'
 			? entry
@@ -3519,6 +3563,21 @@ function normalizeActivityEntry(
 	);
 	const resolvedUndo = getResolvedActivityUndoState( entry, allEntries );
 	const status = getActivityStatus( entry, allEntries );
+	const persistenceVerdictLabel = getAssuranceLabel(
+		entry,
+		'persistenceVerdict',
+		__( 'Persistence unknown', 'flavor-agent' )
+	);
+	const verificationCoverageLabel = getAssuranceLabel(
+		entry,
+		'verificationCoverage',
+		__( 'Verification coverage unknown', 'flavor-agent' )
+	);
+	const undoStateLabel = getAssuranceLabel(
+		entry,
+		'undoState',
+		__( 'Undo state unknown', 'flavor-agent' )
+	);
 	const { timestampDisplay, dayKey } = formatActivityTimestamp(
 		entry?.timestamp,
 		{
@@ -3610,6 +3669,20 @@ function normalizeActivityEntry(
 		timestampDisplay,
 		status,
 		statusLabel: getActivityStatusLabel( entry, allEntries ),
+		persistenceVerdictLabel,
+		verificationCoverageLabel,
+		undoStateLabel,
+		assuranceIndicators: [
+			{ id: 'persistenceVerdict', label: persistenceVerdictLabel },
+			{ id: 'verificationCoverage', label: verificationCoverageLabel },
+			{ id: 'undoState', label: undoStateLabel },
+		].map( ( indicator ) => ( {
+			...indicator,
+			state:
+				typeof entry?.[ indicator.id ]?.state === 'string'
+					? entry[ indicator.id ].state
+					: 'unknown',
+		} ) ),
 		apply:
 			entry?.apply && typeof entry.apply === 'object'
 				? entry.apply

@@ -59,6 +59,8 @@ final class UninstallOptions {
 			'flavor_agent_docs_warm_queue',
 			'flavor_agent_docs_source_coverage_last_known_current',
 			'flavor_agent_activity_schema_version',
+			'flavor_agent_save_occurrence_schema_version',
+			'flavor_agent_save_verification_age_days',
 			'flavor_agent_attestation_schema_version',
 			'flavor_agent_attestation_public_keys',
 			'flavor_agent_activity_retention_days',

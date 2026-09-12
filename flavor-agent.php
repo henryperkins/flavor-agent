@@ -79,6 +79,8 @@ register_activation_hook(
 		wp_clear_scheduled_hook( 'flavor_agent_prewarm_docs' );
 		wp_clear_scheduled_hook( 'flavor_agent_warm_docs_context' );
 		FlavorAgent\Activity\Repository::install();
+		FlavorAgent\Activity\PersistenceOccurrenceRepository::install();
+		FlavorAgent\Activity\PersistenceOccurrenceRepository::schedule();
 		FlavorAgent\Attestation\Repository::install();
 		add_option( 'flavor_agent_cloudflare_workers_ai_api_token', '', '', false );
 		add_option( 'flavor_agent_qdrant_key', '', '', false );
@@ -92,6 +94,7 @@ register_deactivation_hook(
 	function () {
 		FlavorAgent\Patterns\PatternIndex::deactivate();
 		wp_clear_scheduled_hook( FlavorAgent\Activity\Repository::PRUNE_CRON_HOOK );
+		wp_clear_scheduled_hook( FlavorAgent\Activity\PersistenceOccurrenceRepository::CRON_HOOK );
 		wp_clear_scheduled_hook( FlavorAgent\Activity\Repository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK );
 		// Legacy docs-grounding warm crons; cleared by literal name so sites
 		// upgrading from the prewarm/context-warm era don't strand schedules.
@@ -103,6 +106,8 @@ register_deactivation_hook(
 );
 
 add_action( 'init', [ FlavorAgent\Activity\Repository::class, 'maybe_install' ], 5 );
+add_action( 'init', [ FlavorAgent\Activity\PersistenceOccurrenceRepository::class, 'maybe_install' ], 5 );
+FlavorAgent\Activity\PersistenceSaveObserver::register();
 add_action( 'init', [ FlavorAgent\Attestation\Repository::class, 'maybe_install' ], 5, 0 );
 add_action( 'init', [ FlavorAgent\Activity\RequestLoggingBridge::class, 'register' ], 5 );
 // When the WordPress AI plugin's "AI Request Logging" experiment is enabled the
@@ -306,6 +311,8 @@ function flavor_agent_get_editor_bootstrap_data(
 
 	return [
 		'settingsUrl'                  => $settings_url,
+		'restUrl'                      => rest_url(),
+		'currentUserId'                => (int) get_current_user_id(),
 		'connectorsUrl'                => $connectors_url,
 		'connectorApprovalUrl'         => $can_manage_settings
 			? FlavorAgent\LLM\WordPressAIClient::connector_approval_admin_url()

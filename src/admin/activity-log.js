@@ -319,8 +319,13 @@ function getLearningReportSummaryMetrics( report, locale ) {
 		},
 		{
 			id: 'apply-conversion',
-			label: __( 'Apply conversion', 'flavor-agent' ),
+			label: __( 'Apply conversion (editor state)', 'flavor-agent' ),
 			value: formatLearningReportRate( summary.applyConversionRate ),
+		},
+		{
+			id: 'pattern-insertion',
+			label: __( 'Pattern insertion (editor state)', 'flavor-agent' ),
+			value: formatLearningReportRate( summary.patternInsertionRate ),
 		},
 		{
 			id: 'undo',
@@ -336,6 +341,42 @@ function getLearningReportSummaryMetrics( report, locale ) {
 			id: 'insert-failed',
 			label: __( 'Insert failed', 'flavor-agent' ),
 			value: formatLearningReportRate( summary.insertFailedRate ),
+		},
+		{
+			id: 'save-attempts',
+			label: __( 'Save attempts', 'flavor-agent' ),
+			value: formatLearningReportInteger(
+				summary.saveAttemptedOccurrences,
+				locale
+			),
+		},
+		{
+			id: 'save-persisted',
+			label: __( 'Persisted at save', 'flavor-agent' ),
+			value: formatLearningReportRate( summary.savePersistedRate ),
+		},
+		{
+			id: 'save-discarded',
+			label: __( 'Discarded at save', 'flavor-agent' ),
+			value: formatLearningReportRate( summary.saveDiscardedRate ),
+		},
+		{
+			id: 'save-unverifiable',
+			label: __( 'Unverifiable saves', 'flavor-agent' ),
+			value: formatLearningReportRate( summary.saveUnverifiableRate ),
+		},
+		{
+			id: 'verification-coverage',
+			label: __( 'Verification coverage', 'flavor-agent' ),
+			value: formatLearningReportRate( summary.verificationCoverageRate ),
+		},
+		{
+			id: 'unverified-coverage',
+			label: __( 'Applies not verified', 'flavor-agent' ),
+			value: formatLearningReportInteger(
+				summary.unverifiedCoverageCount,
+				locale
+			),
 		},
 	];
 }
@@ -379,8 +420,8 @@ function LearningReportRow( { adminUrl, locale, row } ) {
 				</span>
 				<span>
 					{ sprintf(
-						/* translators: %s: apply-conversion percentage. */
-						__( 'Apply %s', 'flavor-agent' ),
+						/* translators: %s: editor-state apply-conversion percentage. */
+						__( 'Apply in editor %s', 'flavor-agent' ),
 						formatLearningReportRate( row.applyConversionRate )
 					) }
 				</span>
@@ -897,7 +938,13 @@ const DETAIL_SECTIONS = [
 				.filter( ( value ) => value && value !== NOT_RECORDED )
 				.join( ' · ' ),
 		rows: [
-			[ __( 'Status', 'flavor-agent' ), 'statusLabel', 'status' ],
+			[ __( 'Request status', 'flavor-agent' ), 'statusLabel', 'status' ],
+			[ __( 'Persistence', 'flavor-agent' ), 'persistenceVerdictLabel' ],
+			[
+				__( 'Save verification', 'flavor-agent' ),
+				'verificationCoverageLabel',
+			],
+			[ __( 'Undo', 'flavor-agent' ), 'undoStateLabel' ],
 			[ __( 'Recorded', 'flavor-agent' ), 'timestampDisplay' ],
 			[ __( 'Surface', 'flavor-agent' ), 'surfaceLabel' ],
 			[ __( 'Action type', 'flavor-agent' ), 'operationTypeLabel' ],
@@ -1088,9 +1135,21 @@ function getEntryTechnicalReviewSummary( entry ) {
 function getEntryStoryRows( entry ) {
 	return [
 		{
-			label: __( 'Current status', 'flavor-agent' ),
+			label: __( 'Request status', 'flavor-agent' ),
 			value: entry.statusLabel,
 			kind: 'status',
+		},
+		{
+			label: __( 'Persistence', 'flavor-agent' ),
+			value: entry.persistenceVerdictLabel,
+		},
+		{
+			label: __( 'Save verification', 'flavor-agent' ),
+			value: entry.verificationCoverageLabel,
+		},
+		{
+			label: __( 'Undo', 'flavor-agent' ),
+			value: entry.undoStateLabel,
 		},
 		{
 			label: __( 'Action', 'flavor-agent' ),
@@ -3385,11 +3444,23 @@ export function ActivityLogApp( { bootData } ) {
 					operators: [ 'is', 'isNot' ],
 				},
 				render: ( { item } ) => (
-					<span
-						className={ `flavor-agent-activity-log__status is-${ item.status }` }
-					>
-						{ item.statusLabel }
-					</span>
+					<div className="flavor-agent-activity-log__assurance">
+						<span
+							className={ `flavor-agent-activity-log__status is-${ item.status }` }
+						>
+							{ item.statusLabel }
+						</span>
+						{ item.assuranceIndicators.map( ( indicator ) => (
+							<span
+								key={ indicator.id }
+								className="flavor-agent-activity-log__assurance-indicator"
+								data-assurance={ indicator.id }
+								data-state={ indicator.state }
+							>
+								{ indicator.label }
+							</span>
+						) ) }
+					</div>
 				),
 			},
 			{

@@ -52,6 +52,11 @@ final class RecommendationOutcome {
 		'adapted_inserted_from_preview',
 		'adaptation_blocked',
 		'adapted_insert_failed',
+		'save_attempted',
+		'save_failed',
+		'save_confirmed',
+		'save_discarded',
+		'save_unverifiable',
 	];
 
 	private const SURFACES = [
@@ -77,6 +82,11 @@ final class RecommendationOutcome {
 		'adapted_inserted_from_preview' => 'Adapted pattern inserted from preview',
 		'adaptation_blocked'            => 'Pattern adaptation blocked',
 		'adapted_insert_failed'         => 'Adapted pattern insertion failed',
+		'save_attempted'                => 'Save requested',
+		'save_failed'                   => 'Save request failed',
+		'save_confirmed'                => 'Recommendation persisted',
+		'save_discarded'                => 'Recommendation not present in saved content',
+		'save_unverifiable'             => 'Saved change could not be verified',
 	];
 
 	/**
@@ -93,6 +103,10 @@ final class RecommendationOutcome {
 	public static function normalize_entry( array $entry ) {
 		if ( ! self::is_outcome_entry( $entry ) ) {
 			return $entry;
+		}
+
+		if ( PersistenceOutcome::is_lifecycle_event( (string) ( $entry['after']['outcome']['event'] ?? '' ) ) ) {
+			return PersistenceOutcome::normalize_entry( $entry );
 		}
 
 		$surface = self::normalize_enum(

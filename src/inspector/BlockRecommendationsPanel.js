@@ -666,7 +666,7 @@ export function BlockRecommendationsContent( {
 				applySuccessMessage: hasApplySuccess
 					? sprintf(
 							/* translators: %s: recommendation label. */
-							__( 'Applied %s.', 'flavor-agent' ),
+							__( 'Applied %s in the editor.', 'flavor-agent' ),
 							latestBlockActivity?.suggestion ||
 								__( 'suggestion', 'flavor-agent' )
 					  )
@@ -674,7 +674,7 @@ export function BlockRecommendationsContent( {
 				undoSuccessMessage: hasUndoSuccess
 					? sprintf(
 							/* translators: %s: recommendation label. */
-							__( 'Undid %s.', 'flavor-agent' ),
+							__( 'Undid %s in the editor.', 'flavor-agent' ),
 							lastUndoneBlockActivity?.suggestion ||
 								__( 'suggestion', 'flavor-agent' )
 					  )

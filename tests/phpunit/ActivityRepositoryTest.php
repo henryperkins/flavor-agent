@@ -747,12 +747,19 @@ final class ActivityRepositoryTest extends TestCase {
 		$this->assertCount( 2, $result['entries'] ?? [] );
 		$this->assertSame(
 			[
-				'shownCount'            => 1,
-				'reviewSelectionRate'   => 1.0,
-				'applyConversionRate'   => 0.0,
-				'undoRate'              => 0.5,
-				'validationBlockedRate' => 0.3333,
-				'insertFailedRate'      => 0.5,
+				'shownCount'               => 1,
+				'reviewSelectionRate'      => 1.0,
+				'applyConversionRate'      => 0.0,
+				'patternInsertionRate'     => 0.0,
+				'undoRate'                 => 0.5,
+				'validationBlockedRate'    => 0.3333,
+				'insertFailedRate'         => 0.5,
+				'saveAttemptedOccurrences' => 0,
+				'savePersistedRate'        => 0.0,
+				'saveDiscardedRate'        => 0.0,
+				'saveUnverifiableRate'     => 0.0,
+				'verificationCoverageRate' => 0.0,
+				'unverifiedCoverageCount'  => 0,
 			],
 			$report['summary'] ?? null
 		);

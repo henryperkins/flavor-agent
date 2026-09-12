@@ -64,6 +64,8 @@ module.exports = defineConfig( {
 			'npx @wp-playground/cli@3.1.51 server',
 			`--port ${ port }`,
 			'--wp=7.1',
+			// Direct unzip + activation avoids installPlugin's staged-directory
+			// rename, which intermittently fails with EPERM on Windows hosts.
 			'--blueprint tests/e2e/playground-blueprint.json',
 			`--mount-dir ${ quoteShellArg(
 				pluginDir

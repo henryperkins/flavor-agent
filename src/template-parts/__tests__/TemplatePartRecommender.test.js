@@ -1393,6 +1393,29 @@ describe( 'TemplatePartRecommender', () => {
 		).toBe( false );
 	} );
 
+	test( 'qualifies a template-part undo as an editor change', async () => {
+		currentState = createState( {
+			store: {
+				activityLog: [
+					{
+						id: 'activity-1',
+						type: 'apply_template_part_suggestion',
+						surface: 'template-part',
+						suggestion: 'Add utility links',
+						target: { templatePartRef: 'theme//header' },
+						undo: { canUndo: false, status: 'undone', error: null },
+					},
+				],
+				lastUndoneActivityId: 'activity-1',
+				undoStatus: 'success',
+			},
+		} );
+		await renderPanel();
+		expect( hasText( 'Undid Add utility links in the editor.' ) ).toBe(
+			true
+		);
+	} );
+
 	test( 'shows an undo action on apply success notices and dispatches undo for the latest template-part activity', async () => {
 		currentState = createState( {
 			store: {
@@ -1427,7 +1450,9 @@ describe( 'TemplatePartRecommender', () => {
 
 		await renderPanel();
 
-		expect( hasText( 'Applied 1 template-part operation.' ) ).toBe( true );
+		expect(
+			hasText( 'Applied 1 template-part operation in the editor.' )
+		).toBe( true );
 
 		const undoButton = Array.from(
 			getContainer().querySelectorAll( 'button' )

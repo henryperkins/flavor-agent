@@ -35,6 +35,12 @@ final class RecommendationOutcomeEvaluationTest extends TestCase {
 				'applyConversionRate'       => 0.5,
 				'reviewApplyConversionRate' => 1.0,
 				'unlinkedApplyCount'        => 1,
+				'saveAttemptedOccurrences'  => 0,
+				'savePersistedRate'         => 0.0,
+				'saveDiscardedRate'         => 0.0,
+				'saveUnverifiableRate'      => 0.0,
+				'verificationCoverageRate'  => 0.0,
+				'unverifiedCoverageCount'   => 0,
 			],
 			RecommendationOutcomeMetrics::evaluate( $entries )
 		);

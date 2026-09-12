@@ -73,6 +73,7 @@ namespace FlavorAgent\Tests\Support {
 		public static array $capability_checks = [];
 
 		public static array $block_templates = [];
+		public static array $post_type_objects = [];
 
 		/**
 		 * Optional one-shot hook fired once, right after the first get_block_templates()
@@ -487,6 +488,7 @@ namespace FlavorAgent\Tests\Support {
 			self::$capabilities                = [];
 			self::$capability_checks           = [];
 			self::$block_templates             = [];
+			self::$post_type_objects           = [];
 			self::$block_templates_read_hook   = null;
 			self::$before_block_templates_query = null;
 			self::$transients                  = [];
@@ -1185,6 +1187,18 @@ namespace {
 
 			private string $route;
 
+			private array $headers = [];
+
+			public function set_header(string $key, string $value): void
+			{
+				$this->headers[strtolower(str_replace('_', '-', $key))] = $value;
+			}
+
+			public function get_header(string $key): ?string
+			{
+				return $this->headers[strtolower(str_replace('_', '-', $key))] ?? null;
+			}
+
 			public function __construct(string $method = 'GET', string $route = '/')
 			{
 				$this->method = strtoupper($method);
@@ -1505,6 +1519,42 @@ namespace {
 					return 1;
 				}
 
+				if (preg_match('/DELETE evidence FROM\s+([^\s]+)\s+AS evidence LEFT JOIN/i', $query, $matches)) {
+					$table = trim($matches[1], '`');
+					$rows = WordPressTestState::$db_tables[$table] ?? [];
+					$ids = array_column($rows, 'activity_id');
+					WordPressTestState::$db_tables[$table] = array_values(array_filter($rows, static fn(array $row): bool => empty($row['linked_apply_activity_id']) || in_array($row['linked_apply_activity_id'], $ids, true)));
+					return count($rows) - count(WordPressTestState::$db_tables[$table]);
+				}
+
+				if (preg_match("/UPDATE\\s+([^\\s]+)\\s+SET snapshot_json = NULL, status = CASE.*WHERE expires_at <= '([^']+)'/i", $query, $matches)) {
+					$table = trim($matches[1], '`');
+					$updated = 0;
+					foreach (WordPressTestState::$db_tables[$table] ?? [] as $index => $row) {
+						if (($row['expires_at'] ?? '') <= $matches[2]) {
+							WordPressTestState::$db_tables[$table][$index]['snapshot_json'] = null;
+							WordPressTestState::$db_tables[$table][$index]['status'] = 'pending' === ($row['status'] ?? '') ? 'expired' : $row['status'];
+							++$updated;
+						}
+					}
+					return $updated;
+				}
+
+				if (preg_match('/DELETE occurrence FROM\s+([^\s]+)\s+AS occurrence WHERE NOT EXISTS \(SELECT 1 FROM\s+([^\s]+)\s+AS original/i', $query, $matches)) {
+					$table = trim($matches[1], '`');
+					$applies = WordPressTestState::$db_tables[trim($matches[2], '`')] ?? [];
+					$rows = WordPressTestState::$db_tables[$table] ?? [];
+					WordPressTestState::$db_tables[$table] = array_values(array_filter($rows, static function (array $row) use ($applies): bool {
+						foreach ($applies as $apply) {
+							if ('editor-state' === ($apply['apply_lane'] ?? '') && ($apply['admin_post_type'] ?? '') === $row['admin_post_type'] && ($apply['admin_entity_id'] ?? '') === $row['admin_entity_id'] && $apply['id'] <= $row['candidate_before_id'] && $apply['created_at'] >= $row['candidate_since']) {
+								return true;
+							}
+						}
+						return false;
+					}));
+					return count($rows) - count(WordPressTestState::$db_tables[$table]);
+				}
+
 				if (preg_match('/DELETE FROM\s+([^\s]+)\s+WHERE\s+created_at\s*<\s*\'([^\']+)\'/i', $query, $matches)) {
 					$table  = (string) ($matches[1] ?? '');
 					$cutoff = (string) ($matches[2] ?? '');
@@ -1512,6 +1562,7 @@ namespace {
 						$query,
 						'CONVERT(HEX(execution_result) USING utf8mb4) REGEXP'
 					);
+					$preserve_linked_evidence = str_contains($query, 'linked_apply_activity_id IS NULL');
 
 					if (isset(WordPressTestState::$db_tables[$table])) {
 						$before_count = count(WordPressTestState::$db_tables[$table]);
@@ -1519,6 +1570,7 @@ namespace {
 							array_filter(
 								WordPressTestState::$db_tables[$table],
 								static fn(array $row): bool => (string) ($row['created_at'] ?? '') >= $cutoff
+									|| ($preserve_linked_evidence && ! empty($row['linked_apply_activity_id']))
 									|| (
 										$preserve_active_claims
 										&& 1 === preg_match('/^claim:[a-f0-9]{24}$/', (string) ($row['execution_result'] ?? ''))
@@ -2253,6 +2305,28 @@ namespace {
 				$rows  = array_values(WordPressTestState::$db_tables[$table] ?? []);
 				$all_rows = $rows;
 				$has_entity_pairs = false;
+				if (preg_match('/\blinked_apply_activity_id\s+IS NULL/i', $query)) {
+					$rows = array_values(array_filter($rows, static fn(array $row): bool => null === ($row['linked_apply_activity_id'] ?? null)));
+				}
+
+				// Indexed persistence evidence queries use the same scalar predicates
+				// as the activity table, plus a numeric keyset cursor.
+				foreach (['apply_lane', 'admin_entity_id', 'snapshot_id', 'occurrence_id', 'entity_key', 'status'] as $column) {
+					if (preg_match("/\\b{$column}\\s*=\\s*'([^']*)'/i", $query, $persistence_match)) {
+						$value = stripslashes($persistence_match[1]);
+						$rows = array_values(array_filter($rows, static fn(array $row): bool => (string) ($row[$column] ?? '') === $value));
+					}
+				}
+				if (preg_match_all('/\\bid\\s*(<=|>=|<|>)\\s*(\\d+)/i', $query, $cursor_matches, PREG_SET_ORDER)) {
+					foreach ($cursor_matches as $cursor_match) {
+						$boundary = (int) $cursor_match[2];
+						$operator = $cursor_match[1];
+						$rows = array_values(array_filter($rows, static function (array $row) use ($boundary, $operator): bool {
+							$id = (int) ($row['id'] ?? 0);
+							return match ($operator) { '<=' => $id <= $boundary, '>=' => $id >= $boundary, '<' => $id < $boundary, '>' => $id > $boundary };
+						}));
+					}
+				}
 
 				if (preg_match('/\b1\s*=\s*0\b/', $query)) {
 					$rows = [];
@@ -2462,7 +2536,7 @@ namespace {
 					);
 				}
 
-				foreach (['attestation_id', 'reverts_attestation_id', 'supersedes_attestation_id', 'related_activity_id'] as $column) {
+				foreach (['attestation_id', 'reverts_attestation_id', 'supersedes_attestation_id', 'related_activity_id', 'linked_apply_activity_id'] as $column) {
 					if (preg_match("/\b{$column}\b\s+IN\s*\(([^)]*)\)/i", $query, $matches)) {
 						$values = [];
 
@@ -3940,6 +4014,14 @@ namespace {
 		function wp_get_global_styles(): array
 		{
 			return WordPressTestState::$global_styles;
+		}
+	}
+
+	if (! function_exists('get_post_type_object')) {
+		function get_post_type_object(string $post_type): object
+		{
+			$bases = ['post' => 'posts', 'page' => 'pages', 'wp_template' => 'templates', 'wp_template_part' => 'template-parts', 'wp_global_styles' => 'global-styles'];
+			return WordPressTestState::$post_type_objects[$post_type] ?? (object) ['name' => $post_type, 'rest_base' => $bases[$post_type] ?? false, 'rest_namespace' => 'wp/v2'];
 		}
 	}
 

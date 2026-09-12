@@ -1,8 +1,17 @@
 const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
+const mockUseRegistry = jest.fn();
+const mockSetActivitySession = jest.fn();
 const mockLoadActivitySession = jest.fn();
 const mockGetStyleBookUiState = jest.fn();
 const mockSubscribeToStyleBookUi = jest.fn();
+const mockInstallSaveObserver = jest.fn( () => () => {} );
+
+jest.mock( '../../store/save-persistence', () => ( {
+	...jest.requireActual( '../../store/save-persistence' ),
+	installSavePersistenceObserver: ( ...args ) =>
+		mockInstallSaveObserver( ...args ),
+} ) );
 
 jest.mock( '@wordpress/data', () => {
 	const actual = jest.requireActual( '@wordpress/data' );
@@ -15,6 +24,10 @@ jest.mock( '@wordpress/data', () => {
 		useSelect: {
 			enumerable: true,
 			value: ( ...args ) => mockUseSelect( ...args ),
+		},
+		useRegistry: {
+			enumerable: true,
+			value: ( ...args ) => mockUseRegistry( ...args ),
 		},
 	} );
 } );
@@ -34,6 +47,10 @@ const { act } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import ActivitySessionBootstrap from '../ActivitySessionBootstrap';
+import {
+	readPersistedActivityLog,
+	writePersistedActivityLog,
+} from '../../store/activity-history';
 
 const { getRoot } = setupReactTest();
 
@@ -44,6 +61,13 @@ let styleBookUiSubscription = null;
 
 beforeEach( () => {
 	jest.clearAllMocks();
+	window.sessionStorage.clear();
+	mockUseRegistry.mockReturnValue( {
+		select: () => ( {
+			getActivityScopeKey: () => 'post:99',
+			getActivityLog: () => [],
+		} ),
+	} );
 	currentEditorState = {
 		postType: 'post',
 		postId: null,
@@ -96,10 +120,67 @@ beforeEach( () => {
 	);
 	mockUseDispatch.mockImplementation( () => ( {
 		loadActivitySession: mockLoadActivitySession,
+		setActivitySession: mockSetActivitySession,
 	} ) );
 } );
 
 describe( 'ActivitySessionBootstrap', () => {
+	test( 'merges server facts into the original scope after navigation without replacing the active scope', () => {
+		writePersistedActivityLog( 'post:42', [
+			{
+				id: 'apply-42',
+				type: 'apply_suggestion',
+				surface: 'block',
+				document: { scopeKey: 'post:42' },
+				target: { clientId: 'block-42' },
+			},
+		] );
+		act( () => {
+			getRoot().render( <ActivitySessionBootstrap /> );
+		} );
+		const onReconcile =
+			mockInstallSaveObserver.mock.calls[ 0 ][ 0 ].onReconcile;
+		onReconcile( [
+			{
+				id: 'apply-42',
+				document: { scopeKey: 'post:42' },
+				persistenceVerdict: {
+					state: 'save_confirmed',
+					saveSequence: 2,
+					label: 'Persisted',
+				},
+				requestStatus: {
+					state: 'save_failed',
+					label: 'Save request failed',
+				},
+				undoState: { state: 'undone', label: 'Undone in editor' },
+			},
+		] );
+		expect( readPersistedActivityLog( 'post:42' )[ 0 ] ).toMatchObject( {
+			target: { clientId: 'block-42' },
+			persistenceVerdict: { state: 'save_confirmed' },
+			requestStatus: { state: 'save_failed' },
+			undoState: { state: 'undone' },
+		} );
+		expect( mockSetActivitySession ).not.toHaveBeenCalled();
+	} );
+
+	test( 'installs the editor-wide observer independently of the active document and keeps it through scope changes', () => {
+		act( () => {
+			getRoot().render( <ActivitySessionBootstrap /> );
+		} );
+		expect( mockInstallSaveObserver ).toHaveBeenCalledTimes( 1 );
+		expect( mockInstallSaveObserver ).toHaveBeenCalledWith( {
+			selectCore: expect.any( Function ),
+			onReconcile: expect.any( Function ),
+		} );
+		currentEditorState = { postType: 'wp_template', postId: 'theme//home' };
+		act( () => {
+			getRoot().render( <ActivitySessionBootstrap /> );
+		} );
+		expect( mockInstallSaveObserver ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	test( 'does not subscribe to Style Book DOM outside the Styles sidebar', () => {
 		act( () => {
 			getRoot().render( <ActivitySessionBootstrap /> );

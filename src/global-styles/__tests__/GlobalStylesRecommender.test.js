@@ -1496,7 +1496,7 @@ describe( 'GlobalStylesRecommender', () => {
 		} );
 
 		expect( sidebar.textContent ).toContain(
-			'Flavor Agent applied the selected Global Styles change.'
+			'Global Styles updated in the editor.'
 		);
 
 		const undoButton = Array.from(
@@ -1567,7 +1567,7 @@ describe( 'GlobalStylesRecommender', () => {
 		);
 		const applySuccessNotice = notices.find( ( element ) =>
 			element.textContent.includes(
-				'Flavor Agent applied the selected Global Styles change.'
+				'Global Styles updated in the editor.'
 			)
 		);
 
@@ -1617,6 +1617,31 @@ describe( 'GlobalStylesRecommender', () => {
 		).not.toBeNull();
 	} );
 
+	test( 'qualifies a Global Styles undo as an editor change', () => {
+		const undo = { canUndo: false, status: 'undone', error: null };
+		mockGetGlobalStylesActivityUndoState.mockReturnValue( undo );
+		currentStoreState = {
+			...currentStoreState,
+			activityLog: [
+				{
+					id: 'activity-1',
+					surface: 'global-styles',
+					suggestion: 'Use accent canvas',
+					target: { globalStylesId: '17' },
+					undo,
+				},
+			],
+			undoStatus: 'success',
+			lastUndoneActivityId: 'activity-1',
+		};
+		act( () => {
+			getRoot().render( <GlobalStylesRecommender /> );
+		} );
+		expect( sidebar.textContent ).toContain(
+			'Previous Global Styles restored in the editor.'
+		);
+	} );
+
 	test( 'does not keep an undo success notice once the resolved style activity is available again', () => {
 		currentStoreState = {
 			...currentStoreState,
@@ -1644,7 +1669,7 @@ describe( 'GlobalStylesRecommender', () => {
 		} );
 
 		expect( sidebar.textContent ).not.toContain(
-			'Flavor Agent restored the previous Global Styles config.'
+			'Previous Global Styles restored in the editor.'
 		);
 		expect(
 			sidebar.querySelector( '[data-status-notice="true"]' )

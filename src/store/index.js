@@ -2368,6 +2368,7 @@ const actions = {
 							currentAttributes,
 							appliedAttributeKeys
 						),
+						preApplyAttributes: currentAttributes,
 						blockContext,
 						blockPath: findBlockPath(
 							blockEditorSelect.getBlocks?.() || [],
@@ -2805,6 +2806,7 @@ const actions = {
 						currentAttributes,
 						appliedAttributeKeys
 					),
+					preApplyAttributes: currentAttributes,
 					blockContext,
 					blockPath: findBlockPath(
 						blockEditorSelect.getBlocks?.() || [],

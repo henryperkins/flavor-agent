@@ -51,6 +51,7 @@ final class UninstallTest extends TestCase {
 			],
 		];
 
+		WordPressTestState::$db_tables['wp_flavor_agent_save_occurrences'] = [ [ 'snapshot_json' => '{"content":"private"}' ] ];
 		require dirname( __DIR__, 2 ) . '/uninstall.php';
 
 		foreach ( $option_names as $option_name ) {
@@ -59,10 +60,12 @@ final class UninstallTest extends TestCase {
 
 		$this->assertSame( [], WordPressTestState::$transients );
 		$this->assertArrayNotHasKey( ActivityRepository::table_name(), WordPressTestState::$db_tables );
+		$this->assertArrayNotHasKey( 'wp_flavor_agent_save_occurrences', WordPressTestState::$db_tables );
 		$this->assertSame(
 			[
 				'flavor_agent_reindex_patterns',
 				'flavor_agent_prune_activity',
+				'flavor_agent_verify_saved_applies',
 				'flavor_agent_backfill_activity_admin_projection',
 				'flavor_agent_prewarm_docs',
 				'flavor_agent_warm_docs_context',

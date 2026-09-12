@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace FlavorAgent\REST;
 
 use FlavorAgent\Activity\Permissions as ActivityPermissions;
+use FlavorAgent\Activity\PersistenceAssurance;
+use FlavorAgent\Activity\PersistenceOccurrenceRepository;
+use FlavorAgent\Activity\PersistenceOutcome;
 use FlavorAgent\Apply\ApplyClaim;
 use FlavorAgent\Apply\PendingApplyDecision;
 use FlavorAgent\Activity\Repository as ActivityRepository;
@@ -69,6 +72,16 @@ final class Agent_Controller {
 					'callback'            => [ __CLASS__, 'handle_get_activity' ],
 					'permission_callback' => [ ActivityPermissions::class, 'can_access_activity_request' ],
 					'args'                => [
+						'applyIds'                   => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
+						'saveOccurrenceId'           => [
+							'required'          => false,
+							'type'              => 'string',
+							'sanitize_callback' => 'sanitize_text_field',
+						],
 						'scopeKey'                   => [
 							'required'          => false,
 							'type'              => 'string',
@@ -500,6 +513,28 @@ final class Agent_Controller {
 			return ActivityPermissions::forbidden_error();
 		}
 
+		if ( null !== $request->get_param( 'applyIds' ) ) {
+			$entries    = [];
+			$pending    = false;
+			$occurrence = (string) $request->get_param( 'saveOccurrenceId' );
+			foreach ( ActivityPermissions::persistence_lookup_ids( $request ) as $id ) {
+				$apply = ActivityRepository::find( $id );
+				if ( ! is_array( $apply ) || ! in_array( $apply['type'] ?? '', PersistenceOutcome::APPLY_TYPES, true ) ) {
+					continue;
+				}
+				$entries[] = $apply;
+				$snapshot  = PersistenceOccurrenceRepository::find_occurrence( $occurrence, PersistenceOccurrenceRepository::entity_for_apply( $apply ) );
+				$pending   = $pending || ( is_array( $snapshot ) && 'pending' === $snapshot['status'] && strtotime( $snapshot['expiresAt'] . ' UTC' ) > time() );
+			}
+			return new \WP_REST_Response(
+				[
+					'entries' => PersistenceAssurance::enrich( $entries ),
+					'pending' => $pending,
+				],
+				200
+			);
+		}
+
 		$is_global_request = true === $request->get_param( 'global' )
 			|| '' === \trim( (string) $request->get_param( 'scopeKey' ) );
 
@@ -556,6 +591,7 @@ final class Agent_Controller {
 
 			if ( \is_array( $result['entries'] ?? null ) ) {
 				$result['entries'] = ActivityRepository::enrich_admin_entries_with_apply_claims( $result['entries'] );
+				$result['entries'] = PersistenceAssurance::enrich( $result['entries'] );
 			}
 
 			return new \WP_REST_Response( $result, 200 );
@@ -584,7 +620,7 @@ final class Agent_Controller {
 
 		return new \WP_REST_Response(
 			[
-				'entries' => $entries,
+				'entries' => PersistenceAssurance::enrich( $entries ),
 			],
 			200
 		);
@@ -691,9 +727,14 @@ final class Agent_Controller {
 			);
 		}
 
-		$result = ActivityRepository::create(
-			self::sanitize_structured_value( $entry )
-		);
+		$entry = self::sanitize_structured_value( $entry );
+		if ( in_array( $entry['after']['outcome']['event'] ?? '', PersistenceOutcome::SERVER_EVENTS, true ) ) {
+			return new \WP_Error( 'flavor_agent_persistence_server_authorship_required', 'Only the server can record a persistence verdict.', [ 'status' => 403 ] );
+		}
+		if ( 'server-executed' === ( $entry['applyLane'] ?? null ) ) {
+			return new \WP_Error( 'flavor_agent_activity_invalid_entry', 'The server execution lane cannot be set by an editor activity request.', [ 'status' => 400 ] );
+		}
+		$result = ActivityRepository::create( $entry );
 
 		if ( \is_wp_error( $result ) ) {
 			return $result;

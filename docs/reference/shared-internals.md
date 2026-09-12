@@ -73,6 +73,8 @@ Pure-function utility with zero internal dependencies. Contains the core of the 
 
 ### `src/store/recommendation-outcomes.js`
 
+`OUTCOME_EVENTS` is the client emit gate: it includes `save_attempted` and `save_failed`, but excludes the three server-only persistence verdicts. Save observations use `save-persistence-outcomes.js`; `save-persistence.js` owns the editor-wide request middleware, site/user-scoped outbox, and explicit verdict reconciliation. The activity cache remains version 4. See [save persistence outcomes](../features/save-persistence-outcomes.md) for the shared server resolver, storage lifecycle, and metric definitions.
+
 Recommendation outcome decoration, dedupe, and diagnostic activity-entry construction. Each fetched recommendation set is decorated with a stable `recommendationSetId`, suggestion-level `suggestionKey`, and ranking snapshot, so downstream outcome events (`shown`, `selected_for_review`, `stale_blocked`, `validation_blocked`, `insert_failed`, `pattern_inserted_from_shelf`) can be deduplicated and joined back to the originating ranking decision. Outcome entries are written through `createActivityEntry()` with `executionResult: 'diagnostic'` and `undo.canUndo: false` so they coexist with applied/undone entries without polluting the executable activity timeline.
 
 **Key exports:**

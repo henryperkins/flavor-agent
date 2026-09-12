@@ -104,6 +104,7 @@ function getExternalApplyStatus( entry ) {
  * @return {{label: string, tone: string}} Pill label and tone token.
  */
 function getStatusLabel( entry ) {
+	const isEditorApply = entry?.applyLane === 'editor-state';
 	if (
 		isDiagnosticActivityEntry( entry ) &&
 		entry?.undo?.status !== 'failed'
@@ -142,17 +143,25 @@ function getStatusLabel( entry ) {
 		entry?.persistence?.status !== 'server' &&
 		entry?.persistence?.syncType === 'undo'
 	) {
+		const undoLabel = isEditorApply
+			? __( 'Undone in editor', 'flavor-agent' )
+			: __( 'Undo pending sync', 'flavor-agent' );
 		return {
 			label:
 				entry?.undo?.status === 'undone'
-					? __( 'Undo pending sync', 'flavor-agent' )
+					? undoLabel
 					: __( 'Audit sync pending', 'flavor-agent' ),
 			tone: 'stale',
 		};
 	}
 
 	if ( entry?.undo?.status === 'undone' ) {
-		return { label: __( 'Undone', 'flavor-agent' ), tone: 'stale' };
+		return {
+			label: isEditorApply
+				? __( 'Undone in editor', 'flavor-agent' )
+				: __( 'Undone', 'flavor-agent' ),
+			tone: 'stale',
+		};
 	}
 
 	if ( entry?.undo?.status === 'blocked' ) {
@@ -183,7 +192,12 @@ function getStatusLabel( entry ) {
 		};
 	}
 
-	return { label: __( 'Applied', 'flavor-agent' ), tone: 'success' };
+	return {
+		label: isEditorApply
+			? __( 'Changed in editor', 'flavor-agent' )
+			: __( 'Applied', 'flavor-agent' ),
+		tone: 'success',
+	};
 }
 
 function getExternalApplyMessage( entry ) {

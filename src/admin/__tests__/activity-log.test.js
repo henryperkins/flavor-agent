@@ -133,6 +133,9 @@ jest.mock( '@wordpress/dataviews/wp', () => {
 		const titleField = Array.isArray( props.fields )
 			? props.fields.find( ( field ) => field.id === 'title' )
 			: null;
+		const statusField = props.fields?.find(
+			( field ) => field.id === 'status'
+		);
 
 		if ( ! props.data.length ) {
 			return props.empty || null;
@@ -143,16 +146,24 @@ jest.mock( '@wordpress/dataviews/wp', () => {
 			{ className: 'mock-dataviews-layout' },
 			props.data.map( ( item ) =>
 				createElement(
-					'button',
+					'div',
 					{
 						key: item.id,
-						'aria-label': item.title,
-						onClick: () => props.onClickItem?.( item ),
-						type: 'button',
+						className: 'mock-activity-row',
+						'data-activity-id': item.id,
 					},
-					titleField?.render
-						? titleField.render( { item } )
-						: item.title
+					createElement(
+						'button',
+						{
+							'aria-label': item.title,
+							onClick: () => props.onClickItem?.( item ),
+							type: 'button',
+						},
+						titleField?.render
+							? titleField.render( { item } )
+							: item.title
+					),
+					statusField?.render?.( { item } )
 				)
 			)
 		);
@@ -920,7 +931,7 @@ describe( 'ActivityLogApp', () => {
 
 		expect( story ).not.toBeNull();
 		expect( story.textContent ).toContain( 'At a glance' );
-		expect( getDefinitionValue( story, 'Current status' ) ).toBe(
+		expect( getDefinitionValue( story, 'Request status' ) ).toBe(
 			'Applied'
 		);
 		expect(
@@ -950,6 +961,120 @@ describe( 'ActivityLogApp', () => {
 			'Provider diagnostics',
 			'Request context',
 		] );
+	} );
+
+	test( 'renders request, persistence, coverage, and undo as independent server facts in the feed and detail', async () => {
+		const entry = createEntry( {
+			requestStatus: {
+				state: 'save_failed',
+				label: 'Save request failed (server)',
+			},
+			persistenceVerdict: {
+				state: 'save_confirmed',
+				label: 'Persisted at last comparison',
+			},
+			verificationCoverage: {
+				state: 'compared',
+				label: 'Compared with saved content (server)',
+			},
+			undoState: { state: 'undone', label: 'Undone in editor (server)' },
+			status: 'blocked',
+			admin: { statusLabel: 'Undo blocked' },
+			attestation: { id: 'att_historical' },
+		} );
+		await renderApp( [ entry ] );
+
+		const row = getContainer().querySelector( '.mock-activity-row' );
+		const status = row.querySelector(
+			'.flavor-agent-activity-log__status'
+		);
+		expect( status.textContent ).toBe( entry.requestStatus.label );
+		const indicators = Array.from(
+			row.querySelectorAll(
+				'.flavor-agent-activity-log__assurance-indicator'
+			)
+		);
+		expect(
+			indicators.map( ( indicator ) => indicator.textContent )
+		).toEqual( [
+			entry.persistenceVerdict.label,
+			entry.verificationCoverage.label,
+			entry.undoState.label,
+		] );
+		expect(
+			row.querySelector(
+				'.flavor-agent-activity-log__assurance a, .flavor-agent-activity-log__assurance button'
+			)
+		).toBeNull();
+		expect(
+			row.querySelector( '.flavor-agent-activity-log__entry-badge' )
+				.textContent
+		).toBe( 'Attestation' );
+
+		const story = getContainer().querySelector(
+			'.flavor-agent-activity-log__entry-story'
+		);
+		expect( getDefinitionValue( story, 'Request status' ) ).toBe(
+			entry.requestStatus.label
+		);
+		expect( getDefinitionValue( story, 'Persistence' ) ).toBe(
+			entry.persistenceVerdict.label
+		);
+		expect( getDefinitionValue( story, 'Save verification' ) ).toBe(
+			entry.verificationCoverage.label
+		);
+		expect( getDefinitionValue( story, 'Undo' ) ).toBe(
+			entry.undoState.label
+		);
+	} );
+
+	test( 'shows unknown, unverified, and unverifiable assurance without collapsing them', async () => {
+		await renderApp( [
+			createEntry( { id: 'missing', executionResult: 'applied' } ),
+			createEntry( {
+				id: 'unverified',
+				persistenceVerdict: {
+					state: 'unknown',
+					label: 'Persistence unknown',
+				},
+				verificationCoverage: {
+					state: 'not_verified',
+					label: 'Not verified',
+				},
+			} ),
+			createEntry( {
+				id: 'unverifiable',
+				persistenceVerdict: {
+					state: 'save_unverifiable',
+					label: 'Could not verify saved change',
+				},
+				verificationCoverage: {
+					state: 'compared',
+					label: 'Compared with saved content',
+				},
+			} ),
+		] );
+		const getRow = ( id ) =>
+			getContainer().querySelector( `[data-activity-id="${ id }"]` );
+
+		expect( getRow( 'missing' ).textContent ).toContain(
+			'Persistence unknown'
+		);
+		expect( getRow( 'missing' ).textContent ).toContain(
+			'Verification coverage unknown'
+		);
+		expect( getRow( 'unverified' ).textContent ).toContain(
+			'Not verified'
+		);
+		expect( getRow( 'unverifiable' ).textContent ).toContain(
+			'Could not verify saved change'
+		);
+		expect( getRow( 'unverifiable' ).textContent ).toContain(
+			'Compared with saved content'
+		);
+		expect( getRow( 'unverifiable' ).textContent ).not.toContain(
+			'Not verified'
+		);
 	} );
 
 	test( 'renders summary cards from the server response instead of the visible page size', async () => {
@@ -1008,6 +1133,13 @@ describe( 'ActivityLogApp', () => {
 							shownCount: 12,
 							reviewSelectionRate: 0.25,
 							applyConversionRate: 0.1667,
+							patternInsertionRate: 0.2,
+							saveAttemptedOccurrences: 11,
+							savePersistedRate: 0.75,
+							saveDiscardedRate: 0.25,
+							saveUnverifiableRate: 0.1,
+							verificationCoverageRate: 0.8,
+							unverifiedCoverageCount: 3,
 							undoRate: 0.08,
 							validationBlockedRate: 0.1,
 							insertFailedRate: 0.03,
@@ -1078,7 +1210,19 @@ describe( 'ActivityLogApp', () => {
 			'Truncated to newest matching rows'
 		);
 		expect( report.textContent ).toContain( 'Review selection25%' );
-		expect( report.textContent ).toContain( 'Apply conversion16.7%' );
+		expect( report.textContent ).toContain(
+			'Apply conversion (editor state)16.7%'
+		);
+		expect( report.textContent ).toContain(
+			'Pattern insertion (editor state)20%'
+		);
+		expect( report.textContent ).toContain( 'Save attempts11' );
+		expect( report.textContent ).toContain( 'Persisted at save75%' );
+		expect( report.textContent ).toContain( 'Discarded at save25%' );
+		expect( report.textContent ).toContain( 'Unverifiable saves10%' );
+		expect( report.textContent ).toContain( 'Verification coverage80%' );
+		expect( report.textContent ).toContain( 'Applies not verified3' );
+		expect( report.textContent ).toContain( 'Apply in editor 20%' );
 		expect( report.textContent ).toContain( 'Undo rate8%' );
 		expect( report.textContent ).toContain( 'Validation blocked10%' );
 		expect( report.textContent ).toContain( 'Insert failed3%' );
@@ -1092,6 +1236,43 @@ describe( 'ActivityLogApp', () => {
 				'a[href="https://example.test/wp-admin/options-general.php?page=flavor-agent-activity&activity=activity-1"]'
 			)
 		).not.toBeNull();
+	} );
+
+	test( 'renders zero save metrics when the report has no eligible or compared applies', async () => {
+		await renderApp(
+			buildResponse( [], {
+				learningReport: {
+					version: 'governance-learning-report-v1',
+					sampleSize: 0,
+					summary: {
+						saveAttemptedOccurrences: 0,
+						savePersistedRate: 0,
+						saveDiscardedRate: 0,
+						saveUnverifiableRate: 0,
+						verificationCoverageRate: 0,
+						unverifiedCoverageCount: 0,
+					},
+					groups: {},
+				},
+			} )
+		);
+		const report = getContainer().querySelector(
+			'.flavor-agent-activity-log__learning-report'
+		);
+
+		for ( const label of [
+			'Persisted at save',
+			'Discarded at save',
+			'Unverifiable saves',
+			'Verification coverage',
+		] ) {
+			expect( getDefinitionValue( report, label ) ).toBe( '0%' );
+		}
+		expect( getDefinitionValue( report, 'Save attempts' ) ).toBe( '0' );
+		expect( getDefinitionValue( report, 'Applies not verified' ) ).toBe(
+			'0'
+		);
+		expect( report.textContent ).not.toMatch( /NaN|Infinity/ );
 	} );
 
 	test( 'renders shared normalized governance learning report sections without local regrouping drift', async () => {
@@ -2511,7 +2692,7 @@ describe( 'ActivityLogApp', () => {
 			'.flavor-agent-activity-log__entry-story'
 		);
 
-		expect( getDefinitionValue( story, 'Current status' ) ).toBe(
+		expect( getDefinitionValue( story, 'Request status' ) ).toBe(
 			'Rejected'
 		);
 		expect( detailsRegion?.textContent ).toMatch( /Rejected/i );

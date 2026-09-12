@@ -1,6 +1,12 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-09-04
+> Last updated: 2026-09-12
+
+## Unreleased save persistence work
+
+The current development branch adds [save persistence outcomes](docs/features/save-persistence-outcomes.md): editor Apply remains an unsaved editor change, WordPress save observers capture frozen evidence, and background comparisons supply separate persistence, coverage, request, and undo facts. Historical rows are not relabelled, external governed applies retain their own lane, and these signals do not modify ranking. This is local implementation work, not a release or production quality result.
+
+The recorded verification failures were repaired by restoring the locked dependency tree and fixing the Playground install step and Site Editor hydration race. The corrected working tree passed all nine strict verification steps with no skips: production build, JS/PHP lint, documentation checks, Plugin Check, 116 Jest suites / 1,944 tests, 2,347 PHP tests, Playground 17/17, and Docker Gutenberg 23.9.0 34/34. The separate WordPress 7.1 bundled-editor leg passed 34/34 with Gutenberg confirmed inactive. Real browser evidence covers unsaved Apply, confirmed Save, Undo before another Save, a later discarded change, and a successful server write with a lost browser response. The [September 12 verification record](docs/validation/2026-09-12-save-persistence-outcomes.md) identifies the uncommitted source, preserved logs, runtime checks, and remaining operational boundaries.
 
 ## Release
 

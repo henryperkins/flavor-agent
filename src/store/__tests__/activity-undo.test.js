@@ -180,6 +180,41 @@ describe( 'buildStyleBookActivityEntry', () => {
 } );
 
 describe( 'buildBlockActivityEntry', () => {
+	test.each( [ buildBlockActivityEntry, buildBlockBatchActivityEntry ] )(
+		'pins complete pre-apply identity separately from the affected attribute snapshot',
+		( build ) => {
+			const blockContext = {
+				name: 'core/heading',
+				currentAttributes: { content: 'Stale recommendation context' },
+			};
+			const preApplyAttributes = {
+				content: 'Stable identity',
+				level: 2,
+				metadata: { name: 'Hero' },
+			};
+			const entry = build( {
+				blockContext,
+				preApplyAttributes,
+				clientId: 'heading',
+				beforeAttributes: { level: 2 },
+				afterAttributes: { level: 3 },
+				suggestion: {},
+				memberSuggestionKeys: [ 'first' ],
+			} );
+			preApplyAttributes.content = 'Edited later';
+			preApplyAttributes.metadata.name = 'Changed later';
+			expect( entry.target.persistenceIdentity ).toEqual( {
+				name: 'core/heading',
+				attributes: {
+					content: 'Stable identity',
+					level: 2,
+					metadata: { name: 'Hero' },
+				},
+			} );
+			expect( entry.before.attributes ).toEqual( { level: 2 } );
+		}
+	);
+
 	test( 'preserves structural runtime IDs in the activity after-state', () => {
 		const operations = [
 			{

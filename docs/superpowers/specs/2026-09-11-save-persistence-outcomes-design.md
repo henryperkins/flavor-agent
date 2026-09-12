@@ -1,11 +1,12 @@
-# Flavor Agent Save-Persistence Outcomes 1.2
+# Flavor Agent Save-Persistence Outcomes 1.3
 
-- **Status:** Canonical design contract; no runtime implementation exists yet
-- **Contract version:** `1.2`
+- **Status:** Canonical design contract; implemented and locally verified, unreleased
+- **Contract version:** `1.3`
 - **Date:** 2026-09-11
 - **Baseline commit:** `fd28015` (`master`)
 - **Revision:** `1.1` applied 28 findings from an adversarial verification pass over `1.0`; `1.2` resolves 9 further correctness gaps (occurrence identity, cohort definitions, verification authority, undo evidence, verdict ordering, operation aggregation, the trash route, schema pinning)
 - **Scope:** What an Apply claims — to the editor who clicked it and to the operator reading the audit — and how persistence is proven
+- **Implementation evidence:** [September 12 working-tree verification](../../validation/2026-09-12-save-persistence-outcomes.md)
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** are normative.
 
@@ -22,7 +23,7 @@ A contract that fixed only the second would leave the overclaim intact in the on
 
 ## 2. Implementation status
 
-This is a design contract. None of it is implemented.
+This design is being implemented under `docs/superpowers/plans/2026-09-12-save-persistence-outcomes.md`. The following inventory describes the baseline, not completion evidence for the implementation.
 
 The current repository contains:
 
@@ -31,7 +32,7 @@ The current repository contains:
 - `RecommendationOutcomeMetrics::evaluate()` with `applyConversionRate` and `reviewApplyConversionRate`
 - governed server persistence with read-back verification for external applies (`inc/Apply/ExistingPostContentWriter.php`)
 
-The current repository contains **no** save-lifecycle code. There is not one reference to `savePost`, `isEditedPostDirty`, `isSavingPost`, `didPostSaveRequestSucceed`, or `saveEditedEntityRecord` anywhere in `src/`, tests included. This is greenfield.
+The baseline contains **no** save-lifecycle code. Its editor applies provide no save-lifecycle observation or confirmation.
 
 ## 3. Problem statement
 
@@ -260,7 +261,7 @@ Post ID and `post_modified_gmt` are insufficient: multiple writes can share a ti
 
 **Snapshot lifecycle.** The comparison snapshot is a separate, earlier artifact, written at capture time keyed by `(saveOccurrenceId, entityType, entityRef)`, before any verdict exists. It holds the frozen content **and the pinned schema slice** (§6.6). It is the input §6.3's deferred job reads. Snapshots are deleted once every apply frozen into their occurrence has a conclusive verdict, or when the verification age limit expires, whichever comes first.
 
-**Idempotency.** Verdict rows are idempotent on `(applyId, saveOccurrenceId, verifierVersion)`. A second pass for the same tuple MUST update the existing record in place, never insert a second row.
+**Idempotency.** Verdict rows are idempotent on `(applyId, saveOccurrenceId, verifierVersion)`. A second pass for the same tuple MUST resolve to the existing immutable record, never insert a second row or replace its captured evidence. An identical replay is a no-op; this clarifies the earlier in-place-update wording without permitting a second verdict for one tuple.
 
 **Scope key.** A verdict row inherits the `document.scopeKey` of the apply row it links to, verbatim. It MUST NOT be written with a derived or empty scope key: `Repository::create()` rejects an empty one (`:183-192`), and `Permissions::can_access_context_values()` escalates an unresolvable scope to `manage_options` (`inc/Activity/Permissions.php:110-112`), which would hide the verdict from the editor who authored the apply.
 
@@ -382,16 +383,18 @@ Scenarios: selective saves; partial failure across a multi-entity save; draft au
 - Post-blocks external apply, which already performs guarded persistence with read-back verification
 - **Pattern-inserter conversion.** Pattern insertions mutate the document with the same unproven-persistence claim, but are recorded as outcome rows rather than `apply_*` rows and are deferred to a follow-on contract. Until then `patternInsertionRate` MUST be labelled as an editor-state metric wherever it is surfaced
 
-## 11. Open questions
+## 11. Resolved implementation decisions (2026-09-12)
 
-Raised by the verification pass, not yet decided:
+1. **Verdict authorship and access.** The verdict's `user_id` inherits the original apply's owner. The internal writer obtains it from the stored apply, never a submitted field. `saverUserId` records the server-observed saver separately (zero for an unauthenticated/background actor). Verdicts inherit the original document scope and remain subject to that scope's access checks; no snapshot content is returned by activity lookups. Client attempts must link to the current user's stored apply.
+2. **Save-path cost and continuation.** The save hook captures the saved bytes, complete registered attribute schemas, an indexed candidate boundary, and occurrence metadata. It performs no per-apply comparison. Cron processes at most 25 applies or approximately 50 ms of comparisons per invocation, whichever comes first, and continues durably. The latency bound is cooperative between comparisons; an individual parser invocation is not preemptible. Client telemetry uses an independent retrying outbox and never delays or alters the save result. `flavor_agent_save_verification_age_days` defaults to seven days and is clamped below a positive activity-retention interval. Comparison payloads expire at that age or after all comparisons are conclusive; the smaller occurrence identity, candidate boundary, and sequence remain while linked activity survives so coverage can still be resolved after payload cleanup.
+3. **Attestation meaning.** An attestation remains an immutable statement about the governed execution it signed. Later persistence evidence describes a later saved version and never rewrites or revokes that historical statement. Existing subject-state verification continues to describe the current subject. Activity views display those meanings separately; an editor-state verdict cannot assert an external governed execution occurred.
+4. **Client cache compatibility.** Keep `ACTIVITY_STORAGE_VERSION = 4`: the lane, identity, and resolved read fields are additive, and missing fields remain unknown. Use a separate version-1 outbox scoped to site and current user. Its pending attempts and session candidates survive panel/scope changes independently of activity-display trimming; lower-version activity is not evicted merely to introduce the outbox.
 
-1. **Verdict authorship.** `Repository::create()` stamps `user_id => get_current_user_id()` (`:206`). A verdict written during a *different* user's save would be attributed to the saver, not the applier, while `KEY user_created (user_id, created_at)` (`:115`) and the admin surface's per-user filtering treat that column as meaningful. Both an audit-integrity and a privacy question.
-2. **Comparison cost inside the save request.** `wp_after_insert_post` runs synchronously in the user's save; §6.5/§6.6 require parsing and schema-normalizing content. No latency budget is set, and write amplification is unbounded (`save_attempted` per apply per save).
-3. **Ring III attestation interaction.** `inc/Attestation/Repository.php:62,68,260-268` links attestations to apply rows. A `save_discarded` on an attested lane means the signed statement and the verdict disagree about the same subject. `docs/reference/governance-layer.md` likely needs updating.
-4. **Client storage version.** `src/store/activity-history.js:19` pins `ACTIVITY_STORAGE_VERSION = 4` and `:301-302` discards lower-versioned cache. Whether this bumps is unstated.
+For coverage, a frozen capture boundary establishes eligibility durably even if its comparison is still queued or its payload later expires. An apply delivered after that boundary is never retroactively compared with the saved version. It remains visibly unverified and becomes eligible for a later capture; client attempts alone cannot add it to a server capture's denominator.
 
-## 12. Known blockers
+## 12. Recorded baseline blockers
+
+The three failures below are historical baseline evidence. Restoring locked dependencies resolved the Jest loading failure without a VM-mode workaround. The revised direct-extraction Playground blueprint passed 17/17, and waiting for template hydration repaired the stale-results fixture before a 32/32 Docker Gutenberg 23.9.0 pass. These are working-tree baseline results; the final integrated implementation gate is tracked separately in the implementation plan.
 
 Verification on baseline `fd28015` returned `status: fail` (5 passed, 3 failed, 1 skipped). Pre-existing, not introduced by this design, but they block §9:
 

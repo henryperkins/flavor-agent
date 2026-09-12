@@ -304,26 +304,26 @@ describe( 'Playground latest-Gutenberg boundary', () => {
 		const blueprint = JSON.parse(
 			fs.readFileSync( PLAYGROUND_BLUEPRINT_PATH, 'utf8' )
 		);
-		const gutenbergInstall = blueprint.steps.find(
-			( step ) => step.step === 'installPlugin'
-		);
-
 		expect( blueprint.login ).toBe( true );
 		expect( blueprint.steps.at( -1 ) ).toEqual( {
 			step: 'writeFile',
 			path: `/wordpress/flavor-agent-gutenberg-${ DEFAULT_GUTENBERG_VERSION }-ready.txt`,
 			data: 'ready',
 		} );
-		expect( gutenbergInstall ).toEqual( {
-			step: 'installPlugin',
-			pluginData: {
-				resource: 'url',
-				url: `https://downloads.wordpress.org/plugin/gutenberg.${ DEFAULT_GUTENBERG_VERSION }.zip`,
+		expect( blueprint.steps.slice( 0, -1 ) ).toEqual( [
+			{
+				step: 'unzip',
+				zipFile: {
+					resource: 'url',
+					url: `https://downloads.wordpress.org/plugin/gutenberg.${ DEFAULT_GUTENBERG_VERSION }.zip`,
+				},
+				extractToPath: '/wordpress/wp-content/plugins',
 			},
-			options: {
-				activate: true,
+			{
+				step: 'activatePlugin',
+				pluginPath: 'gutenberg/gutenberg.php',
 			},
-		} );
+		] );
 	} );
 
 	test( 'keeps a custom port aligned across the command and readiness URL', () => {

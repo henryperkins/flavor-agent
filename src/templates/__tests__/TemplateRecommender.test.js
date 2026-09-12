@@ -1459,7 +1459,9 @@ describe( 'TemplateRecommender', () => {
 
 		await renderPanel();
 
-		expect( hasText( 'Undid Clarify hierarchy.' ) ).toBe( true );
+		expect( hasText( 'Undid Clarify hierarchy in the editor.' ) ).toBe(
+			true
+		);
 	} );
 
 	test( 'shows an undo action on apply success notices and dispatches undo for the latest template activity', async () => {
@@ -1496,7 +1498,9 @@ describe( 'TemplateRecommender', () => {
 
 		await renderPanel();
 
-		expect( hasText( 'Applied 1 template operation.' ) ).toBe( true );
+		expect( hasText( 'Applied 1 template operation in the editor.' ) ).toBe(
+			true
+		);
 
 		const undoButton = Array.from(
 			getContainer().querySelectorAll( 'button' )

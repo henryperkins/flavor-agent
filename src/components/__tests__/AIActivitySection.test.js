@@ -231,6 +231,69 @@ describe( 'AIActivitySection', () => {
 		expect( onUndo ).toHaveBeenCalledWith( 'activity-1' );
 	} );
 
+	test.each( [
+		[ 'editor-state', 'not_applicable', 'Changed in editor' ],
+		[ 'editor-state', 'undone', 'Undone in editor' ],
+		[ undefined, 'not_applicable', 'Applied' ],
+		[ undefined, 'undone', 'Undone' ],
+		[ 'external-write', 'not_applicable', 'Applied' ],
+		[ 'external-write', 'undone', 'Undone' ],
+	] )(
+		'qualifies only editor-lane history: %s / %s',
+		( applyLane, undoStatus, expected ) => {
+			act( () => {
+				getRoot().render(
+					<AIActivitySection
+						entries={ [
+							{
+								id: 'activity-1',
+								surface: 'block',
+								suggestion: 'Refresh content',
+								applyLane,
+								executionResult: 'success',
+								persistence: { status: 'server' },
+								persistenceVerdict: {
+									state: 'save_confirmed',
+									label: 'Persisted',
+								},
+								undo: { status: undoStatus, canUndo: false },
+							},
+						] }
+					/>
+				);
+			} );
+			expect(
+				getContainer().querySelector(
+					'.flavor-agent-activity-row .flavor-agent-pill'
+				).textContent
+			).toBe( expected );
+			expect( getContainer().textContent ).not.toContain( 'not saved' );
+		}
+	);
+
+	test( 'keeps an editor undo distinct from its pending audit synchronization', () => {
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					entries={ [
+						{
+							id: 'activity-1',
+							surface: 'block',
+							suggestion: 'Refresh content',
+							applyLane: 'editor-state',
+							undo: { status: 'undone', canUndo: false },
+							persistence: { status: 'local', syncType: 'undo' },
+						},
+					] }
+				/>
+			);
+		} );
+		expect( getContainer().textContent ).toContain( 'Undone in editor' );
+		expect( getContainer().textContent ).toContain(
+			'Activity audit sync pending.'
+		);
+	} );
+
 	test( 'adds tone modifiers to status pills', () => {
 		act( () => {
 			getRoot().render(

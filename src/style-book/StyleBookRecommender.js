@@ -722,10 +722,16 @@ export default function StyleBookRecommender() {
 					applyError: currentApplyError,
 					undoError: hasUndoSuccess ? '' : currentUndoError,
 					undoSuccessMessage: hasUndoSuccess
-						? 'Flavor Agent restored the previous Style Book block styles.'
+						? __(
+								'Previous Style Book block styles restored in the editor.',
+								'flavor-agent'
+						  )
 						: '',
 					applySuccessMessage: hasApplySuccess
-						? 'Flavor Agent applied the selected Style Book change.'
+						? __(
+								'Style Book updated in the editor.',
+								'flavor-agent'
+						  )
 						: '',
 					requestStatus: status,
 					isStale: isStaleResult,

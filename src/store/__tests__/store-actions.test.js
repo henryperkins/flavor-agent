@@ -3884,29 +3884,39 @@ describe( 'store action thunks', () => {
 		expect( result ).toBe( true );
 	} );
 
-	test( 'applySuggestion records only changed attributes for undo snapshots', async () => {
+	test( 'applySuggestion records live full pre-apply identity and only changed attributes for undo', async () => {
 		apiFetch.mockResolvedValue( {
 			payload: {
 				resolvedContextSignature: 'resolved-block',
 			},
 		} );
 
-		const updateBlockAttributes = jest.fn();
 		const dispatch = jest.fn();
 		const currentAttributes = {
 			content: 'Old copy',
+			anchor: 'hero-copy',
 			align: 'wide',
 			metadata: {
 				name: 'Hero',
 			},
 		};
+		let liveAttributes = currentAttributes;
+		const updateBlockAttributes = jest.fn( ( clientId, updates ) => {
+			liveAttributes = { ...liveAttributes, ...updates };
+		} );
 		const select = {
 			getActivityScopeKey: jest.fn().mockReturnValue( null ),
 			getBlockResolvedContextSignature: jest
 				.fn()
 				.mockReturnValue( 'resolved-block' ),
 			getBlockRecommendations: jest.fn().mockReturnValue( {
-				blockContext: PARAGRAPH_BLOCK_CONTEXT,
+				blockContext: {
+					...PARAGRAPH_BLOCK_CONTEXT,
+					currentAttributes: {
+						content: 'Stale recommendation context',
+						anchor: 'old-anchor',
+					},
+				},
 				prompt: 'Tighten the copy.',
 			} ),
 			getBlockRequestToken: jest.fn().mockReturnValue( 4 ),
@@ -3915,16 +3925,14 @@ describe( 'store action thunks', () => {
 			select: jest.fn( ( storeName ) =>
 				storeName === 'core/block-editor'
 					? {
-							getBlocks: jest.fn().mockReturnValue( [
+							getBlocks: jest.fn( () => [
 								{
 									clientId: 'block-1',
 									name: 'core/paragraph',
-									attributes: currentAttributes,
+									attributes: liveAttributes,
 								},
 							] ),
-							getBlockAttributes: jest
-								.fn()
-								.mockReturnValue( currentAttributes ),
+							getBlockAttributes: jest.fn( () => liveAttributes ),
 					  }
 					: {}
 			),
@@ -3963,6 +3971,11 @@ describe( 'store action thunks', () => {
 		)?.[ 0 ];
 
 		expect( result ).toBe( true );
+		expect( liveAttributes.content ).toBe( 'New copy' );
+		expect( logActivityAction.entry.target.persistenceIdentity ).toEqual( {
+			name: 'core/paragraph',
+			attributes: currentAttributes,
+		} );
 		expect( logActivityAction.entry.before.attributes ).toEqual( {
 			content: 'Old copy',
 		} );
@@ -9968,12 +9981,14 @@ describe( 'store action thunks', () => {
 
 	test( 'applySelectedSuggestions folds cross-lane updates once in canonical order', async () => {
 		const updateBlockAttributes = jest.fn();
+		const preApplyAttributes = {
+			anchor: 'feature-group',
+			className: 'custom-class is-style-fill',
+			style: { spacing: { padding: '1rem' } },
+			metadata: { bindings: { url: { source: 'core/post-meta' } } },
+		};
 		const registry = createBlockApplyRegistry( {
-			attributes: {
-				className: 'custom-class is-style-fill',
-				style: { spacing: { padding: '1rem' } },
-				metadata: { bindings: { url: { source: 'core/post-meta' } } },
-			},
+			attributes: preApplyAttributes,
 			updateBlockAttributes,
 		} );
 		const select = createStoreSelectWithState( {
@@ -9988,7 +10003,10 @@ describe( 'store action thunks', () => {
 			blockRecommendations: {
 				'block-1': {
 					prompt: 'Improve this block.',
-					blockContext: { name: 'core/group' },
+					blockContext: {
+						name: 'core/group',
+						currentAttributes: { anchor: 'old-anchor' },
+					},
 					executionContract: {
 						allowedPanels: [ 'layout', 'color', 'styles' ],
 						configAttributeKeys: [ 'align' ],
@@ -10059,6 +10077,18 @@ describe( 'store action thunks', () => {
 		)( { dispatch, registry, select } );
 
 		expect( didApply ).toBe( true );
+		const activity = dispatch.mock.calls.find(
+			( [ action ] ) => action?.type === 'LOG_ACTIVITY'
+		)?.[ 0 ].entry;
+		expect( activity.target.persistenceIdentity ).toEqual( {
+			name: 'core/group',
+			attributes: preApplyAttributes,
+		} );
+		expect( activity.before.attributes ).not.toHaveProperty( 'anchor' );
+		expect( activity.before.attributes ).not.toHaveProperty( 'metadata' );
+		expect( activity.after.attributes.className ).toBe(
+			'custom-class is-style-rounded'
+		);
 		expect( updateBlockAttributes ).toHaveBeenCalledTimes( 1 );
 		expect( updateBlockAttributes ).toHaveBeenCalledWith( 'block-1', {
 			align: 'wide',

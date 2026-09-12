@@ -24,6 +24,78 @@ import { getStyleBookUiState } from '../../style-book/dom';
 import { getBlockStructuralActivitySignature } from '../../utils/block-structural-actions';
 
 describe( 'activity history helpers', () => {
+	test( 'registers new editor applies independently of display trimming and preserves v4 cache compatibility', () => {
+		window.sessionStorage.clear();
+		window.flavorAgentData = {
+			restUrl: 'https://history.test/wp-json/',
+			currentUserId: 314,
+		};
+		try {
+			const entries = Array.from( { length: 30 }, () =>
+				createActivityEntry( {
+					type: 'apply_suggestion',
+					surface: 'block',
+					document: {
+						scopeKey: 'post:42',
+						postType: 'post',
+						entityId: '42',
+					},
+				} )
+			);
+			writePersistedActivityLog( 'post:42', entries );
+			expect(
+				entries.every( ( entry ) => entry.applyLane === 'editor-state' )
+			).toBe( true );
+			expect( readPersistedActivityLog( 'post:42' ) ).toHaveLength( 20 );
+			const key = Array.from(
+				{ length: window.sessionStorage.length },
+				( _, index ) => window.sessionStorage.key( index )
+			).find( ( value ) =>
+				value.startsWith( 'flavor-agent:save-persistence:v1:' )
+			);
+			const outbox = JSON.parse( window.sessionStorage.getItem( key ) );
+			expect( outbox.candidates ).toHaveLength( 30 );
+			expect( outbox.candidates[ 0 ].id ).toBe( entries[ 0 ].id );
+			const cache = JSON.parse(
+				window.sessionStorage.getItem( 'flavor-agent:activity:post:42' )
+			);
+			expect( cache.version ).toBe( 4 );
+			delete cache.entries[ 0 ].applyLane;
+			window.sessionStorage.setItem(
+				'flavor-agent:activity:post:42',
+				JSON.stringify( cache )
+			);
+			expect(
+				readPersistedActivityLog( 'post:42' )[ 0 ].applyLane
+			).toBeUndefined();
+		} finally {
+			delete window.flavorAgentData;
+		}
+	} );
+
+	test( 'round trips server read-only assurance and lifecycle links without deriving them', () => {
+		const entry = createActivityEntry( {
+			type: 'recommendation_outcome',
+			surface: 'block',
+			linkedApplyActivityId: 'apply-1',
+			saveOccurrenceId: 'save-1',
+		} );
+		entry.persistenceVerdict = {
+			state: 'save_confirmed',
+			label: 'Persisted',
+			saveSequence: 3,
+		};
+		entry.undoState = { state: 'undone', label: 'Undone in editor' };
+		writePersistedActivityLog( 'post:42', [ entry ] );
+		expect( readPersistedActivityLog( 'post:42' )[ 0 ] ).toMatchObject( {
+			linkedApplyActivityId: 'apply-1',
+			saveOccurrenceId: 'save-1',
+			persistenceVerdict: entry.persistenceVerdict,
+			undoState: entry.undoState,
+		} );
+		expect( entry.applyLane ).toBeUndefined();
+	} );
+
 	beforeEach( () => {
 		window.sessionStorage.clear();
 		getStyleBookUiState.mockReturnValue( {

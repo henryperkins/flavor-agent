@@ -278,7 +278,10 @@ export default function SuggestionChips( {
 									) }
 									{ isApplied ? (
 										<span className="flavor-agent-chip-row__status">
-											{ __( 'Applied', 'flavor-agent' ) }
+											{ __(
+												'Changed in editor',
+												'flavor-agent'
+											) }
 										</span>
 									) : (
 										<span className="flavor-agent-chip-row__values">
@@ -339,6 +342,7 @@ export default function SuggestionChips( {
 			{ interactive && feedback && (
 				<InlineActionFeedback
 					compact
+					label={ __( 'Changed in editor', 'flavor-agent' ) }
 					message={ feedback.label }
 					className="flavor-agent-chip-surface__feedback"
 				/>

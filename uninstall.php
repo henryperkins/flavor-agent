@@ -14,6 +14,7 @@ require_once __DIR__ . '/inc/UninstallOptions.php';
 
 wp_clear_scheduled_hook( 'flavor_agent_reindex_patterns' );
 wp_clear_scheduled_hook( 'flavor_agent_prune_activity' );
+wp_clear_scheduled_hook( 'flavor_agent_verify_saved_applies' );
 wp_clear_scheduled_hook( 'flavor_agent_backfill_activity_admin_projection' );
 wp_clear_scheduled_hook( 'flavor_agent_prewarm_docs' );
 wp_clear_scheduled_hook( 'flavor_agent_warm_docs_context' );
@@ -34,6 +35,10 @@ if ( is_object( $wpdb ) && isset( $wpdb->prefix ) ) {
 	$flavor_agent_attestation_table = $wpdb->prefix . 'flavor_agent_attestations';
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Plugin-owned attestation table is intentionally removed during uninstall.
 	$wpdb->query( "DROP TABLE IF EXISTS {$flavor_agent_attestation_table}" );
+
+	$flavor_agent_save_table = $wpdb->prefix . 'flavor_agent_save_occurrences';
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Private snapshots and eligibility metadata belong to the uninstalled plugin.
+	$wpdb->query( "DROP TABLE IF EXISTS {$flavor_agent_save_table}" );
 }
 
 foreach ( \FlavorAgent\UninstallOptions::names() as $flavor_agent_option_name ) {

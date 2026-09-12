@@ -1,4 +1,4 @@
-import { useDispatch, useSelect } from '@wordpress/data';
+import { useDispatch, useRegistry, useSelect } from '@wordpress/data';
 import { useEffect, useRef, useState } from '@wordpress/element';
 
 import { getCurrentGlobalStylesId } from '../global-styles/selectors';
@@ -8,9 +8,54 @@ import {
 	resolveActivityScope,
 	resolveGlobalStylesScope,
 	resolveStyleBookScope,
+	readPersistedActivityLog,
+	writePersistedActivityLog,
 } from '../store/activity-history';
+import { installSavePersistenceObserver } from '../store/save-persistence';
 
 export default function ActivitySessionBootstrap() {
+	const registry = useRegistry();
+	const { loadActivitySession, setActivitySession } =
+		useDispatch( STORE_NAME );
+	useEffect(
+		() =>
+			installSavePersistenceObserver( {
+				selectCore: () => registry.select( 'core' ),
+				onReconcile: ( entries ) => {
+					const store = registry.select( STORE_NAME );
+					const currentScope = store.getActivityScopeKey?.();
+					const updates = new Map(
+						entries.map(
+							( { id, document: entryDocument, ...facts } ) => [
+								id,
+								facts,
+							]
+						)
+					);
+					const scopes = new Set(
+						entries
+							.map( ( entry ) => entry.document?.scopeKey )
+							.filter( Boolean )
+					);
+					for ( const scopeKey of scopes ) {
+						const current =
+							scopeKey === currentScope
+								? store.getActivityLog?.() || []
+								: readPersistedActivityLog( scopeKey );
+						const next = current.map( ( entry ) =>
+							updates.has( entry.id )
+								? { ...entry, ...updates.get( entry.id ) }
+								: entry
+						);
+						writePersistedActivityLog( scopeKey, next );
+						if ( scopeKey === currentScope ) {
+							setActivitySession( scopeKey, next );
+						}
+					}
+				},
+			} ),
+		[ registry, setActivitySession ]
+	);
 	const [ styleBookUiState, setStyleBookUiState ] = useState( () =>
 		typeof document === 'undefined'
 			? {
@@ -73,7 +118,6 @@ export default function ActivitySessionBootstrap() {
 
 		return subscribeToStyleBookUi( document, setStyleBookUiState );
 	}, [ editorState.activeComplementaryArea ] );
-	const { loadActivitySession } = useDispatch( STORE_NAME );
 	const previousScope = useRef( scope );
 	const scopeKey = scope?.key ?? null;
 	const scopeHint = scope?.hint ?? '';

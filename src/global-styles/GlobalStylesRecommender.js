@@ -654,10 +654,16 @@ export default function GlobalStylesRecommender() {
 					applyError: currentApplyError,
 					undoError: hasUndoSuccess ? '' : currentUndoError,
 					undoSuccessMessage: hasUndoSuccess
-						? 'Flavor Agent restored the previous Global Styles config.'
+						? __(
+								'Previous Global Styles restored in the editor.',
+								'flavor-agent'
+						  )
 						: '',
 					applySuccessMessage: hasApplySuccess
-						? 'Flavor Agent applied the selected Global Styles change.'
+						? __(
+								'Global Styles updated in the editor.',
+								'flavor-agent'
+						  )
 						: '',
 					requestStatus: status,
 					isStale: isStaleResult,

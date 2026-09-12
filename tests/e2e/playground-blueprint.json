@@ -3,14 +3,16 @@
 	"login": true,
 	"steps": [
 		{
-			"step": "installPlugin",
-			"pluginData": {
+			"step": "unzip",
+			"zipFile": {
 				"resource": "url",
 				"url": "https://downloads.wordpress.org/plugin/gutenberg.23.9.0.zip"
 			},
-			"options": {
-				"activate": true
-			}
+			"extractToPath": "/wordpress/wp-content/plugins"
+		},
+		{
+			"step": "activatePlugin",
+			"pluginPath": "gutenberg/gutenberg.php"
 		},
 		{
 			"step": "writeFile",

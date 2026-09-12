@@ -4,6 +4,10 @@ import {
 	VALIDATION_REASONS_VERSION,
 } from '../utils/validation-reasons';
 import { __ } from '@wordpress/i18n';
+import {
+	CLIENT_SAVE_OUTCOME_EVENTS,
+	buildSavePersistenceOutcome,
+} from './save-persistence-outcomes';
 
 export const RECOMMENDATION_OUTCOME_TYPE = 'recommendation_outcome';
 export const OUTCOME_VISIBILITY = 'diagnostic';
@@ -19,6 +23,7 @@ export const OUTCOME_EVENTS = Object.freeze( [
 	'adapted_inserted_from_preview',
 	'adaptation_blocked',
 	'adapted_insert_failed',
+	...CLIENT_SAVE_OUTCOME_EVENTS,
 ] );
 
 const OUTCOME_EVENT_SET = new Set( OUTCOME_EVENTS );
@@ -32,6 +37,8 @@ const recordedOutcomeKeys = new Set();
 const pendingOutcomeKeys = new Set();
 
 const OUTCOME_LABELS = Object.freeze( {
+	save_attempted: __( 'Save requested', 'flavor-agent' ),
+	save_failed: __( 'Save request failed', 'flavor-agent' ),
 	shown: __( 'Recommendations shown', 'flavor-agent' ),
 	selected_for_review: __(
 		'Recommendation selected for review',
@@ -819,6 +826,8 @@ export function buildRecommendationIdentityFromSuggestion(
 
 export function buildRecommendationOutcomeEntry( {
 	document = null,
+	linkedApplyActivityId = '',
+	saveOccurrenceId = '',
 	event,
 	surface,
 	suggestion = null,
@@ -848,6 +857,16 @@ export function buildRecommendationOutcomeEntry( {
 		! safeSurface
 	) {
 		return null;
+	}
+	if ( CLIENT_SAVE_OUTCOME_EVENTS.includes( safeEvent ) ) {
+		return buildSavePersistenceOutcome( {
+			document: safeDocument,
+			event: safeEvent,
+			surface: safeSurface,
+			target,
+			linkedApplyActivityId,
+			saveOccurrenceId,
+		} );
 	}
 
 	const identity = buildRecommendationIdentityFromSuggestion( suggestion, {

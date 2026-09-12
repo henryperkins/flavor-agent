@@ -175,6 +175,7 @@ final class ApplyAbilities {
 				'before'          => [],
 				'after'           => [],
 				'executionResult' => 'pending',
+				'applyLane'       => 'server-executed',
 				'undo'            => [ 'status' => 'not_applicable' ],
 				'timestamp'       => $timestamp,
 				'request'         => [
@@ -363,6 +364,7 @@ final class ApplyAbilities {
 				'before'          => [],
 				'after'           => [],
 				'executionResult' => 'pending',
+				'applyLane'       => 'server-executed',
 				'undo'            => [ 'status' => 'not_applicable' ],
 				'timestamp'       => $timestamp,
 				'request'         => [
@@ -549,6 +551,7 @@ final class ApplyAbilities {
 				'before'          => [],
 				'after'           => [],
 				'executionResult' => 'pending',
+				'applyLane'       => 'server-executed',
 				'undo'            => [ 'status' => 'not_applicable' ],
 				'timestamp'       => $timestamp,
 				'request'         => [
@@ -769,6 +772,7 @@ final class ApplyAbilities {
 				'before'          => [],
 				'after'           => [],
 				'executionResult' => 'pending',
+				'applyLane'       => 'server-executed',
 				'undo'            => [ 'status' => 'not_applicable' ],
 				'timestamp'       => $timestamp,
 				'request'         => [

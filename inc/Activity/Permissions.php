@@ -35,6 +35,21 @@ final class Permissions {
 	];
 
 	public static function can_access_activity_request( \WP_REST_Request $request ): bool {
+		if ( 'GET' === $request->get_method() && null !== $request->get_param( 'applyIds' ) ) {
+			$ids = self::persistence_lookup_ids( $request );
+			if ( [] === $ids ) {
+				return false;
+			}
+			$has_entry = false;
+			foreach ( $ids as $id ) {
+				$apply     = Repository::find( $id );
+				$has_entry = $has_entry || is_array( $apply );
+				if ( is_array( $apply ) && ! self::can_access_entry( $apply ) ) {
+					return false;
+				}
+			}
+			return $has_entry || current_user_can( 'edit_posts' ) || current_user_can( 'edit_theme_options' ) || current_user_can( 'manage_options' );
+		}
 		if ( self::is_global_request( $request ) ) {
 			return current_user_can( 'manage_options' );
 		}
@@ -66,6 +81,24 @@ final class Permissions {
 		return self::can_access_context(
 			self::resolve_request_context( $request )
 		);
+	}
+
+	/** Explicit reconciliation is bounded and never grants global activity access. */
+	public static function persistence_lookup_ids( \WP_REST_Request $request ): array {
+		$value = $request->get_param( 'applyIds' );
+		if ( ! is_string( $value ) || strlen( $value ) > 9600 ) {
+			return [];
+		}
+		$ids = array_values( array_unique( array_filter( array_map( 'trim', explode( ',', $value ) ) ) ) );
+		if ( count( $ids ) > 50 ) {
+			return [];
+		}
+		foreach ( $ids as $id ) {
+			if ( strlen( $id ) > 191 ) {
+				return [];
+			}
+		}
+		return $ids;
 	}
 
 	/**

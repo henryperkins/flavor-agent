@@ -10,7 +10,7 @@ use FlavorAgent\Attestation\Repository as AttestationRepository;
 final class Repository {
 
 	public const SCHEMA_OPTION                       = 'flavor_agent_activity_schema_version';
-	public const SCHEMA_VERSION                      = 5;
+	public const SCHEMA_VERSION                      = 6;
 	public const PRUNE_CRON_HOOK                     = 'flavor_agent_prune_activity';
 	public const ADMIN_PROJECTION_BACKFILL_CRON_HOOK = 'flavor_agent_backfill_activity_admin_projection';
 	public const DEFAULT_RETENTION_DAYS              = 90;
@@ -28,7 +28,7 @@ final class Repository {
 	private const ADMIN_PROJECTION_BACKFILL_FORCE_OPTION  = 'flavor_agent_activity_admin_projection_backfill_force';
 	private const ADMIN_HISTORY_QUERY_ENTITY_BATCH_SIZE   = 50;
 	private const ADMIN_HISTORY_QUERY_KEY_SEPARATOR       = "\x1F";
-	private const ADMIN_PROJECTION_SELECT_SQL             = 'id, activity_id, user_id, surface, entity_type, entity_ref, document_scope_key, activity_type, suggestion, undo_state, execution_result, created_at, admin_post_type, admin_entity_id, admin_block_path, admin_operation_type, admin_operation_label, admin_provider, admin_model, admin_provider_path, admin_configuration_owner, admin_credential_source, admin_selected_provider, admin_request_ability, admin_request_route, admin_request_reference, admin_request_prompt, admin_search_text';
+	private const ADMIN_PROJECTION_SELECT_SQL             = 'id, activity_id, user_id, surface, entity_type, entity_ref, document_scope_key, activity_type, suggestion, undo_state, execution_result, apply_lane, linked_apply_activity_id, save_occurrence_id, created_at, admin_post_type, admin_entity_id, admin_block_path, admin_operation_type, admin_operation_label, admin_provider, admin_model, admin_provider_path, admin_configuration_owner, admin_credential_source, admin_selected_provider, admin_request_ability, admin_request_route, admin_request_reference, admin_request_prompt, admin_search_text';
 	private const PENDING_EXTERNAL_APPLY_NOTICE_CACHE_KEY = 'flavor_agent_pending_external_apply_notice_snapshot';
 	private const ADMIN_PROJECTION_VARCHAR_LIMITS         = [
 		'admin_post_type'           => 64,
@@ -105,6 +105,9 @@ final class Repository {
 			admin_request_prompt longtext NULL,
 			admin_search_text longtext NOT NULL,
 			execution_result varchar(32) NOT NULL DEFAULT 'applied',
+			apply_lane varchar(32) NULL,
+			linked_apply_activity_id varchar(191) NULL,
+			save_occurrence_id varchar(64) NULL,
 			created_at datetime NOT NULL,
 			updated_at datetime NOT NULL,
 			PRIMARY KEY  (id),
@@ -112,6 +115,8 @@ final class Repository {
 			KEY surface (surface),
 			KEY entity_lookup (entity_type, entity_ref),
 			KEY document_scope_key (document_scope_key),
+			KEY save_lifecycle_link (linked_apply_activity_id, save_occurrence_id),
+			KEY save_candidates (apply_lane, admin_post_type, admin_entity_id, id),
 			KEY user_created (user_id, created_at),
 			KEY created_at (created_at),
 			KEY admin_post_type (admin_post_type),
@@ -177,6 +182,12 @@ final class Repository {
 			return $normalized;
 		}
 
+		$is_lifecycle = RecommendationOutcome::TYPE === $normalized['type'] && PersistenceOutcome::is_lifecycle_event( (string) ( $normalized['after']['outcome']['event'] ?? '' ) );
+		$lane_types   = 'server-executed' === $normalized['applyLane'] ? array_merge( PersistenceOutcome::APPLY_TYPES, [ 'apply_post_blocks_suggestion' ] ) : PersistenceOutcome::APPLY_TYPES;
+		if ( ( null !== $normalized['applyLane'] && ! in_array( $normalized['type'], $lane_types, true ) ) || ( ! $is_lifecycle && ( null !== $normalized['linkedApplyActivityId'] || null !== $normalized['saveOccurrenceId'] ) ) ) {
+			return new \WP_Error( 'flavor_agent_activity_invalid_entry', 'Save evidence links and execution lanes require their matching activity type.', [ 'status' => 400 ] );
+		}
+
 		$activity_id = '' !== $normalized['id']
 			? (string) $normalized['id']
 			: self::generate_activity_id();
@@ -201,25 +212,28 @@ final class Repository {
 		$entity     = Serializer::derive_entity( $normalized );
 		$projection = self::build_admin_projection_from_entry( $normalized );
 		$record     = [
-			'activity_id'        => $activity_id,
-			'schema_version'     => (int) $normalized['schemaVersion'],
-			'user_id'            => function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0,
-			'surface'            => $surface,
-			'entity_type'        => $entity['type'],
-			'entity_ref'         => $entity['ref'],
-			'document_scope_key' => $scope_key,
-			'activity_type'      => (string) $normalized['type'],
-			'suggestion'         => (string) $normalized['suggestion'],
-			'suggestion_key'     => $normalized['suggestionKey'],
-			'target_json'        => Serializer::encode_json( $normalized['target'] ),
-			'before_state'       => Serializer::encode_json( $normalized['before'] ),
-			'after_state'        => Serializer::encode_json( $normalized['after'] ),
-			'undo_state'         => Serializer::encode_json( $normalized['undo'] ),
-			'request_json'       => Serializer::encode_json( $normalized['request'] ),
-			'document_json'      => Serializer::encode_json( $normalized['document'] ),
-			'execution_result'   => (string) $normalized['executionResult'],
-			'created_at'         => Serializer::mysql_datetime_from_timestamp( $timestamp ),
-			'updated_at'         => Serializer::mysql_datetime_from_timestamp( $timestamp ),
+			'activity_id'              => $activity_id,
+			'schema_version'           => (int) $normalized['schemaVersion'],
+			'user_id'                  => PersistenceOutcome::author_id() ?? ( function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0 ),
+			'surface'                  => $surface,
+			'entity_type'              => $entity['type'],
+			'entity_ref'               => $entity['ref'],
+			'document_scope_key'       => $scope_key,
+			'activity_type'            => (string) $normalized['type'],
+			'suggestion'               => (string) $normalized['suggestion'],
+			'suggestion_key'           => $normalized['suggestionKey'],
+			'target_json'              => Serializer::encode_json( $normalized['target'] ),
+			'before_state'             => Serializer::encode_json( $normalized['before'] ),
+			'after_state'              => Serializer::encode_json( $normalized['after'] ),
+			'undo_state'               => Serializer::encode_json( $normalized['undo'] ),
+			'request_json'             => Serializer::encode_json( $normalized['request'] ),
+			'document_json'            => Serializer::encode_json( $normalized['document'] ),
+			'execution_result'         => (string) $normalized['executionResult'],
+			'apply_lane'               => $normalized['applyLane'],
+			'linked_apply_activity_id' => $normalized['linkedApplyActivityId'],
+			'save_occurrence_id'       => $normalized['saveOccurrenceId'],
+			'created_at'               => Serializer::mysql_datetime_from_timestamp( $timestamp ),
+			'updated_at'               => Serializer::mysql_datetime_from_timestamp( $timestamp ),
 		];
 		$record     = array_merge( $record, $projection );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
@@ -506,7 +520,7 @@ final class Repository {
 		];
 
 		if ( $include_reports ) {
-			$report_records = $filtered_records;
+			$report_records = array_values( array_filter( $filtered_records, static fn ( array $record ): bool => empty( $record['row']['linked_apply_activity_id'] ) ) );
 			self::sort_admin_records(
 				$report_records,
 				'timestamp',
@@ -1582,12 +1596,16 @@ final class Repository {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Deletes from the plugin-owned activity log table must execute immediately.
 		$deleted = $wpdb->query(
 			$wpdb->prepare(
-				'DELETE FROM %i WHERE created_at < %s AND NOT (CONVERT(HEX(execution_result) USING utf8mb4) REGEXP %s)',
+				'DELETE FROM %i WHERE created_at < %s AND linked_apply_activity_id IS NULL AND NOT (CONVERT(HEX(execution_result) USING utf8mb4) REGEXP %s)',
 				$table_name,
 				gmdate( 'Y-m-d H:i:s', $unix_timestamp ),
 				ExternalApplyDecisionClaim::SQL_HEX_PATTERN
 			)
 		);
+		// Linked evidence survives its own date cutoff while the original apply exists.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Indexed orphan cleanup follows ordinary retention in the plugin-owned table.
+		$orphans = $wpdb->query( $wpdb->prepare( 'DELETE evidence FROM %i AS evidence LEFT JOIN %i AS original ON original.activity_id = evidence.linked_apply_activity_id WHERE evidence.linked_apply_activity_id IS NOT NULL AND original.id IS NULL', $table_name, $table_name ) );
+		$deleted = ( is_int( $deleted ) ? $deleted : 0 ) + ( is_int( $orphans ) ? $orphans : 0 );
 
 		if ( is_int( $deleted ) && $deleted > 0 ) {
 			self::invalidate_pending_external_apply_notification_snapshot_cache();
@@ -1605,13 +1623,16 @@ final class Repository {
 		);
 
 		if ( $retention_days <= 0 ) {
+			PersistenceOccurrenceRepository::cleanup();
 			return 0;
 		}
 
 		$seconds_per_day = defined( 'DAY_IN_SECONDS' ) ? \DAY_IN_SECONDS : 86400;
 		$cutoff          = gmdate( 'c', time() - ( $retention_days * $seconds_per_day ) );
 
-		return self::delete_before( $cutoff );
+		$deleted = self::delete_before( $cutoff );
+		PersistenceOccurrenceRepository::cleanup();
+		return $deleted;
 	}
 
 	public static function ensure_prune_schedule(): void {
@@ -2467,10 +2488,12 @@ final class Repository {
 			return [];
 		}
 
-		$sql  = 'SELECT * FROM ' . self::table_name() . ' AS t';
-		$sql  = self::append_admin_sql_where_clause( $sql, $where['clauses'] );
-		$sql .= ' ORDER BY t.created_at DESC, t.id DESC LIMIT %d';
-		$args = array_merge( $where['args'], [ $limit ] );
+		// Save telemetry must not evict shown/review/apply rows from the original sample.
+		$where['clauses'][] = 't.linked_apply_activity_id IS NULL';
+		$sql                = 'SELECT * FROM ' . self::table_name() . ' AS t';
+		$sql                = self::append_admin_sql_where_clause( $sql, $where['clauses'] );
+		$sql               .= ' ORDER BY t.created_at DESC, t.id DESC LIMIT %d';
+		$args               = array_merge( $where['args'], [ $limit ] );
 		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $sql uses fixed clauses with placeholders.
 		$sql = $wpdb->prepare( $sql, $args );
 

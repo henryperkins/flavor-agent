@@ -677,16 +677,22 @@ export default function TemplateRecommender() {
 				hasSuccess: Boolean( hasApplySuccess ),
 				hasUndoSuccess,
 				applySuccessMessage: hasApplySuccess
-					? `Applied ${ formatCount(
-							lastAppliedOperations.length,
-							'template operation'
-					  ) }.`
+					? sprintf(
+							/* translators: %s: number of template operations. */
+							__( 'Applied %s in the editor.', 'flavor-agent' ),
+							formatCount(
+								lastAppliedOperations.length,
+								'template operation'
+							)
+					  )
 					: '',
 				undoSuccessMessage: hasUndoSuccess
-					? `Undid ${
+					? sprintf(
+							/* translators: %s: recommendation label. */
+							__( 'Undid %s in the editor.', 'flavor-agent' ),
 							lastUndoneTemplateActivity?.suggestion ||
-							'suggestion'
-					  }.`
+								__( 'suggestion', 'flavor-agent' )
+					  )
 					: '',
 				onDismissAction: Boolean( error ),
 				onApplyDismissAction: Boolean( applyError ),
@@ -1064,7 +1070,7 @@ function TemplateSuggestionCard( {
 						</span>
 						{ isApplied && (
 							<span className="flavor-agent-done-badge">
-								{ __( 'Applied', 'flavor-agent' ) }
+								{ __( 'Changed in editor', 'flavor-agent' ) }
 							</span>
 						) }
 					</div>
