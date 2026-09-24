@@ -24,52 +24,24 @@ Use available MCP tools when they can speed up implementation, verification, or 
 
 ## Commands
 
-```bash
-npm ci                 # install JS deps reproducibly (Node 24 / npm 11 via .nvmrc; Node 20 / npm 10 also supported)
-npm start              # dev build with watch (webpack via @wordpress/scripts)
-npm run build          # production build → build/index.js, build/admin.js, build/activity-log.js
-npm run dist           # release packaging via scripts/build-dist.sh → dist/
-npm run lint:js        # ESLint on src/
-npm run lint:plugin    # WP Plugin Check (requires bash + wp-cli + WP_PLUGIN_CHECK_PATH)
-npm run test:unit -- --runInBand  # Jest unit tests
-npm run test:e2e       # Playwright smoke suites (Playground + Site Editor, both WP 7.1)
-npm run test:e2e:playground  # fast Playground smoke suite
-npm run test:e2e:wp70  # Docker-backed WP 7.1 Site Editor suite
-npm run verify         # aggregate: build + lint + plugin-check + unit + PHP + E2E → output/verify/summary.json
-npm run verify:strict  # verify with --strict (warnings fail the run)
-npm run verify -- --skip=lint-plugin  # omit plugin-check when WP-CLI or WP root is unavailable
-npm run verify -- --skip-e2e       # same pipeline without Playwright suites (fast loop)
-npm run verify -- --only=build,unit  # run a subset of steps
-npm run verify -- --dry-run        # print planned steps as JSON and exit
-npm run check:docs     # stale-doc freshness guard
-npm run ensure:local-env  # pre-flight check for docker compose + .env wiring
-npm run wp:start       # docker compose up; follow docs/reference/local-environment-setup.md for nightly + companion plugins
-npm run wp:stop        # docker compose down
-npm run wp:reset       # docker compose down -v (destroys volumes)
-npm run wp:e2e:wp70:bootstrap  # provision WP 7.1 browser harness
-npm run wp:e2e:wp70:teardown   # stop WP 7.1 browser harness
+Standard scripts are listed in `package.json` / `composer.json`; only the non-obvious invocations are kept here.
 
-composer install       # install PHP deps (PSR-4 autoloader)
-composer lint:php      # WPCS via phpcs
-composer test:php      # PHPUnit tests
-vendor/bin/phpunit     # PHPUnit tests (direct)
+```bash
+npm run test:unit -- --runInBand  # Jest unit tests
+npm run lint:plugin    # WP Plugin Check (requires bash + wp-cli + WP_PLUGIN_CHECK_PATH)
+npm run verify         # aggregate: build + lint + plugin-check + unit + PHP + E2E → output/verify/summary.json
+npm run wp:reset       # docker compose down -v (destroys volumes)
 wp flavor-agent attestation verify att_xxx  # verify a stored Ring III attestation from the site runtime
 php tools/attestation-verify.php https://site.example att_xxx  # verify the public REST/JWKS envelope externally
 ```
 
-PHP tests run via `vendor/bin/phpunit`. JS tests live alongside source files (e.g. `src/store/update-helpers.test.js`) or in `__tests__/` directories.
-
 ### Local WordPress runtime
 
-The representative runtime is WordPress `7.0` stable (now released), or nightly/trunk when validating against upcoming releases, with these companion plugins active before validating editor, Connectors, Abilities, or MCP: `wordpress-beta-tester`, `gutenberg`, `ai`, `ai-provider-for-openai`, `ai-provider-for-anthropic`, `ai-provider-for-google`, `mcp-adapter` (installed from `WordPress/mcp-adapter`, pinned to **v0.6.1** — 2026-08-13; the upstream README now recommends the WordPress-plugin form installed from the GitHub Releases ZIP and demotes Composer to a plugin-developer library path, reversing the Composer-primary framing that held at v0.5.0. A WP.org-format `readme.txt` exists upstream for Plugin Check compliance, but its Installation section still points at GitHub releases and no `wordpress.org/plugins` listing is referenced anywhere in the v0.6.1 tree, so GitHub remains the distribution channel. Flavor Agent keeps the pinned git clone as its local-setup path because the clone needs `composer install` for the adapter's autoloader — a deliberate deviation from upstream's recommended install. Any ZIP-based install must be >= 0.6.1: the v0.6.0 ZIP shipped dangling Jetpack classmap entries that can fatal a site, fixed upstream in `23cb53e` / #284), `plugin-check`, plus `flavor-agent`. See `docs/reference/local-environment-setup.md` for setup and Plugin Check env exports.
+The representative runtime is WordPress `7.0` stable (now released), or nightly/trunk when validating against upcoming releases, with these companion plugins active before validating editor, Connectors, Abilities, or MCP: `wordpress-beta-tester`, `gutenberg`, `ai`, `ai-provider-for-openai`, `ai-provider-for-anthropic`, `ai-provider-for-google`, `mcp-adapter` (a pinned git clone of `WordPress/mcp-adapter` at **v0.6.1** — a deliberate deviation from upstream's recommended Releases ZIP; any ZIP install must be >= 0.6.1 because the v0.6.0 ZIP can fatal a site), `plugin-check`, plus `flavor-agent`. See `docs/reference/local-environment-setup.md` for setup, the mcp-adapter pin rationale, and Plugin Check env exports.
 
 ### Agent-executable verification
 
-`npm run verify` (`scripts/verify.js`) is the single entry point for automated verification. It runs `build`, `lint-js`, `lint-plugin`, `unit`, `lint-php`, `test-php`, `e2e-playground`, and `e2e-wp70` in order, streaming output while capturing per-step logs.
-
-Artifacts under `output/verify/` (gitignored): `summary.json` (structured run report with `schemaVersion`, `status` of `pass`/`fail`/`incomplete`, `counts`, per-step `{status, exitCode, durationMs, startedAt, finishedAt, stdoutPath, stderrPath}`, environment) and `<step>.stdout.log` / `<step>.stderr.log`. Final stdout is `VERIFY_RESULT={...}` (one-line JSON with `status`, `summaryPath`, `counts`).
-
-Exit codes: `0` pass, `1` any failure or required-tool-missing skip (status flips to `incomplete`), `2` argument error. `--only` / `--skip` / `--skip-e2e` skips never fail the run. `lint-plugin` requires `bash` plus either host WP-CLI (`wp` + a resolvable `WP_PLUGIN_CHECK_PATH`) or the Docker path (`PLUGIN_CHECK_USE_DOCKER=1` with the compose `wordpress` container running; no host `wp` needed) — use `--skip=lint-plugin` when neither is available.
+`npm run verify` (`scripts/verify.js`) is the single entry point for automated verification. Use the `verify-pipeline` skill for step order, modes and flags, Plugin Check / E2E prerequisites, `output/verify/summary.json`, and exit codes.
 
 ### Cross-surface validation gates
 
@@ -83,15 +55,14 @@ For any change touching more than one recommendation surface or any shared subsy
 
 ## Architecture
 
-**PHP backend** (`inc/`, PSR-4 namespace `FlavorAgent\`) — thirteen namespaces spanning `REST\` routes, `Activity\` + `Attestation\` storage, `CLI\`, per-surface `LLM\` prompts, server-side `Context\` collection, the provider/embeddings clients (`OpenAI\`, `Embeddings\`, `AzureOpenAI\`, `Cloudflare\`), `Patterns\` indexing/retrieval, `AI\` feature + Abilities registration, `Guidelines\`, governed `Apply\`, `Settings`, and cross-cutting `Support\` helpers. See [docs/reference/php-backend-architecture.md](docs/reference/php-backend-architecture.md) for the namespace-by-namespace map.
+**PHP backend** (`inc/`, PSR-4 namespace `FlavorAgent\`) — see [docs/reference/php-backend-architecture.md](docs/reference/php-backend-architecture.md) for the namespace-by-namespace map.
 
-**JS frontend** (`src/`, built with `@wordpress/scripts`) — the editor entry (`index.js`), shared `components/`, Inspector injection (`inspector/`), client-side `context/` collection, the `flavor-agent` `store/`, per-surface panels (`patterns/`, `content/`, `templates/`, `template-parts/`, `global-styles/`, `style-book/`, `style-surfaces/`), `utils/` helpers, `test-utils/`, and the `admin/` settings + AI Activity apps. See [docs/reference/js-frontend-architecture.md](docs/reference/js-frontend-architecture.md) for the full per-module table.
+**JS frontend** (`src/`, built with `@wordpress/scripts`) — see [docs/reference/js-frontend-architecture.md](docs/reference/js-frontend-architecture.md) for the full per-module table.
 
 **Webpack** has three entry points: `src/index.js` (editor), `src/admin/settings-page.js` (settings page), and `src/admin/activity-log.js` (AI Activity admin page).
 
 ## Key Integration Points
 
-- **Inspector injection**: `editor.BlockEdit` filter via `createHigherOrderComponent`. The main `AI Recommendations` panel fills the default (ungrouped) `<InspectorControls>`; passive mirrored chips fill the delegated `<InspectorControls group="...">` slots listed in `src/inspector/panel-delegation.js` — position, advanced, bindings, list, typography, dimensions, border, filter, background. The `color` group is deliberately not delegated: Gutenberg 23.5 (#77279) moved text and background color controls into Typography and Background, so a `color` fill would resurrect an otherwise-absent, empty Color panel.
 - **Recommendation transport**: The eight recommendation surfaces are Abilities (not REST routes), registered via `Abilities\Registration::register_recommendation_abilities()` and reachable at `POST /wp-abilities/v1/abilities/{ability}/run` or via `@wordpress/abilities` (see `src/store/abilities-client.js` + `assets/abilities-bridge.js`). Concrete classes in `inc/AI/Abilities/Recommend*Ability.php` extend `RecommendationAbility`. Capability matrix from per-class `CAPABILITY` constant, enforced in `RecommendationAbility::permission_callback()`; escalates to `current_user_can( 'edit_post', $post_id )` when post ID is extractable:
   - `RecommendBlockAbility`, `RecommendContentAbility`, `RecommendPatternsAbility` → `edit_posts`
   - `RecommendNavigationAbility`, `RecommendStyleAbility`, `RecommendTemplateAbility`, `RecommendTemplatePartAbility` → `edit_theme_options`
@@ -124,10 +95,7 @@ Each recommendation surface disables independently when its required backend is 
 - Inspector sub-panel chips use `grid-column: 1 / -1` to span ToolsPanel CSS grid — changing this breaks layout.
 - The plugin respects `contentOnly` editing mode: suggestions won't propose changes to locked attributes.
 - `vendor/` is gitignored — run `composer install` after cloning (and inside the container) to generate the PSR-4 autoloader.
-- Localized JS globals (via `wp_localize_script`):
-  - `flavorAgentData` (editor) → `settingsUrl`, `connectorsUrl`, `connectorApprovalUrl`, `activityLogUrl`, `canManageFlavorAgentSettings`, `enableBlockStructuralActions`, structured `capabilities.surfaces` + `capabilities.styles`, legacy per-surface `canRecommend*` flags (Blocks/Patterns/Content/Templates/TemplateParts/Navigation/GlobalStyles/StyleBook), `templatePartAreas`. No `restUrl`/`nonce`: the editor reaches abilities and REST through `@wordpress/api-fetch`, which core already configures.
-  - `flavorAgentAdmin` (settings page) → `restUrl`, `nonce`
-  - `flavorAgentActivityLog` (Settings > AI Activity) → `restUrl`, `nonce`, `adminUrl`, `settingsUrl`, `connectorsUrl`, `defaultPerPage`, `maxPerPage`, `locale`, `timeZone`, `canApproveStyleApplies`, `currentUserId`, `themeColorPresets`
+- Localized JS globals are defined at their `wp_localize_script` calls: `flavorAgentData` (editor), `flavorAgentAdmin` (settings page), `flavorAgentActivityLog` (Settings > AI Activity). `flavorAgentData` has no `restUrl`/`nonce`: the editor reaches abilities and REST through `@wordpress/api-fetch`, which core already configures.
 - Pattern settings keys and inserter DOM selectors are centralized in `src/patterns/compat.js`; the adapter resolves stable keys first, then `__experimentalAdditional*` override keys, then `__experimental*` base keys. Direct experimental usages remain in `src/context/theme-tokens.js`, `src/context/block-inspector.js`, `src/global-styles/selectors.js`, `src/utils/style-support-paths.js` (the `typography.__experimentalFontFamily` support-path alias), and `src/patterns/PatternAdaptationPreview.js` (the `BlockPreview` → `__experimentalBlockPreview` fallback) because WordPress has not promoted stable replacements yet. All of these are guarded fallbacks; this list is the tracked boundary, so add any new site here rather than letting it go unowned.
 - Plugin self-registers as a downstream Experiment of the WP AI plugin via `wpai_default_feature_classes` (`flavor-agent.php:30` + `inc/AI/FeatureBootstrap.php`). Editor scripts gate on `FeatureBootstrap::editor_runtime_available()`; when missing, scripts don't enqueue and an admin notice explains. Concrete abilities in `inc/AI/Abilities/Recommend*Ability.php` bind to callbacks in `inc/Abilities/{Block,Content,Navigation,Pattern,Style,Template}Abilities.php`.
 

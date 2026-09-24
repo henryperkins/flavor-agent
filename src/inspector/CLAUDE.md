@@ -1,0 +1,3 @@
+# src/inspector — Inspector injection
+
+- **Inspector injection**: `editor.BlockEdit` filter via `createHigherOrderComponent`. The main `AI Recommendations` panel fills the default (ungrouped) `<InspectorControls>`; passive mirrored chips fill the delegated `<InspectorControls group="...">` slots listed in `src/inspector/panel-delegation.js` — position, advanced, bindings, list, typography, dimensions, border, filter, background. The `color` group is deliberately not delegated: Gutenberg 23.5 (#77279) moved text and background color controls into Typography and Background, so a `color` fill would resurrect an otherwise-absent, empty Color panel.
