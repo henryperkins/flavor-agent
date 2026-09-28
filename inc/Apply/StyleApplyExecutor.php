@@ -162,7 +162,7 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 	 * @return array{scope: array<string, mixed>, styleContext: array<string, mixed>}|\WP_Error
 	 */
 	public static function build_validation_context( string $surface, string $block_name = '' ): array|\WP_Error {
-		$theme_tokens = ServerCollector::for_tokens();
+		$theme_tokens = ServerCollector::for_tokens( self::SURFACE_STYLE_BOOK === $surface ? $block_name : '' );
 
 		if ( self::SURFACE_STYLE_BOOK === $surface ) {
 			$block_manifest = ServerCollector::introspect_block_type( $block_name );
@@ -181,9 +181,10 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 					'blockName' => $block_name,
 				],
 				'styleContext' => [
-					'supportedStylePaths' => StyleAbilities::supported_style_paths_for_block( $block_manifest ),
+					'supportedStylePaths' => StyleAbilities::supported_style_paths_for_block( $block_manifest, $theme_tokens ),
 					'availableVariations' => [],
 					'themeTokens'         => $theme_tokens,
+					'globalThemeTokens'   => ServerCollector::for_tokens(),
 					'styleBookTarget'     => [
 						'blockName'  => $block_name,
 						'blockTitle' => sanitize_text_field( (string) ( $block_manifest['title'] ?? '' ) ),
@@ -335,17 +336,8 @@ final class StyleApplyExecutor implements ExternalApplyExecutor {
 			$after_config['styles'] = self::write_path( $after_config['styles'], $config_path, $operation['value'] ?? null );
 		}
 
-		$contrast = StyleContrastValidator::evaluate(
-			$applied,
-			[
-				'styleContext' => [
-					'themeTokens'  => is_array( $context['styleContext']['themeTokens'] ?? null )
-						? $context['styleContext']['themeTokens']
-						: [],
-					'mergedConfig' => self::merged_config_with_user_overrides( $after_config ),
-				],
-			]
-		);
+		$context['styleContext']['mergedConfig'] = self::merged_config_with_user_overrides( $after_config );
+		$contrast                                = StyleContrastValidator::evaluate( $applied, $context );
 
 		if ( empty( $contrast['passed'] ) ) {
 			return new \WP_Error(

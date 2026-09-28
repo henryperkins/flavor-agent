@@ -10,7 +10,7 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 - Unavailable state: when Pattern Storage or the Embedding Model is missing, the native inserter prepends a shared capability notice that explains which setup path is missing and links to `Settings > Flavor Agent` and `Settings > Connectors` when those actions are available
 - There is no separate Flavor Agent sidebar for this feature; the user stays inside Gutenberg's normal inserter workflow, and the surface intentionally remains an inserter ranking and guarded insertion assist instead of participating in the lane/review/apply/undo model
 - Pattern recommendations return `reviewContextSignature` and `resolvedContextSignature`; both `Insert original` and `Insert adapted` revalidate the server-resolved apply context through `resolveSignatureOnly` before dispatching core insertion, while the surface still avoids a separate Flavor Agent review/apply panel
-- Non-synced recommended patterns expose `Preview adapted` and `Insert original`; preview opens a labeled original/adapted compare panel inside the inserter, while synced/user `core/block` reference patterns keep a single unchanged `Insert` action and are not detached
+- Non-synced recommended patterns expose `Preview adapted` and `Insert original`; preview shows an original/adapted comparison when adjustments are ready, one original preview when no changes are needed, or diagnostics when adaptation is blocked. Synced/user `core/block` reference patterns keep a single unchanged `Insert` action and are not detached
 
 ## Surfacing Conditions
 
@@ -34,7 +34,15 @@ When a real inserter-intent request ends before a model call, diagnostics carry 
 
 ## Adapted Preview
 
-For non-synced recommended patterns, the shelf offers `Preview adapted` beside `Insert original`. Preview keeps the untouched resolved block tree beside a detached adapted clone, applies only deterministic cosmetic mutations to the clone, and renders a stacked compare panel with labeled `Original pattern` and `Adapted result` `BlockPreview` sections plus deterministic per-change summary rows. `Insert adapted` re-clones the previewed adapted tree immediately before dispatch so Gutenberg receives fresh block instances.
+For non-synced recommended patterns, the shelf offers `Preview adapted` beside `Insert original`. Preview preserves the untouched resolved block tree and applies only deterministic cosmetic mutations to a detached clone. A `ready` result renders a stacked compare panel with labeled `Original pattern` and `Adapted result` `BlockPreview` sections plus per-change summary rows. `Insert adapted` re-clones the previewed adapted tree immediately before dispatch so Gutenberg receives fresh block instances.
+
+An `unchanged` result shows **No changes needed**, one original preview, and `Insert original`, which uses the existing original-insertion freshness and validation path. It records `adapted_preview_shown` with reason `no_changes_needed`. A `blocked` result explains why adaptation could not proceed and keeps `Insert original` available when safe.
+
+Structured diagnostics identify missing theme presets, unsupported block controls, unmapped color or spacing presets, and ambiguous color roles. Before reporting no changes, the engine also checks presets that no rule adjusts — font size, font family, gradient, and border color attributes, core Cover/Navigation/Social Icons colors, and preset references in `style` — and reports any the theme lacks as `unresolved_theme_preset`. If other adjustments succeed, the comparison remains available with the diagnostics and unresolved values left unchanged. A zero-change result with unresolved presets is blocked. Per-value diagnostics remain in the client preview; Activity records the outcome reason without full block content.
+
+Preset checks and color/spacing adjustments resolve the current block's theme settings, including `settings.blocks[blockName]`. Global presets remain available through inheritance; block presets override matching slugs after resolving default, theme, and custom origins within each scope. Nested blocks use their own block-type settings, and block-specific color opt-outs are respected. Border diagnostics recognize both `border.color` and Gutenberg's `__experimentalBorder.color` support keys. The same settings are collected again before adapted insertion, so a changed mapping invalidates the preview.
+
+Inline `style` preset references also recognize CSS variables inherited from ancestor blocks inside the pattern. An existing inherited spacing variable is preserved without remapping. This follows the current ancestor branch: sibling presets, preset classes, and ancestor control permissions do not become available to a child. CSS preset names use WordPress's kebab-case normalization, so a theme slug such as `brandBlue` defines `--wp--preset--color--brand-blue`; literal CSS variable references remain case-sensitive, and raw preset attributes keep their original slugs.
 
 The v1 mutation allowlist is intentionally narrow:
 
@@ -43,6 +51,8 @@ The v1 mutation allowlist is intentionally narrow:
 - supported text/background color preset slugs can be remapped to theme palette roles,
 - supported spacing preset values can be remapped to the nearest available theme spacing preset,
 - `core/button` can receive a registered non-default style variation when it does not already have one.
+
+Color remapping preserves slugs already in the active palette, including custom slugs. Off-theme semantic slugs try their own slug, then known aliases, and match only explicit palette labels: an exact slug, an exact display name, or a parenthetical label such as **Evergreen (brand)**. Names that merely contain a role word, such as Twenty Twenty-Four's **Accent / Two** or **Primary Dark**, are not role labels; entries sharing a label are ambiguous, and unlabeled colors are not assigned roles from hue or palette order. Pattern adaptation and the Style Book execution contract share WordPress's color-support defaults: declaring `supports.color` enables text and background unless explicitly disabled, while each surface also respects theme restrictions.
 
 The preview reads a client-only `adaptationContext` from the live editor at preview time: nearby heading levels, preceding heading level, root alignment, and sibling alignments around the current insertion point. That context is not sent to ranking and is not part of the server `resolvedContextSignature`; instead the preview records a local `adaptationSignature` over the source pattern, insertion target, server-resolved signature, adaptation context, and applied changes.
 
@@ -101,6 +111,8 @@ Recommendation outcome events added for this path are `adapted_preview_shown`, `
 - If a stored recommendation lacks a server `resolvedContextSignature`, or the current `resolveSignatureOnly` response does not match the stored signature, the Insert action is blocked and the shelf refreshes recommendations for the current target
 - If an adapted preview's client-only insertion context changes before `Insert adapted`, the adapted insert is blocked with `adapted_preview_stale` and the shelf refreshes recommendations for the current target
 - If a pattern is a synced/user `core/block` reference, Flavor Agent keeps the unchanged reference path and does not show `Preview adapted`
+- If the rules make no changes and report no unresolved presets, preview reports `unchanged` with `no_changes_needed` and offers original insertion; it does not record an adaptation failure
+- If presets are missing, unsupported, unmapped, unresolved, or ambiguous, preview shows specific diagnostics. Successful adjustments may still be previewed with unresolved values preserved; zero successful adjustments with unresolved presets block adaptation
 - If adapted blocks cannot be safely built, the adapted path records `adaptation_blocked` and leaves original insertion available when the original remains safe
 - If Gutenberg rejects insertion, silently no-ops, or inserts cloned blocks outside the requested target, Flavor Agent records `insert_failed` for original insertion or `adapted_insert_failed` for adapted insertion. Wrong-target inserts are rolled back with `removeBlocks()` when the cloned client IDs are visible after dispatch.
 - Cloudflare AI Search sync uploads only public-safe current pattern content. It preserves owner-marker items and unknown remote items, and deletes only stale item IDs that were recorded in the previous Flavor Agent pattern fingerprint state. If a synced pattern later becomes private, draft, trashed, or unreadable before the next sync, request-time rehydration drops it before ranking or response output.

@@ -1,6 +1,22 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-09-12
+> Last updated: 2026-09-28
+
+## Unreleased adapted-preview and color-support fixes
+
+Pattern previews now distinguish ready adjustments, unchanged patterns, and blocked adaptation. Unchanged patterns show one original preview and `Insert original`; unresolved presets and ambiguous color roles show specific diagnostics. Existing custom palette slugs are preserved, and semantic color remapping matches only explicit palette labels (an exact slug or name, or a parenthetical role such as “(brand)”) and known aliases, so bundled palettes such as Twenty Twenty-Four remap cleanly and names like **Primary Dark** never claim a role. Before reporting no changes, the preview also checks font size, font family, gradient, border, core overlay/icon, and `style` preset references and blocks on any the theme lacks. The [canonical surface doc](docs/features/pattern-recommendations.md) and [adapted-preview design](docs/features/pattern-recommendations-adapted-preview.md) describe these states and their Activity outcomes.
+
+Pattern adaptation and Style Book now share the client block color-support predicate, and the server Style Book allowlist follows the same defaults. Declaring `supports.color` enables text/background paths unless the relevant facet is explicitly false; theme opt-outs and Style Book's palette requirement still apply. Regression coverage exercises core paragraph defaults, explicit block/theme opt-outs, and block-scoped color application.
+
+The September 27–28 review fixes make border diagnostics recognize Gutenberg's `__experimentalBorder.color` key and resolve pattern presets per block type. Valid block-specific presets are preserved alongside inherited global presets, scoped color/spacing mappings use the same tokens as diagnostics, and block-specific color opt-outs are honored. Insertion revalidation recollects these settings so a changed mapping blocks the stale preview.
+
+The September 28 scope follow-up also resolves Style Book controls, palettes, freshness signatures, and contrast checks for the selected block on both client and server. Pattern diagnostics preserve CSS preset variables inherited from ancestor blocks inside the pattern and recognize WordPress's kebab-case CSS names without rewriting raw preset attributes or sharing settings across sibling branches.
+
+The [latest scope and contrast verification](docs/validation/2026-09-20-color-support-review.md#scoped-settings-and-inherited-colors--2026-09-28) passed all seven strict non-browser checks, including Plugin Check, 117 Jest suites / 2,067 tests, and 2,398 PHP tests. All 12 selected Playground pattern cases passed. All 11 selected Global Styles/Style Book cases plus authentication passed in both Gutenberg 23.9.0 and the WordPress 7.1 bundled editor, including the four new control and inherited-contrast regressions. Every browser run passed on its first attempt. The complete browser suites were not rerun.
+
+The earlier September 27–28 follow-up in the [verification record](docs/validation/2026-09-20-color-support-review.md#follow-up--2026-09-28) passed all seven strict non-browser checks, including Plugin Check, 117 Jest suites / 2,037 tests, and 2,361 PHP tests. All 10 selected Playground pattern cases and all seven selected Docker Global Styles/Style Book cases passed on the first run; Docker authentication also passed. The complete browser suites and bundled-editor leg were not rerun in that pass.
+
+The [September 20 verification record](docs/validation/2026-09-20-color-support-review.md) records a passing six-step non-browser aggregate, including Docker-backed Plugin Check, 117 Jest suites / 1,984 tests, and 2,361 PHP tests. Documentation checks pass with real ripgrep. All eight selected pattern cases and seven selected style cases have passing browser evidence across targeted runs, including default paragraph color review/apply/undo; one pattern-catalog hydration failure passed on isolated retry. The full browser suites and bundled-editor leg were not rerun. A September 24 follow-up in the same record fixed palette-label matching and the no-changes preset check: its non-browser verify run passed every step it could run, with 117 Jest suites / 2,016 tests and 2,361 PHP tests (Plugin Check had no local WordPress root), and all eight Playground pattern cases passed on the first run.
 
 ## Unreleased save persistence work
 

@@ -35,6 +35,142 @@ const CHANGE_REASON_LABELS = {
 	),
 };
 
+function describeUnresolvedPreset( presetType, value ) {
+	switch ( presetType ) {
+		case 'color':
+			return sprintf(
+				/* translators: %s: color preset slug. */
+				__(
+					'The color preset “%s” is not available in this theme. It is kept unchanged.',
+					'flavor-agent'
+				),
+				value
+			);
+		case 'gradient':
+			return sprintf(
+				/* translators: %s: gradient preset slug. */
+				__(
+					'The gradient preset “%s” is not available in this theme. It is kept unchanged.',
+					'flavor-agent'
+				),
+				value
+			);
+		case 'duotone':
+			return sprintf(
+				/* translators: %s: duotone filter preset slug. */
+				__(
+					'The duotone filter preset “%s” is not available in this theme. It is kept unchanged.',
+					'flavor-agent'
+				),
+				value
+			);
+		case 'font-size':
+			return sprintf(
+				/* translators: %s: font size preset slug. */
+				__(
+					'The font size preset “%s” is not available in this theme. It is kept unchanged.',
+					'flavor-agent'
+				),
+				value
+			);
+		case 'font-family':
+			return sprintf(
+				/* translators: %s: font family preset slug. */
+				__(
+					'The font family preset “%s” is not available in this theme. It is kept unchanged.',
+					'flavor-agent'
+				),
+				value
+			);
+		case 'spacing':
+			return sprintf(
+				/* translators: %s: spacing preset slug. */
+				__(
+					'The spacing preset “%s” is not available in this theme. It is kept unchanged.',
+					'flavor-agent'
+				),
+				value
+			);
+		case 'shadow':
+			return sprintf(
+				/* translators: %s: shadow preset slug. */
+				__(
+					'The shadow preset “%s” is not available in this theme. It is kept unchanged.',
+					'flavor-agent'
+				),
+				value
+			);
+		default:
+			return sprintf(
+				/* translators: %s: theme preset slug. */
+				__(
+					'The preset “%s” is not available in this theme. It is kept unchanged.',
+					'flavor-agent'
+				),
+				value
+			);
+	}
+}
+
+function describeDiagnostic( { code, value = '', presetType = '' } ) {
+	switch ( code ) {
+		case 'unsupported_synced_reference':
+			return __(
+				'Synced patterns stay linked to their original. Insert the original to keep that link.',
+				'flavor-agent'
+			);
+		case 'adapted_blocks_not_insertable':
+			return __(
+				'The pattern blocks could not be loaded for preview. Close this preview and try again.',
+				'flavor-agent'
+			);
+		case 'missing_theme_tokens':
+			return __(
+				'The theme presets needed for this adjustment are unavailable. The original styling is kept unchanged.',
+				'flavor-agent'
+			);
+		case 'unsupported_block_support':
+			return __(
+				'A block does not support the requested style adjustment. Its original styling is kept unchanged.',
+				'flavor-agent'
+			);
+		case 'unmapped_color_preset':
+			return sprintf(
+				/* translators: %s: original color preset slug. */
+				__(
+					'The color “%s” has no matching role in this theme’s palette. It is kept unchanged.',
+					'flavor-agent'
+				),
+				value
+			);
+		case 'ambiguous_color_role':
+			return sprintf(
+				/* translators: %s: original color preset slug. */
+				__(
+					'More than one theme color matches “%s”. It is kept unchanged so you can choose the color in the editor.',
+					'flavor-agent'
+				),
+				value
+			);
+		case 'unresolved_theme_preset':
+			return describeUnresolvedPreset( presetType, value );
+		case 'unmapped_spacing_preset':
+			return sprintf(
+				/* translators: %s: original spacing preset slug. */
+				__(
+					'The spacing preset “%s” has no matching theme preset. It is kept unchanged.',
+					'flavor-agent'
+				),
+				value
+			);
+		default:
+			return __(
+				'An adapted preview is unavailable for this pattern. You can still insert the original.',
+				'flavor-agent'
+			);
+	}
+}
+
 function describeChange( change ) {
 	return (
 		CHANGE_REASON_LABELS[ change?.reason ] ||
@@ -148,6 +284,8 @@ function normalizeChangeRows( changes ) {
 export default function PatternAdaptationPreview( {
 	title = '',
 	status = 'ready',
+	reason = '',
+	diagnostics = [],
 	changes = [],
 	originalBlocks = [],
 	adaptedBlocks = [],
@@ -157,9 +295,20 @@ export default function PatternAdaptationPreview( {
 	onClose,
 } ) {
 	const isReady = status === 'ready' && ! isStale;
+	const isUnchanged = status === 'unchanged' && ! isStale;
 	const changeRows = normalizeChangeRows( changes );
 	const hasComparePreview =
-		isReady && ( originalBlocks.length > 0 || adaptedBlocks.length > 0 );
+		( isReady || isUnchanged ) &&
+		( originalBlocks.length > 0 || adaptedBlocks.length > 0 );
+	const fallbackDiagnostics =
+		status === 'blocked' ? [ { code: reason } ] : [];
+	const diagnosticMessages = [
+		...new Set(
+			( diagnostics.length > 0 ? diagnostics : fallbackDiagnostics ).map(
+				describeDiagnostic
+			)
+		),
+	];
 
 	return (
 		<div className="flavor-agent-pattern-adaptation">
@@ -184,23 +333,37 @@ export default function PatternAdaptationPreview( {
 				</p>
 			) }
 
-			{ status === 'blocked' && ! isStale && (
+			{ isUnchanged && (
 				<p
 					className="flavor-agent-pattern-adaptation__status"
 					role="status"
 				>
 					{ __(
-						'Flavor Agent could not build a safe adaptation for this pattern. You can still insert the original.',
+						'No changes needed. Insert the original pattern to use it as shown.',
 						'flavor-agent'
 					) }
 				</p>
 			) }
+			{ ! isStale &&
+				diagnosticMessages.map( ( message ) => (
+					<p
+						key={ message }
+						className="flavor-agent-pattern-adaptation__status"
+						role="status"
+					>
+						{ message }
+					</p>
+				) ) }
 
 			{ hasComparePreview && (
 				<div
 					className="flavor-agent-pattern-adaptation__compare"
 					role="group"
-					aria-label={ __( 'Pattern comparison', 'flavor-agent' ) }
+					aria-label={
+						isUnchanged
+							? __( 'Pattern preview', 'flavor-agent' )
+							: __( 'Pattern comparison', 'flavor-agent' )
+					}
 				>
 					<div
 						className="flavor-agent-pattern-adaptation__panel flavor-agent-pattern-adaptation__panel--original"
@@ -219,23 +382,29 @@ export default function PatternAdaptationPreview( {
 							</div>
 						) }
 					</div>
-					<div
-						className="flavor-agent-pattern-adaptation__panel flavor-agent-pattern-adaptation__panel--adapted"
-						role="group"
-						aria-label={ __( 'Adapted result', 'flavor-agent' ) }
-					>
-						<span className="flavor-agent-pattern-adaptation__panel-title">
-							{ __( 'Adapted result', 'flavor-agent' ) }
-						</span>
-						{ ResolvedBlockPreview && adaptedBlocks.length > 0 && (
-							<div className="flavor-agent-pattern-adaptation__preview">
-								<ResolvedBlockPreview
-									blocks={ adaptedBlocks }
-									viewportWidth={ 800 }
-								/>
-							</div>
-						) }
-					</div>
+					{ ! isUnchanged && (
+						<div
+							className="flavor-agent-pattern-adaptation__panel flavor-agent-pattern-adaptation__panel--adapted"
+							role="group"
+							aria-label={ __(
+								'Adapted result',
+								'flavor-agent'
+							) }
+						>
+							<span className="flavor-agent-pattern-adaptation__panel-title">
+								{ __( 'Adapted result', 'flavor-agent' ) }
+							</span>
+							{ ResolvedBlockPreview &&
+								adaptedBlocks.length > 0 && (
+									<div className="flavor-agent-pattern-adaptation__preview">
+										<ResolvedBlockPreview
+											blocks={ adaptedBlocks }
+											viewportWidth={ 800 }
+										/>
+									</div>
+								) }
+						</div>
+					) }
 				</div>
 			) }
 
@@ -271,21 +440,23 @@ export default function PatternAdaptationPreview( {
 			) }
 
 			<div className="flavor-agent-pattern-adaptation__actions">
+				{ status !== 'unchanged' && (
+					<Button
+						variant="primary"
+						size="small"
+						disabled={ ! isReady }
+						onClick={ onInsertAdapted }
+						aria-label={ sprintf(
+							/* translators: %s: pattern title. */
+							__( 'Insert adapted %s', 'flavor-agent' ),
+							title
+						) }
+					>
+						{ __( 'Insert adapted', 'flavor-agent' ) }
+					</Button>
+				) }
 				<Button
-					variant="primary"
-					size="small"
-					disabled={ ! isReady }
-					onClick={ onInsertAdapted }
-					aria-label={ sprintf(
-						/* translators: %s: pattern title. */
-						__( 'Insert adapted %s', 'flavor-agent' ),
-						title
-					) }
-				>
-					{ __( 'Insert adapted', 'flavor-agent' ) }
-				</Button>
-				<Button
-					variant="secondary"
+					variant={ isUnchanged ? 'primary' : 'secondary' }
 					size="small"
 					onClick={ onInsertOriginal }
 				>

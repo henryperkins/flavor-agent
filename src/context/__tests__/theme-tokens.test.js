@@ -365,6 +365,161 @@ describe( 'summarizeTokens', () => {
 	} );
 } );
 
+describe( 'block-specific theme tokens', () => {
+	test.each( [
+		[ 'color', 'palette', 'palette', { color: '#123456' } ],
+		[
+			'color',
+			'gradients',
+			'gradients',
+			{ gradient: 'linear-gradient(red, blue)' },
+		],
+		[ 'color', 'duotone', 'duotone', { colors: [ '#000000', '#ffffff' ] } ],
+		[ 'typography', 'fontSizes', 'fontSizes', { size: '2rem' } ],
+		[
+			'typography',
+			'fontFamilies',
+			'fontFamilies',
+			{ fontFamily: 'serif' },
+		],
+		[ 'spacing', 'spacingSizes', 'spacingSizes', { size: '2rem' } ],
+		[ 'shadow', 'presets', 'presets', { shadow: '0 1px 2px #000000' } ],
+	] )(
+		'inherits global %s.%s presets and gives the block precedence across origins',
+		( group, feature, token, value ) => {
+			const settings = {
+				__experimentalFeatures: {
+					[ group ]: {
+						[ feature ]: {
+							default: [ { slug: 'inherited', ...value } ],
+							custom: [
+								{ slug: 'shared', name: 'Global', ...value },
+							],
+						},
+					},
+					blocks: {
+						'core/paragraph': {
+							[ group ]: {
+								[ feature ]: {
+									default: [
+										{
+											slug: 'shared',
+											name: 'Block default',
+											...value,
+										},
+									],
+									theme: [ { slug: 'local', ...value } ],
+									custom: [
+										{
+											slug: 'shared',
+											name: 'Block custom',
+											...value,
+										},
+									],
+								},
+							},
+						},
+					},
+				},
+			};
+			const before = JSON.stringify( settings );
+			const tokens = collectThemeTokensFromSettings(
+				settings,
+				'core/paragraph'
+			);
+
+			expect(
+				tokens[ group ][ token ].map( ( preset ) => preset.slug )
+			).toEqual( [ 'inherited', 'shared', 'local' ] );
+			expect( tokens[ group ][ token ][ 1 ].name ).toBe( 'Block custom' );
+			const withoutBlockCustom = JSON.parse( JSON.stringify( settings ) );
+			delete withoutBlockCustom.__experimentalFeatures.blocks[
+				'core/paragraph'
+			][ group ][ feature ].custom;
+			expect(
+				collectThemeTokensFromSettings(
+					withoutBlockCustom,
+					'core/paragraph'
+				)[ group ][ token ][ 1 ].name
+			).toBe( 'Block default' );
+			expect(
+				collectThemeTokensFromSettings( settings, 'core/heading' )[
+					group
+				][ token ].map( ( preset ) => preset.slug )
+			).toEqual( [ 'inherited', 'shared' ] );
+			expect(
+				collectThemeTokensFromSettings( settings )[ group ][
+					token
+				][ 1 ].name
+			).toBe( 'Global' );
+			expect( JSON.stringify( settings ) ).toBe( before );
+		}
+	);
+
+	test( 'keeps inherited presets with flat or empty block collections and honors block opt-outs', () => {
+		const settings = {
+			features: {
+				color: {
+					text: true,
+					palette: [ { slug: 'global', color: '#000000' } ],
+				},
+				typography: { fontSizes: [ { slug: 'medium', size: '1rem' } ] },
+				blocks: {
+					'core/paragraph': {
+						color: { text: false, palette: [] },
+						typography: {
+							fontSizes: [ { slug: 'local', size: '2rem' } ],
+						},
+					},
+				},
+			},
+		};
+		const tokens = collectThemeTokensFromSettings(
+			settings,
+			'core/paragraph'
+		);
+
+		expect( tokens.color.textEnabled ).toBe( false );
+		expect( tokens.color.palette.map( ( preset ) => preset.slug ) ).toEqual(
+			[ 'global' ]
+		);
+		expect(
+			tokens.typography.fontSizes.map( ( preset ) => preset.slug )
+		).toEqual( [ 'medium', 'local' ] );
+	} );
+
+	test( 'fills experimental block settings when the stable source only has global parity', () => {
+		const settings = {
+			features: {
+				typography: {
+					fontSizes: { theme: [ { slug: 'medium', size: '1rem' } ] },
+				},
+			},
+			__experimentalFeatures: {
+				typography: {
+					fontSizes: { theme: [ { slug: 'medium', size: '1rem' } ] },
+				},
+				blocks: {
+					'core/paragraph': {
+						typography: {
+							fontSizes: {
+								theme: [ { slug: 'local', size: '2rem' } ],
+							},
+						},
+					},
+				},
+			},
+		};
+
+		expect(
+			collectThemeTokensFromSettings(
+				settings,
+				'core/paragraph'
+			).typography.fontSizes.map( ( preset ) => preset.slug )
+		).toEqual( [ 'medium', 'local' ] );
+	} );
+} );
+
 describe( 'global styles execution contract', () => {
 	test( 'derives supported style paths from live color feature gates', () => {
 		const contract = buildGlobalStylesExecutionContractFromSettings( {
@@ -513,6 +668,84 @@ describe( 'global styles execution contract', () => {
 } );
 
 describe( 'block style execution contract', () => {
+	test.each( [ 'background', 'text' ] )(
+		'resolves the target block theme %s control without affecting other scopes',
+		( facet ) => {
+			const settings = {
+				features: {
+					color: {
+						palette: [ { slug: 'global', color: '#111111' } ],
+					},
+					blocks: {
+						'core/paragraph': { color: { [ facet ]: false } },
+					},
+				},
+			};
+			const blockType = {
+				name: 'core/paragraph',
+				supports: { color: {} },
+			};
+			const entry = { path: [ 'color', facet ], valueSource: 'color' };
+			expect(
+				buildBlockStyleExecutionContractFromSettings(
+					settings,
+					blockType
+				).supportedStylePaths
+			).not.toContainEqual( entry );
+			expect(
+				buildBlockStyleExecutionContractFromSettings( settings, {
+					...blockType,
+					name: 'core/heading',
+				} ).supportedStylePaths
+			).toContainEqual( entry );
+			expect(
+				buildGlobalStylesExecutionContractFromSettings( settings )
+					.supportedStylePaths
+			).toContainEqual( entry );
+		}
+	);
+
+	test( 'allows a block color opt-in and its presets while retaining inherited presets', () => {
+		const settings = {
+			features: {
+				color: {
+					text: false,
+					background: false,
+					palette: {
+						custom: [ { slug: 'global', color: '#111111' } ],
+					},
+				},
+				blocks: {
+					'core/paragraph': {
+						color: {
+							text: true,
+							palette: {
+								theme: [ { slug: 'local', color: '#ffffff' } ],
+							},
+						},
+					},
+				},
+			},
+		};
+		const contract = buildBlockStyleExecutionContractFromSettings(
+			settings,
+			{
+				name: 'core/paragraph',
+				supports: { color: {} },
+			}
+		);
+		expect( contract.supportedStylePaths ).toEqual( [
+			{ path: [ 'color', 'text' ], valueSource: 'color' },
+		] );
+		expect( contract.presetSlugs.color ).toEqual( [ 'global', 'local' ] );
+		expect(
+			buildBlockStyleExecutionContractFromSettings( settings, {
+				name: 'core/heading',
+				supports: { color: {} },
+			} ).presetSlugs.color
+		).toEqual( [ 'global' ] );
+	} );
+
 	test( 'derives supported block style paths from theme tokens and block supports', () => {
 		const contract = buildBlockStyleExecutionContractFromSettings(
 			{
@@ -589,23 +822,81 @@ describe( 'block style execution contract', () => {
 		);
 	} );
 
-	test( 'omits block paths that are missing block support even when the theme enables them', () => {
-		const tokens = collectThemeTokensFromSettings( {
-			features: COMPLETE_FEATURES,
-		} );
-
-		expect(
-			getBlockStyleSupportedStylePathsFromTokens( tokens, {
-				color: {
-					text: true,
-				},
-			} )
-		).toEqual( [
+	test.each( [
+		[ 'omitted', {}, [] ],
+		[ 'disabled', { color: false }, [] ],
+		[ 'null', { color: null }, [] ],
+		[ 'boolean', { color: true }, [ 'background', 'text' ] ],
+		[ 'empty object', { color: {} }, [ 'background', 'text' ] ],
+		[
+			'paragraph defaults',
 			{
-				path: [ 'color', 'text' ],
-				valueSource: 'color',
+				color: {
+					gradients: true,
+					link: true,
+					__experimentalDefaultControls: {
+						background: true,
+						text: true,
+					},
+				},
 			},
-		] );
+			[ 'background', 'text' ],
+		],
+		[
+			'explicit text',
+			{ color: { text: true } },
+			[ 'background', 'text' ],
+		],
+		[ 'background opt-out', { color: { background: false } }, [ 'text' ] ],
+		[ 'text opt-out', { color: { text: false } }, [ 'background' ] ],
+		[ 'both opt-outs', { color: { background: false, text: false } }, [] ],
+	] )(
+		'resolves %s block color support using WordPress defaults',
+		( label, supports, facets ) => {
+			const tokens = collectThemeTokensFromSettings( {
+				features: COMPLETE_FEATURES,
+			} );
+
+			expect(
+				getBlockStyleSupportedStylePathsFromTokens( tokens, supports )
+			).toEqual(
+				facets.map( ( facet ) => ( {
+					path: [ 'color', facet ],
+					valueSource: 'color',
+				} ) )
+			);
+		}
+	);
+
+	test.each( [ 'background', 'text' ] )(
+		'keeps the theme %s opt-out with default block color support',
+		( facet ) => {
+			const contract = buildBlockStyleExecutionContractFromSettings(
+				{
+					features: {
+						...COMPLETE_FEATURES,
+						color: { ...COMPLETE_FEATURES.color, [ facet ]: false },
+					},
+				},
+				{ supports: { color: {} } }
+			);
+
+			expect( contract.supportedStylePaths ).toEqual( [
+				{
+					path: [ 'color', facet === 'text' ? 'background' : 'text' ],
+					valueSource: 'color',
+				},
+			] );
+		}
+	);
+
+	test( 'requires palette presets even with default block color support', () => {
+		const contract = buildBlockStyleExecutionContractFromSettings(
+			{ features: { color: { background: true, text: true } } },
+			{ supports: { color: {} } }
+		);
+
+		expect( contract.supportedStylePaths ).toEqual( [] );
 	} );
 } );
 

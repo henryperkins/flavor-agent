@@ -320,6 +320,199 @@ final class StyleApplyExecutorTest extends TestCase {
 		);
 	}
 
+	public function test_style_book_apply_rejects_block_theme_disabled_color_operations_without_writing(): void {
+		$this->register_paragraph_color_support();
+		WordPressTestState::$global_settings['blocks']['core/paragraph']['color'] = [
+			'text'       => false,
+			'background' => false,
+		];
+
+		$result = StyleApplyExecutor::apply(
+			'style-book',
+			self::GLOBAL_STYLES_ID,
+			$this->paragraph_color_operations(),
+			'core/paragraph'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_operations_invalid', $result->get_error_code() );
+		$this->assertContains( 'unsupported_path', array_column( $result->get_error_data()['validationReasons'], 'code' ) );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	public function test_style_book_apply_uses_block_enabled_controls_and_presets_with_global_fallbacks(): void {
+		$this->register_paragraph_color_support();
+		WordPressTestState::$global_settings['color']['text']                     = false;
+		WordPressTestState::$global_settings['color']['background']               = false;
+		WordPressTestState::$global_settings['blocks']['core/paragraph']['color'] = [
+			'text'       => true,
+			'background' => true,
+			'palette'    => [
+				[
+					'slug'  => 'paragraph-ink',
+					'color' => '#222222',
+				],
+			],
+		];
+
+		$result = StyleApplyExecutor::apply(
+			'style-book',
+			self::GLOBAL_STYLES_ID,
+			$this->paragraph_color_operations( 'paragraph-ink' ),
+			'core/paragraph'
+		);
+
+		$this->assertIsArray( $result );
+		$written = json_decode( WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content, true );
+		$this->assertSame(
+			[
+				'text'       => 'var:preset|color|paragraph-ink',
+				'background' => 'var:preset|color|base',
+			],
+			$written['styles']['blocks']['core/paragraph']['color']
+		);
+	}
+
+	public function test_style_book_apply_evaluates_contrast_with_the_block_override_of_a_global_preset(): void {
+		$this->register_paragraph_color_support();
+		WordPressTestState::$global_settings['blocks']['core/paragraph']['color']['palette'] = [
+			'theme' => [
+				[
+					'slug'  => 'accent',
+					'color' => '#fdfdfd',
+				],
+			],
+		];
+
+		$result = StyleApplyExecutor::apply(
+			'style-book',
+			self::GLOBAL_STYLES_ID,
+			$this->paragraph_color_operations(),
+			'core/paragraph'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_contrast_failed', $result->get_error_code() );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+	}
+
+	public function test_style_book_apply_cannot_reuse_a_sibling_blocks_preset_after_its_context_is_cached(): void {
+		$this->register_paragraph_color_support();
+		\WP_Block_Type_Registry::get_instance()->register( 'core/heading', [ 'supports' => [ 'color' => [] ] ] );
+		WordPressTestState::$global_settings['blocks']['core/heading']['color']['palette'] = [
+			[
+				'slug'  => 'heading-ink',
+				'color' => '#222222',
+			],
+		];
+		$heading_context = StyleApplyExecutor::build_validation_context( 'style-book', 'core/heading' );
+		$this->assertContains( 'heading-ink', array_column( $heading_context['styleContext']['themeTokens']['colorPresets'], 'slug' ) );
+
+		$result = StyleApplyExecutor::apply(
+			'style-book',
+			self::GLOBAL_STYLES_ID,
+			$this->paragraph_color_operations( 'heading-ink' ),
+			'core/paragraph'
+		);
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_operations_invalid', $result->get_error_code() );
+		$this->assertContains( 'preset_unavailable', array_column( $result->get_error_data()['validationReasons'], 'code' ) );
+		$this->assertSame( [], WordPressTestState::$updated_posts );
+		$global_context = StyleApplyExecutor::build_validation_context( 'global-styles' );
+		$this->assertSame( [ 'accent', 'base' ], array_column( $global_context['styleContext']['themeTokens']['colorPresets'], 'slug' ) );
+	}
+
+	/**
+	 * @dataProvider inherited_color_complement_cases
+	 */
+	public function test_style_book_apply_uses_global_presets_for_inherited_complements(
+		string $side,
+		string $root_color,
+		string $block_color,
+		bool $passed
+	): void {
+		$this->register_paragraph_color_support();
+		WordPressTestState::$global_settings['color']['palette']                             = [
+			[
+				'slug'  => 'shared',
+				'color' => $root_color,
+			],
+		];
+		WordPressTestState::$global_settings['blocks']['core/paragraph']['color']['palette'] = [
+			[
+				'slug'  => 'shared',
+				'color' => $block_color,
+			],
+			[
+				'slug'  => 'operation',
+				'color' => '#ffffff',
+			],
+		];
+		$complement                        = 'text' === $side ? 'background' : 'text';
+		WordPressTestState::$global_styles = [ 'color' => [ $complement => 'var:preset|color|shared' ] ];
+
+		$result = StyleApplyExecutor::apply(
+			'style-book',
+			self::GLOBAL_STYLES_ID,
+			[
+				[
+					'type'       => 'set_block_styles',
+					'blockName'  => 'core/paragraph',
+					'path'       => [ 'color', $side ],
+					'value'      => 'var:preset|color|operation',
+					'valueType'  => 'preset',
+					'presetType' => 'color',
+					'presetSlug' => 'operation',
+				],
+			],
+			'core/paragraph'
+		);
+
+		if ( ! $passed ) {
+			$this->assertInstanceOf( \WP_Error::class, $result );
+			$this->assertSame( 'flavor_agent_apply_contrast_failed', $result->get_error_code() );
+			$this->assertSame( [], WordPressTestState::$updated_posts );
+			return;
+		}
+
+		$this->assertIsArray( $result );
+		$written = json_decode( WordPressTestState::$posts[ (int) self::GLOBAL_STYLES_ID ]->post_content, true );
+		$this->assertSame( 'var:preset|color|operation', $written['styles']['blocks']['core/paragraph']['color'][ $side ] );
+	}
+
+	public static function inherited_color_complement_cases(): array {
+		return [
+			'white text on inherited white fails'          => [ 'text', '#ffffff', '#000000', false ],
+			'white text on inherited black passes'         => [ 'text', '#000000', '#ffffff', true ],
+			'white background under inherited white fails' => [ 'background', '#ffffff', '#000000', false ],
+			'white background under inherited black passes' => [ 'background', '#000000', '#ffffff', true ],
+		];
+	}
+
+	private function register_paragraph_color_support(): void {
+		\WP_Block_Type_Registry::get_instance()->register( 'core/paragraph', [ 'supports' => [ 'color' => [] ] ] );
+	}
+
+	private function paragraph_color_operations( string $text_slug = 'accent' ): array {
+		$operations = [];
+		foreach ( [
+			'text'       => $text_slug,
+			'background' => 'base',
+		] as $facet => $slug ) {
+			$operations[] = [
+				'type'       => 'set_block_styles',
+				'blockName'  => 'core/paragraph',
+				'path'       => [ 'color', $facet ],
+				'value'      => 'var:preset|color|' . $slug,
+				'valueType'  => 'preset',
+				'presetType' => 'color',
+				'presetSlug' => $slug,
+			];
+		}
+		return $operations;
+	}
+
 	public function test_apply_fails_when_the_entity_is_missing(): void {
 		$result = StyleApplyExecutor::apply( 'global-styles', '999', [ [ 'type' => 'set_styles' ] ] );
 

@@ -57,6 +57,72 @@ beforeEach( () => {
 } );
 
 describe( 'PatternAdaptationPreview', () => {
+	test( 'shows one original preview and insert action when no changes are needed', () => {
+		render( {
+			status: 'unchanged',
+			reason: 'no_changes_needed',
+			changes: [],
+		} );
+		expect( getContainer().textContent ).toContain( 'No changes needed' );
+		expect( getContainer().textContent ).toContain( 'Original pattern' );
+		expect( getContainer().textContent ).not.toContain( 'Adapted result' );
+		expect( getContainer().textContent ).not.toContain( 'Insert adapted' );
+		expect( mockBlockPreview ).toHaveBeenCalledTimes( 1 );
+		const insert = [ ...getContainer().querySelectorAll( 'button' ) ].find(
+			( node ) => node.textContent === 'Insert original'
+		);
+		expect( insert.disabled ).toBe( false );
+	} );
+
+	test.each( [
+		[ 'unsupported_synced_reference', 'Synced patterns' ],
+		[ 'adapted_blocks_not_insertable', 'could not be loaded' ],
+		[ 'missing_theme_tokens', 'theme presets' ],
+		[ 'unsupported_block_support', 'does not support' ],
+	] )( 'explains blocked reason %s', ( reason, message ) => {
+		render( { status: 'blocked', reason, adaptedBlocks: [], changes: [] } );
+		expect(
+			getContainer().querySelector( '[role="status"]' ).textContent
+		).toContain( message );
+		expect( getContainer().textContent ).not.toContain(
+			'could not build a safe adaptation'
+		);
+	} );
+
+	test.each( [
+		[ 'font-size', 'The font size preset “gigantic” is not available' ],
+		[ 'color', 'The color preset “gigantic” is not available' ],
+		[ 'border-radius', 'The preset “gigantic” is not available' ],
+	] )( 'explains an unresolved %s theme preset', ( presetType, message ) => {
+		render( {
+			status: 'blocked',
+			reason: 'unresolved_theme_preset',
+			diagnostics: [
+				{
+					code: 'unresolved_theme_preset',
+					presetType,
+					value: 'gigantic',
+				},
+			],
+			adaptedBlocks: [],
+			changes: [],
+		} );
+		expect( getContainer().textContent ).toContain( message );
+		expect( getContainer().textContent ).not.toContain(
+			'No changes needed'
+		);
+	} );
+
+	test( 'explains preserved unmapped colors even when other adaptations are ready', () => {
+		render( {
+			diagnostics: [
+				{ code: 'unmapped_color_preset', value: 'unknown-brand' },
+			],
+		} );
+		expect( getContainer().textContent ).toContain( 'unknown-brand' );
+		expect( getContainer().textContent ).toContain( 'kept unchanged' );
+	} );
+
 	test( 'renders labeled original and adapted BlockPreview panels when ready', () => {
 		render();
 		expect( getContainer().textContent ).toContain( 'Original pattern' );

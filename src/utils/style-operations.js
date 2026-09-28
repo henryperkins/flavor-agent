@@ -356,7 +356,11 @@ function getMergedComplementHex( scopeKey, side, context = {} ) {
 	const rootValue = mergedStyles?.color?.[ side ];
 
 	if ( rootValue !== null && rootValue !== undefined ) {
-		const rootColor = resolveColorValue( rootValue, themeTokens );
+		// Inherited root colors are computed before block-local preset overrides.
+		const rootColor = resolveColorValue(
+			rootValue,
+			context.globalThemeTokens || themeTokens
+		);
 
 		if ( rootColor.resolved ) {
 			return rootColor.hex;
@@ -1530,13 +1534,22 @@ export function applyGlobalStyleSuggestionOperations(
 		appliedOperations.push( nextState.appliedOperation );
 	}
 
-	const themeTokens = summarizeTokens(
+	const globalThemeTokens = summarizeTokens(
 		collectThemeTokensFromSettings( blockEditorSettings )
 	);
+	const themeTokens = expectedStyleBookBlockName
+		? summarizeTokens(
+				collectThemeTokensFromSettings(
+					blockEditorSettings,
+					expectedStyleBookBlockName
+				)
+		  )
+		: globalThemeTokens;
 	const contrastValidation = validateReadableColorContrast(
 		appliedOperations,
 		{
 			themeTokens,
+			globalThemeTokens,
 			mergedConfig: getCurrentMergedConfig(
 				runtime.coreSelect,
 				afterConfig

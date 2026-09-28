@@ -7,9 +7,10 @@
  * is the source of truth for insertion; the `plan` is diagnostics only.
  */
 import { cloneBlock } from '@wordpress/blocks';
+import { kebabCase } from '@wordpress/kebab-case';
 
-import { getBlockStyleSupportedStylePathsFromTokens } from '../context/theme-tokens';
 import { buildContextSignature } from '../utils/context-signature';
+import { hasBlockColorSupport } from '../utils/block-color-support';
 import { isSyncedPatternReference } from './pattern-insertability';
 
 export const ADAPTATION_PLAN_VERSION = 'pattern-adaptation-v1';
@@ -111,7 +112,7 @@ const COLOR_ROLE_SYNONYMS = {
 		'dark',
 		'black',
 	],
-	primary: [ 'primary', 'accent', 'accent-1', 'brand' ],
+	primary: [ 'primary', 'brand', 'accent', 'accent-1' ],
 	secondary: [ 'secondary', 'accent-2', 'accent-3', 'tertiary' ],
 };
 
@@ -133,57 +134,114 @@ function themeColorSlugs( themeTokens ) {
 		: [];
 }
 
+function normalizeColorLabel( label ) {
+	return typeof label === 'string'
+		? label
+				.toLowerCase()
+				.replace( /[^a-z0-9]+/g, ' ' )
+				.trim()
+		: '';
+}
+
+/**
+ * Role labels a palette entry declares explicitly: its slug, its name outside
+ * parentheses, and each comma-separated label inside parentheses. A role word
+ * inside a longer name ("Accent / Two", "Primary Dark", "Light green cyan")
+ * names a variant or hue, so it is not a label on its own.
+ *
+ * @param {Object} entry Palette entry.
+ * @return {Set<string>} Normalized labels.
+ */
+function colorEntryLabels( entry ) {
+	const name = typeof entry?.name === 'string' ? entry.name : '';
+	const annotations = [ ...name.matchAll( /\(([^()]*)\)/g ) ].flatMap(
+		( [ , annotation ] ) => annotation.split( ',' )
+	);
+
+	return new Set(
+		[ entry?.slug, name.replace( /\([^()]*\)/g, ' ' ), ...annotations ]
+			.map( normalizeColorLabel )
+			.filter( Boolean )
+	);
+}
+
 function remapColorSlug( slug, themeTokens ) {
-	const slugs = themeColorSlugs( themeTokens );
-
-	if ( slugs.includes( slug ) ) {
-		return '';
-	}
-
 	const role = roleForColorSlug( slug );
 
 	if ( ! role ) {
-		return '';
+		return { code: 'unmapped_color_preset' };
 	}
 
+	const palette = themeTokens.color.palette
+		.filter( ( entry ) => entry?.slug )
+		.map( ( entry ) => ( {
+			slug: entry.slug,
+			labels: colorEntryLabels( entry ),
+		} ) );
+
+	// Try the pattern's own slug, then aliases of that role. Themes can name
+	// tokens freely and label the role (e.g. "Evergreen (brand)"); a color is
+	// never assigned a role from its hue, brightness, or palette position.
+	for ( const alias of new Set( [ slug, ...COLOR_ROLE_SYNONYMS[ role ] ] ) ) {
+		const label = normalizeColorLabel( alias );
+		const slugs = [
+			...new Set(
+				palette
+					.filter( ( entry ) => entry.labels.has( label ) )
+					.map( ( entry ) => entry.slug )
+			),
+		];
+		if ( slugs.length > 1 ) {
+			return { code: 'ambiguous_color_role' };
+		}
+		if ( slugs.length === 1 ) {
+			return { slug: slugs[ 0 ] };
+		}
+	}
+	return { code: 'unmapped_color_preset' };
+}
+
+function supportsColor( themeTokens, blockSupports, facet ) {
 	return (
-		slugs.find( ( candidate ) => roleForColorSlug( candidate ) === role ) ||
-		''
+		hasBlockColorSupport( blockSupports, facet ) &&
+		themeTokens?.color?.[ `${ facet }Enabled` ] !== false
 	);
 }
 
-function supportsStylePath( themeTokens, blockSupports, path ) {
-	return getBlockStyleSupportedStylePathsFromTokens(
-		themeTokens,
-		blockSupports || {}
-	).some(
-		( entry ) =>
-			entry.path.length === path.length &&
-			entry.path.every( ( segment, index ) => segment === path[ index ] )
-	);
-}
-
-function colorRule( attribute, path ) {
-	return ( block, { themeTokens, blockRegistry } ) => {
+function colorRule( attribute, facet ) {
+	return ( block, { themeTokens, blockRegistry, diagnostics } ) => {
+		const from = block?.attributes?.[ attribute ];
+		const slugs = themeColorSlugs( themeTokens );
+		if ( typeof from !== 'string' || ! from || slugs.includes( from ) ) {
+			return null;
+		}
 		const blockSupports = blockRegistry?.getBlockType?.(
 			block?.name
 		)?.supports;
-
-		if ( ! supportsStylePath( themeTokens, blockSupports, path ) ) {
+		let result;
+		if ( slugs.length === 0 ) {
+			result = { code: 'missing_theme_tokens' };
+		} else if ( ! supportsColor( themeTokens, blockSupports, facet ) ) {
+			result = { code: 'unsupported_block_support' };
+		} else {
+			result = remapColorSlug( from, themeTokens );
+		}
+		if ( result.code ) {
+			diagnostics.push( {
+				code: result.code,
+				blockName: block.name,
+				attribute,
+				value: from,
+			} );
 			return null;
 		}
 
-		const from = block?.attributes?.[ attribute ];
-
-		if ( typeof from !== 'string' || ! from ) {
-			return null;
-		}
-
-		const to = remapColorSlug( from, themeTokens );
-
-		return to
-			? { attribute, from, to, reason: 'theme_color_alignment' }
-			: null;
+		return {
+			attribute,
+			from,
+			to: result.slug,
+			reason: 'theme_color_alignment',
+		};
 	};
 }
 
@@ -219,7 +277,7 @@ function nearestNumericSlug( slug, themeSlugs ) {
 
 const SPACING_PRESET_RE = /^var:preset\|spacing\|(.+)$/;
 
-function remapSpacingValue( value, themeTokens ) {
+function remapSpacingValue( value, themeTokens, state ) {
 	if ( typeof value !== 'string' ) {
 		return value;
 	}
@@ -233,13 +291,26 @@ function remapSpacingValue( value, themeTokens ) {
 	const slug = match[ 1 ];
 	const themeSlugs = themeSpacingSlugs( themeTokens );
 
-	if ( themeSlugs.includes( slug ) ) {
+	if (
+		themeSlugs.includes( slug ) ||
+		state.stylePresetSlugs?.get( 'spacing' )?.has( kebabCase( slug ) )
+	) {
 		return value;
 	}
 
 	const replacement = nearestNumericSlug( slug, themeSlugs );
+	if ( ! replacement || ! state.supported ) {
+		let code = 'unmapped_spacing_preset';
+		if ( themeSlugs.length === 0 ) {
+			code = 'missing_theme_tokens';
+		} else if ( ! state.supported ) {
+			code = 'unsupported_block_support';
+		}
+		state.report( code, slug );
+		return value;
+	}
 
-	return replacement ? `var:preset|spacing|${ replacement }` : value;
+	return `var:preset|spacing|${ replacement }`;
 }
 
 function remapSpacingTree( node, themeTokens, state ) {
@@ -258,7 +329,7 @@ function remapSpacingTree( node, themeTokens, state ) {
 		);
 	}
 
-	const next = remapSpacingValue( node, themeTokens );
+	const next = remapSpacingValue( node, themeTokens, state );
 
 	if ( next !== node ) {
 		state.changed = true;
@@ -266,6 +337,8 @@ function remapSpacingTree( node, themeTokens, state ) {
 
 	return next;
 }
+
+const SPACING_FACETS = [ 'padding', 'margin', 'blockGap' ];
 
 function spacingFacetSupported( blockSupports, facet ) {
 	const value = blockSupports?.spacing?.[ facet ];
@@ -277,7 +350,10 @@ function spacingFacetSupported( blockSupports, facet ) {
 	return Array.isArray( value ) && value.length > 0;
 }
 
-function spacingRule( block, { themeTokens, blockRegistry } ) {
+function spacingRule(
+	block,
+	{ themeTokens, blockRegistry, diagnostics, stylePresetSlugs }
+) {
 	const blockSupports = blockRegistry?.getBlockType?.(
 		block?.name
 	)?.supports;
@@ -287,16 +363,21 @@ function spacingRule( block, { themeTokens, blockRegistry } ) {
 		return null;
 	}
 
-	const state = { changed: false };
+	const state = { changed: false, stylePresetSlugs };
 	const nextSpacing = { ...spacing };
 
-	for ( const facet of [ 'padding', 'margin', 'blockGap' ] ) {
-		if (
-			spacing[ facet ] === undefined ||
-			! spacingFacetSupported( blockSupports, facet )
-		) {
+	for ( const facet of SPACING_FACETS ) {
+		if ( spacing[ facet ] === undefined ) {
 			continue;
 		}
+		state.supported = spacingFacetSupported( blockSupports, facet );
+		state.report = ( code, value ) =>
+			diagnostics.push( {
+				code,
+				blockName: block.name,
+				attribute: `style.spacing.${ facet }`,
+				value,
+			} );
 
 		nextSpacing[ facet ] = remapSpacingTree(
 			spacing[ facet ],
@@ -360,20 +441,230 @@ function buttonStyleRule( block, { blockRegistry } ) {
 const ADAPTATION_RULES = [
 	headingLevelRule,
 	alignmentRule,
-	colorRule( 'backgroundColor', [ 'color', 'background' ] ),
-	colorRule( 'textColor', [ 'color', 'text' ] ),
+	colorRule( 'backgroundColor', 'background' ),
+	colorRule( 'textColor', 'text' ),
 	spacingRule,
 	buttonStyleRule,
 ];
 
-function themeHasAnyPreset( themeTokens ) {
-	const palette = themeTokens?.color?.palette;
-	const spacing = themeTokens?.spacing?.spacingSizes;
+// Collected theme presets by the type named in `var:preset|{type}|{slug}` and
+// `var(--wp--preset--{type}--{slug})`. References to other types are skipped.
+const THEME_PRESET_SOURCES = new Map( [
+	[ 'color', ( themeTokens ) => themeTokens?.color?.palette ],
+	[ 'gradient', ( themeTokens ) => themeTokens?.color?.gradients ],
+	[ 'duotone', ( themeTokens ) => themeTokens?.color?.duotone ],
+	[ 'font-size', ( themeTokens ) => themeTokens?.typography?.fontSizes ],
+	[ 'font-family', ( themeTokens ) => themeTokens?.typography?.fontFamilies ],
+	[ 'spacing', ( themeTokens ) => themeTokens?.spacing?.spacingSizes ],
+	[ 'shadow', ( themeTokens ) => themeTokens?.shadow?.presets ],
+] );
 
-	return (
-		( Array.isArray( palette ) && palette.length > 0 ) ||
-		( Array.isArray( spacing ) && spacing.length > 0 )
+// Preset-slug attributes that no rule adapts. Block-support attributes hold a
+// slug only when the block declares that support; the core block attributes
+// always do.
+const SUPPORT_PRESET_ATTRIBUTES = [
+	{
+		attribute: 'gradient',
+		presetType: 'gradient',
+		supportPaths: [ [ 'color', 'gradients' ] ],
+	},
+	{
+		attribute: 'fontSize',
+		presetType: 'font-size',
+		supportPaths: [ [ 'typography', 'fontSize' ] ],
+	},
+	{
+		attribute: 'fontFamily',
+		presetType: 'font-family',
+		supportPaths: [
+			[ 'typography', 'fontFamily' ],
+			[ 'typography', '__experimentalFontFamily' ],
+		],
+	},
+	{
+		attribute: 'borderColor',
+		presetType: 'color',
+		supportPaths: [
+			[ 'border', 'color' ],
+			[ '__experimentalBorder', 'color' ],
+		],
+	},
+];
+
+const BLOCK_PRESET_ATTRIBUTES = new Map( [
+	[ 'core/cover', { overlayColor: 'color', gradient: 'gradient' } ],
+	[
+		'core/navigation',
+		{ overlayBackgroundColor: 'color', overlayTextColor: 'color' },
+	],
+	[
+		'core/social-links',
+		{ iconColor: 'color', iconBackgroundColor: 'color' },
+	],
+] );
+
+const STYLE_PRESET_RE = /^var:preset\|([a-z0-9-]+)\|(.+)$/;
+const CSS_PRESET_RE =
+	/var\(\s*--wp--preset--([a-z]+(?:-[a-z]+)*)--([^\s,()]+)\s*[,)]/g;
+
+function themePresetSlugs( themeTokens, presetType ) {
+	const presets = THEME_PRESET_SOURCES.get( presetType )?.( themeTokens );
+
+	return Array.isArray( presets )
+		? presets.map( ( entry ) => entry?.slug ).filter( Boolean )
+		: null;
+}
+
+function collectStylePresetSlugs( themeTokens, inherited ) {
+	const result = new Map();
+
+	for ( const presetType of THEME_PRESET_SOURCES.keys() ) {
+		const localSlugs = themePresetSlugs( themeTokens, presetType );
+		// Duotone presets reference SVG filters, not inheritable CSS variables.
+		const ancestorSlugs =
+			presetType === 'duotone' ? null : inherited?.get( presetType );
+
+		if ( localSlugs || ancestorSlugs ) {
+			result.set(
+				presetType,
+				new Set( [
+					...( ancestorSlugs || [] ),
+					...( localSlugs || [] ).map( ( slug ) =>
+						kebabCase( slug )
+					),
+				] )
+			);
+		}
+	}
+
+	return result;
+}
+
+function hasStyleSupport( blockSupports, supportPaths ) {
+	return supportPaths.some(
+		( [ group, facet ] ) => !! blockSupports?.[ group ]?.[ facet ]
 	);
+}
+
+function collectStylePresetReferences( node, path = [], references = [] ) {
+	if ( typeof node === 'string' ) {
+		const match = node.match( STYLE_PRESET_RE );
+
+		if ( match ) {
+			references.push( {
+				path,
+				presetType: match[ 1 ],
+				slug: match[ 2 ],
+				isPresetValue: true,
+			} );
+		}
+
+		for ( const [ , presetType, slug ] of node.matchAll( CSS_PRESET_RE ) ) {
+			references.push( { path, presetType, slug } );
+		}
+	} else if ( node && typeof node === 'object' ) {
+		for ( const [ key, value ] of Object.entries( node ) ) {
+			collectStylePresetReferences( value, [ ...path, key ], references );
+		}
+	}
+
+	return references;
+}
+
+/**
+ * Report theme presets the adapted block still references but the theme does
+ * not define, so a zero-change result is never mislabeled as unchanged. Colors
+ * handled by `colorRule` and spacing presets handled by `spacingRule` report
+ * their own diagnostics.
+ *
+ * @param {Object}      block                Adapted block.
+ * @param {Object}      env                  Adaptation environment.
+ * @param {Object}      env.themeTokens      Current theme tokens.
+ * @param {Object|null} env.blockRegistry    Block type registry.
+ * @param {Object[]}    env.diagnostics      Diagnostics to append to.
+ * @param {Map}         env.stylePresetSlugs CSS preset names available in this branch.
+ */
+function reportUnresolvedPresets(
+	block,
+	{ themeTokens, blockRegistry, diagnostics, stylePresetSlugs }
+) {
+	const attributes = block?.attributes || {};
+	const blockSupports = blockRegistry?.getBlockType?.(
+		block?.name
+	)?.supports;
+	const attributeTypes = new Map(
+		Object.entries( BLOCK_PRESET_ATTRIBUTES.get( block?.name ) || {} )
+	);
+
+	for ( const {
+		attribute,
+		presetType,
+		supportPaths,
+	} of SUPPORT_PRESET_ATTRIBUTES ) {
+		if ( hasStyleSupport( blockSupports, supportPaths ) ) {
+			attributeTypes.set( attribute, presetType );
+		}
+	}
+
+	const references = [ ...attributeTypes ].map(
+		( [ attribute, presetType ] ) => ( {
+			attribute,
+			presetType,
+			slug: attributes[ attribute ],
+		} )
+	);
+
+	for ( const reference of collectStylePresetReferences(
+		attributes.style
+	) ) {
+		const [ group, facet ] = reference.path;
+		const handledBySpacingRule =
+			reference.isPresetValue &&
+			reference.presetType === 'spacing' &&
+			group === 'spacing' &&
+			SPACING_FACETS.includes( facet );
+
+		if ( ! handledBySpacingRule ) {
+			references.push( {
+				attribute: [ 'style', ...reference.path ].join( '.' ),
+				presetType: reference.presetType,
+				slug: reference.slug,
+				isStyleReference: true,
+				isPresetValue: reference.isPresetValue,
+			} );
+		}
+	}
+
+	for ( const {
+		attribute,
+		presetType,
+		slug,
+		isStyleReference,
+		isPresetValue,
+	} of references ) {
+		if ( typeof slug !== 'string' || ! slug ) {
+			continue;
+		}
+
+		const slugs = isStyleReference
+			? stylePresetSlugs?.get( presetType )
+			: themePresetSlugs( themeTokens, presetType );
+		// WordPress normalizes encoded style presets when generating CSS. Literal
+		// CSS variable names are case-sensitive and must match exactly as written.
+		const isAvailable = isStyleReference
+			? slugs?.has( isPresetValue ? kebabCase( slug ) : slug )
+			: slugs?.includes( slug );
+
+		if ( slugs && ! isAvailable ) {
+			diagnostics.push( {
+				code: 'unresolved_theme_preset',
+				blockName: block.name,
+				attribute,
+				presetType,
+				value: slug,
+			} );
+		}
+	}
 }
 
 function applyRulesToTree( blocks, env, basePath = [] ) {
@@ -381,9 +672,19 @@ function applyRulesToTree( blocks, env, basePath = [] ) {
 
 	blocks.forEach( ( block, index ) => {
 		const path = [ ...basePath, index ];
+		const themeTokens =
+			env.getThemeTokensForBlock?.( block.name ) ?? env.themeTokens;
+		const blockEnv = {
+			...env,
+			themeTokens,
+			stylePresetSlugs: collectStylePresetSlugs(
+				themeTokens,
+				env.stylePresetSlugs
+			),
+		};
 
 		for ( const rule of ADAPTATION_RULES ) {
-			const change = rule( block, env );
+			const change = rule( block, blockEnv );
 
 			if ( ! change ) {
 				continue;
@@ -403,12 +704,15 @@ function applyRulesToTree( blocks, env, basePath = [] ) {
 			} );
 		}
 
+		reportUnresolvedPresets( block, blockEnv );
+
 		if ( Array.isArray( block.innerBlocks ) && block.innerBlocks.length ) {
 			changes.push(
-				...applyRulesToTree( block.innerBlocks, env, [
-					...path,
-					'innerBlocks',
-				] )
+				...applyRulesToTree(
+					block.innerBlocks,
+					{ ...env, stylePresetSlugs: blockEnv.stylePresetSlugs },
+					[ ...path, 'innerBlocks' ]
+				)
 			);
 		}
 	} );
@@ -416,10 +720,11 @@ function applyRulesToTree( blocks, env, basePath = [] ) {
 	return changes;
 }
 
-function blocked( reason ) {
+function blocked( reason, diagnostics = [] ) {
 	return {
 		status: 'blocked',
 		reason,
+		diagnostics,
 		blocks: [],
 		plan: null,
 		adaptationSignature: '',
@@ -433,6 +738,7 @@ export function buildPatternAdaptationPreview( {
 	insertionTargetSignature = '',
 	resolvedContextSignature = '',
 	themeTokens = {},
+	getThemeTokensForBlock = null,
 	blockRegistry = null,
 } = {} ) {
 	if ( isSyncedPatternReference( pattern, sourceBlocks ) ) {
@@ -444,15 +750,18 @@ export function buildPatternAdaptationPreview( {
 	}
 
 	const clonedBlocks = sourceBlocks.map( ( block ) => cloneBlock( block ) );
-	const env = { adaptationContext, themeTokens, blockRegistry };
+	const diagnostics = [];
+	const env = {
+		adaptationContext,
+		themeTokens,
+		getThemeTokensForBlock,
+		blockRegistry,
+		diagnostics,
+	};
 	const changes = applyRulesToTree( clonedBlocks, env );
 
-	if ( changes.length === 0 ) {
-		return blocked(
-			themeHasAnyPreset( themeTokens )
-				? 'unsupported_block_support'
-				: 'missing_theme_tokens'
-		);
+	if ( changes.length === 0 && diagnostics.length > 0 ) {
+		return blocked( diagnostics[ 0 ].code, diagnostics );
 	}
 
 	const sourcePatternName = pattern?.name || '';
@@ -462,7 +771,10 @@ export function buildPatternAdaptationPreview( {
 	} );
 
 	return {
-		status: 'ready',
+		status: changes.length > 0 ? 'ready' : 'unchanged',
+		reason:
+			changes.length > 0 ? 'adapted_preview_ready' : 'no_changes_needed',
+		diagnostics,
 		blocks: clonedBlocks,
 		plan: {
 			version: ADAPTATION_PLAN_VERSION,

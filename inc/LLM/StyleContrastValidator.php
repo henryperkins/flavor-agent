@@ -289,7 +289,12 @@ final class StyleContrastValidator {
 		$root_value = $root_color[ $side ] ?? null;
 
 		if ( null !== $root_value ) {
-			$resolved = self::resolve_color_value( $root_value, $theme_tokens );
+			// Root declarations resolve presets before their computed color is
+			// inherited by a block, whose palette may override the same slug.
+			$global_tokens = is_array( $style_context['globalThemeTokens'] ?? null )
+				? $style_context['globalThemeTokens']
+				: $theme_tokens;
+			$resolved      = self::resolve_color_value( $root_value, $global_tokens );
 
 			if ( $resolved['resolved'] ) {
 				return $resolved['hex'];

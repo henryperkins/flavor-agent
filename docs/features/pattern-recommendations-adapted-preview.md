@@ -17,6 +17,18 @@ The shipped v1 seams are:
 
 The implemented rule set is intentionally cosmetic and deterministic: nearby heading-level alignment, supported alignment matching, theme color preset remapping, theme spacing preset remapping, and registered `core/button` style variation selection. The implementation does not change block names, add/remove top-level blocks, rewrite arbitrary HTML, generate content text, detach synced patterns, or use the model to author an adaptation plan.
 
+The preview distinguishes three results: `ready` (supported adjustments were made), `unchanged` (no adjustments were needed), and `blocked` (the source cannot be adapted, or a preset it references could not be mapped or is missing from the theme). An unchanged result shows **No changes needed**, one original preview, and **Insert original**, using the existing original-insertion freshness and validation path. It records `adapted_preview_shown` with reason `no_changes_needed` instead of an adaptation failure.
+
+Color adaptation preserves any preset already present in the active palette, including custom slugs. It follows Gutenberg's color-support defaults: declaring `supports.color` enables text and background colors unless the relevant facet is explicitly `false`; theme-level opt-outs are also respected. For an off-theme semantic preset, it tries the preset's own slug and then the role's known aliases, matching only palette entries that carry that label explicitly: an exact slug, an exact display name, or a parenthetical label in the name. For example, `primary` can match `green-700` named **Evergreen (brand)**, while `accent` can match `gold-500` named **Gold (accent)**. A role word inside a longer name is not a label, so Twenty Twenty-Four's **Accent / Two**, a **Primary Dark** variant, or core's **Light green cyan** never claim a role. Two entries with the same label are reported as ambiguous. Unlabeled colors are not assigned a role from their hue, brightness, or position in the palette; arbitrary inline color values are outside this preset-remapping rule.
+
+The block color-support predicate is shared with the Style Book execution contract so both surfaces apply the same defaults. Style Book resolves the target block's theme controls and presets before exposing executable text/background paths; scoped opt-outs, opt-ins, palette overrides, and contrast validation use the same resolved settings on the client and server.
+
+For each block type in the pattern, adaptation resolves global theme tokens together with `settings.blocks[blockName]`. Global presets remain available; block-scoped presets take precedence for matching slugs, with default/theme/custom precedence resolved separately within each scope. The resolved tokens drive both diagnostics and color/spacing adjustments, including block-specific color opt-outs. The collector also retains experimental block settings when the stable settings source has only global parity. Border support detection accepts both `border.color` and `__experimentalBorder.color`. Tokens are cached only within one preview build and recollected during insertion revalidation.
+
+CSS preset variables declared by an ancestor block inside the pattern remain available to inline `style` references in its descendants, including spacing values that would otherwise be remapped. This availability stays within that branch; ancestor preset classes and control permissions are not inherited. Duotone SVG filters are not treated as inherited CSS variables. Preset variable names use `@wordpress/kebab-case`, matching [WordPress's CSS identifier normalization](https://developer.wordpress.org/reference/functions/_wp_to_kebab_case/). Encoded `var:preset|…` values are checked after normalization; literal `var(--wp--preset--…)` names must match exactly. Raw preset attributes and existing style values are preserved.
+
+The engine returns structured diagnostics (`code`, block name, attribute, preset slug, and preset type for unresolved presets) to the preview. Missing presets, unsupported style controls, unmapped presets, and ambiguous color roles receive specific messages. The engine also checks theme presets that no rule adjusts: `fontSize`, `fontFamily`, `gradient`, and `borderColor` on blocks that declare those supports; Cover overlay, Navigation overlay, and Social Icons colors; and `var:preset|…` or `var(--wp--preset--…)` references anywhere in `style`. Color, gradient, duotone, font size, font family, spacing, and shadow presets missing from the theme are reported as `unresolved_theme_preset`. If other adjustments succeed, unresolved values remain unchanged and their diagnostics remain visible alongside the comparison. A zero-change result with unresolved presets is blocked rather than mislabeled as no changes needed. These per-value diagnostics stay in the client preview; Activity records the outcome reason without full block content.
+
 The WordPress 7.0 Pattern Overrides premise remains current for custom blocks: attributes that opt into Block Bindings can participate in overrides, but that is still a per-instance content override path rather than an arbitrary cosmetic mutation path for a synced `core/block` reference.
 
 ## Goal
@@ -208,6 +220,11 @@ Useful reason codes:
 
 - `unsupported_synced_reference`
 - `missing_theme_tokens`
+- `no_changes_needed`
+- `unmapped_color_preset`
+- `ambiguous_color_role`
+- `unmapped_spacing_preset`
+- `unresolved_theme_preset`
 - `unsupported_block_attribute`
 - `unsupported_block_support`
 - `adapted_blocks_not_insertable`

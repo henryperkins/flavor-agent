@@ -1288,6 +1288,20 @@ export default function PatternRecommender() {
 	const buildCurrentAdaptation = useCallback(
 		( pattern ) => {
 			const sourceBlocks = resolvePatternBlocks( pattern );
+			const themeTokensByBlock = new Map();
+			const getThemeTokensForBlock = ( blockName ) => {
+				if ( ! themeTokensByBlock.has( blockName ) ) {
+					themeTokensByBlock.set(
+						blockName,
+						collectThemeTokensFromSettings(
+							blockEditorSettings,
+							blockName
+						)
+					);
+				}
+
+				return themeTokensByBlock.get( blockName );
+			};
 			const liveEditor = registry?.select?.( blockEditorStore );
 			const adaptationContext = buildPatternAdaptationContext(
 				liveEditor,
@@ -1306,8 +1320,7 @@ export default function PatternRecommender() {
 					adaptationContext,
 					insertionTargetSignature: currentInsertionTargetSignature,
 					resolvedContextSignature: patternResolvedContextSignature,
-					themeTokens:
-						collectThemeTokensFromSettings( blockEditorSettings ),
+					getThemeTokensForBlock,
 					blockRegistry,
 				} ),
 			};
@@ -1338,7 +1351,7 @@ export default function PatternRecommender() {
 				recordPatternOutcome( 'adapted_preview_shown', {
 					pattern,
 					recommendation,
-					reason: 'adapted_preview_ready',
+					reason: result.reason,
 				} );
 			}
 
@@ -1346,6 +1359,8 @@ export default function PatternRecommender() {
 				pattern,
 				recommendation,
 				status: result.status,
+				reason: result.reason,
+				diagnostics: result.diagnostics,
 				originalBlocks: result.sourceBlocks || [],
 				adaptedBlocks: result.blocks,
 				changes: result.plan?.changes || [],
@@ -2192,6 +2207,8 @@ export default function PatternRecommender() {
 					<PatternAdaptationPreview
 						title={ getPatternTitle( adaptedPreview.pattern ) }
 						status={ adaptedPreview.status }
+						reason={ adaptedPreview.reason }
+						diagnostics={ adaptedPreview.diagnostics }
 						changes={ adaptedPreview.changes }
 						originalBlocks={ adaptedPreview.originalBlocks }
 						adaptedBlocks={ adaptedPreview.adaptedBlocks }

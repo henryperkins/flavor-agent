@@ -77,8 +77,8 @@ final class ServerCollector {
 		return self::block_type_introspector()->count_registered_blocks( $search, $category );
 	}
 
-	public static function for_tokens(): array {
-		return self::theme_token_collector()->for_tokens();
+	public static function for_tokens( string $block_name = '' ): array {
+		return self::theme_token_collector()->for_tokens( $block_name );
 	}
 
 	/**

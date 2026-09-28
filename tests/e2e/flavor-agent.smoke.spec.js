@@ -1736,7 +1736,16 @@ async function mockAdaptedPatternRecommendations( page, patternRequests ) {
 	);
 }
 
-async function openAdaptedPatternRecommendation( page, patternRequests ) {
+async function openAdaptedPatternRecommendation(
+	page,
+	patternRequests,
+	{
+		patternContent = ADAPTED_PATTERN_CONTENT,
+		palette = null,
+		blockSettings = null,
+		blockPresetCss = '',
+	} = {}
+) {
 	await enableMockedRecommendationSurfaces( page, [ 'pattern' ] );
 	await page.goto( '/wp-admin/post-new.php', {
 		waitUntil: 'domcontentloaded',
@@ -1750,10 +1759,56 @@ async function openAdaptedPatternRecommendation( page, patternRequests ) {
 	);
 	await waitForPatternCatalogHydration( page );
 	await seedHeadingAdaptationContext( page );
+	if ( palette || blockSettings ) {
+		await page.evaluate(
+			( { themePalette, themeBlocks, presetCss } ) => {
+				const settings = window.wp.data
+					.select( 'core/block-editor' )
+					.getSettings();
+				const features =
+					settings.features || settings.__experimentalFeatures || {};
+				const nextFeatures = {
+					...features,
+					...( themePalette
+						? {
+								color: {
+									...features.color,
+									palette: { theme: themePalette },
+								},
+						  }
+						: {} ),
+					...( themeBlocks
+						? {
+								blocks: { ...features.blocks, ...themeBlocks },
+						  }
+						: {} ),
+				};
+				const css =
+					( themePalette || [] )
+						.map(
+							( entry ) =>
+								`.has-${ entry.slug }-color { color: ${ entry.color } !important; }`
+						)
+						.join( '\n' ) +
+					'\n' +
+					presetCss;
+				window.wp.data.dispatch( 'core/block-editor' ).updateSettings( {
+					features: nextFeatures,
+					__experimentalFeatures: nextFeatures,
+					styles: [ ...( settings.styles || [] ), { css } ],
+				} );
+			},
+			{
+				themePalette: palette,
+				themeBlocks: blockSettings,
+				presetCss: blockPresetCss,
+			}
+		);
+	}
 	await registerTemplatePattern( page, {
 		patternName: ADAPTED_PATTERN_NAME,
 		patternTitle: ADAPTED_PATTERN_TITLE,
-		patternContent: ADAPTED_PATTERN_CONTENT,
+		patternContent,
 	} );
 	await waitForAllowedPattern( page, ADAPTED_PATTERN_NAME );
 
@@ -4083,6 +4138,376 @@ test( 'pattern surface inserts a recommended pattern at the top-level root and r
 		.toBeGreaterThan( topLevelOrderBefore );
 } );
 
+test( 'pattern surface unchanged preview inserts the original', async ( {
+	page,
+}, testInfo ) => {
+	const patternRequests = [];
+	await mockAdaptedPatternRecommendations( page, patternRequests );
+	const item = await openAdaptedPatternRecommendation(
+		page,
+		patternRequests,
+		{
+			patternContent:
+				'<!-- wp:paragraph --><p>Unchanged pattern content</p><!-- /wp:paragraph -->',
+		}
+	);
+	await item.getByRole( 'button', { name: 'Preview adapted' } ).click();
+	const panel = page.locator( '.flavor-agent-pattern-adaptation' ).first();
+	await expect( panel ).toContainText( 'No changes needed' );
+	await expect(
+		panel.getByText( 'Original pattern', { exact: true } )
+	).toBeVisible();
+	await expect(
+		panel.getByRole( 'button', { name: /^Insert adapted/ } )
+	).toHaveCount( 0 );
+	await expect( panel.locator( 'iframe' ) ).toHaveCount( 1 );
+	await testInfo.attach( 'unchanged-preview', {
+		body: await page.screenshot(),
+		contentType: 'image/png',
+	} );
+	await panel
+		.getByRole( 'button', { name: 'Insert original', exact: true } )
+		.click();
+	await expectSnackbarMessage(
+		page,
+		`Pattern "${ ADAPTED_PATTERN_TITLE }" inserted.`
+	);
+	const inserted = await page.evaluate( () =>
+		window.wp.data
+			.select( 'core/block-editor' )
+			.getBlocks()
+			.filter(
+				( block ) =>
+					String( block.attributes.content || '' ) ===
+					'Unchanged pattern content'
+			)
+	);
+	expect( inserted ).toHaveLength( 1 );
+} );
+
+test( 'pattern surface reports a missing core border preset', async ( {
+	page,
+}, testInfo ) => {
+	const patternRequests = [];
+	await mockAdaptedPatternRecommendations( page, patternRequests );
+	const item = await openAdaptedPatternRecommendation(
+		page,
+		patternRequests,
+		{
+			patternContent:
+				'<!-- wp:group {"borderColor":"missing-brand"} --><div class="wp-block-group has-border-color has-missing-brand-border-color"><!-- wp:paragraph --><p>Missing border preset</p><!-- /wp:paragraph --></div><!-- /wp:group -->',
+		}
+	);
+	await item.getByRole( 'button', { name: 'Preview adapted' } ).click();
+	const panel = page.locator( '.flavor-agent-pattern-adaptation' ).first();
+	await expect( panel ).toContainText(
+		'The color preset “missing-brand” is not available'
+	);
+	await expect( panel ).not.toContainText( 'No changes needed' );
+	await expect(
+		panel.getByRole( 'button', { name: /^Insert adapted/ } )
+	).toBeDisabled();
+	await expect(
+		panel.getByRole( 'button', { name: 'Insert original', exact: true } )
+	).toBeEnabled();
+	await testInfo.attach( 'missing-border-preset', {
+		body: await page.screenshot(),
+		contentType: 'image/png',
+	} );
+} );
+
+test( 'pattern surface previews and inserts a block-specific font preset', async ( {
+	page,
+}, testInfo ) => {
+	const patternRequests = [];
+	await mockAdaptedPatternRecommendations( page, patternRequests );
+	const item = await openAdaptedPatternRecommendation(
+		page,
+		patternRequests,
+		{
+			patternContent:
+				'<!-- wp:paragraph {"fontSize":"paragraph-large"} --><p class="has-paragraph-large-font-size">Scoped font content</p><!-- /wp:paragraph -->',
+			blockSettings: {
+				'core/paragraph': {
+					typography: {
+						fontSizes: {
+							theme: [
+								{
+									slug: 'paragraph-large',
+									name: 'Paragraph large',
+									size: '2rem',
+								},
+							],
+						},
+					},
+				},
+			},
+			blockPresetCss:
+				'p { --wp--preset--font-size--paragraph-large: 2rem; } p.has-paragraph-large-font-size { font-size: var(--wp--preset--font-size--paragraph-large) !important; }',
+		}
+	);
+	await item.getByRole( 'button', { name: 'Preview adapted' } ).click();
+	const panel = page.locator( '.flavor-agent-pattern-adaptation' ).first();
+	await expect( panel ).toContainText( 'No changes needed' );
+	await expect(
+		panel.getByRole( 'button', { name: /^Insert adapted/ } )
+	).toHaveCount( 0 );
+	await expect(
+		panel
+			.frameLocator( 'iframe' )
+			.locator( 'p.has-paragraph-large-font-size' )
+	).toHaveCSS( 'font-size', '32px' );
+	await testInfo.attach( 'block-specific-font-preview', {
+		body: await page.screenshot(),
+		contentType: 'image/png',
+	} );
+	await panel
+		.getByRole( 'button', { name: 'Insert original', exact: true } )
+		.click();
+	await expectSnackbarMessage(
+		page,
+		`Pattern "${ ADAPTED_PATTERN_TITLE }" inserted.`
+	);
+	const inserted = await page.evaluate( () =>
+		window.wp.data
+			.select( 'core/block-editor' )
+			.getBlocks()
+			.find(
+				( block ) =>
+					String( block.attributes.content || '' ) ===
+					'Scoped font content'
+			)
+	);
+	expect( inserted.attributes.fontSize ).toBe( 'paragraph-large' );
+	expect( inserted.isValid ).toBe( true );
+} );
+
+test( 'pattern surface unchanged preview preserves an inherited group color preset', async ( {
+	page,
+}, testInfo ) => {
+	const patternRequests = [];
+	await mockAdaptedPatternRecommendations( page, patternRequests );
+	const item = await openAdaptedPatternRecommendation(
+		page,
+		patternRequests,
+		{
+			patternContent:
+				'<!-- wp:group --><div class="wp-block-group"><!-- wp:paragraph {"style":{"color":{"text":"var(--wp--preset--color--group-brand)"}}} --><p class="has-text-color" style="color:var(--wp--preset--color--group-brand)">Inherited group color content</p><!-- /wp:paragraph --></div><!-- /wp:group -->',
+			blockSettings: {
+				'core/group': {
+					color: {
+						palette: {
+							theme: [
+								{
+									slug: 'group-brand',
+									name: 'Group brand',
+									color: '#654321',
+								},
+							],
+						},
+					},
+				},
+			},
+			blockPresetCss:
+				'.wp-block-group { --wp--preset--color--group-brand: #654321; }',
+		}
+	);
+	await item.getByRole( 'button', { name: 'Preview adapted' } ).click();
+	const panel = page.locator( '.flavor-agent-pattern-adaptation' ).first();
+	await expect( panel ).toContainText( 'No changes needed' );
+	await expect( panel ).not.toContainText( 'is not available in this theme' );
+	await expect(
+		panel.getByRole( 'button', { name: /^Insert adapted/ } )
+	).toHaveCount( 0 );
+	await expect( panel.locator( 'iframe' ) ).toHaveCount( 1 );
+	await expect(
+		panel
+			.frameLocator( 'iframe' )
+			.getByText( 'Inherited group color content' )
+	).toHaveCSS( 'color', 'rgb(101, 67, 33)' );
+	await testInfo.attach( 'inherited-group-color-preview', {
+		body: await page.screenshot(),
+		contentType: 'image/png',
+	} );
+	await panel
+		.getByRole( 'button', { name: 'Insert original', exact: true } )
+		.click();
+	await expectSnackbarMessage(
+		page,
+		`Pattern "${ ADAPTED_PATTERN_TITLE }" inserted.`
+	);
+	const insertedGroup = await page.evaluate( () =>
+		window.wp.data
+			.select( 'core/block-editor' )
+			.getBlocks()
+			.find(
+				( block ) =>
+					block.name === 'core/group' &&
+					block.innerBlocks.some(
+						( child ) =>
+							String( child.attributes.content || '' ) ===
+							'Inherited group color content'
+					)
+			)
+	);
+	expect( insertedGroup.isValid ).toBe( true );
+	expect( insertedGroup.innerBlocks ).toHaveLength( 1 );
+	expect( insertedGroup.innerBlocks[ 0 ].isValid ).toBe( true );
+	expect( insertedGroup.innerBlocks[ 0 ].attributes.style.color.text ).toBe(
+		'var(--wp--preset--color--group-brand)'
+	);
+} );
+
+test( 'pattern surface unchanged preview preserves a camelCase theme preset CSS variable', async ( {
+	page,
+}, testInfo ) => {
+	const patternRequests = [];
+	await mockAdaptedPatternRecommendations( page, patternRequests );
+	const item = await openAdaptedPatternRecommendation(
+		page,
+		patternRequests,
+		{
+			patternContent:
+				'<!-- wp:paragraph {"style":{"color":{"text":"var(--wp--preset--color--brand-blue)"}}} --><p class="has-text-color" style="color:var(--wp--preset--color--brand-blue)">Camel case theme color content</p><!-- /wp:paragraph -->',
+			palette: [
+				{
+					slug: 'brandBlue',
+					name: 'Brand blue',
+					color: '#123456',
+				},
+			],
+			blockPresetCss:
+				':root { --wp--preset--color--brand-blue: #123456; }',
+		}
+	);
+	await item.getByRole( 'button', { name: 'Preview adapted' } ).click();
+	const panel = page.locator( '.flavor-agent-pattern-adaptation' ).first();
+	await expect( panel ).toContainText( 'No changes needed' );
+	await expect( panel ).not.toContainText( 'is not available in this theme' );
+	await expect(
+		panel.getByRole( 'button', { name: /^Insert adapted/ } )
+	).toHaveCount( 0 );
+	await expect( panel.locator( 'iframe' ) ).toHaveCount( 1 );
+	await expect(
+		panel
+			.frameLocator( 'iframe' )
+			.getByText( 'Camel case theme color content' )
+	).toHaveCSS( 'color', 'rgb(18, 52, 86)' );
+	await testInfo.attach( 'camel-case-theme-color-preview', {
+		body: await page.screenshot(),
+		contentType: 'image/png',
+	} );
+	await panel
+		.getByRole( 'button', { name: 'Insert original', exact: true } )
+		.click();
+	await expectSnackbarMessage(
+		page,
+		`Pattern "${ ADAPTED_PATTERN_TITLE }" inserted.`
+	);
+	const inserted = await page.evaluate( () =>
+		window.wp.data
+			.select( 'core/block-editor' )
+			.getBlocks()
+			.find(
+				( block ) =>
+					String( block.attributes.content || '' ) ===
+					'Camel case theme color content'
+			)
+	);
+	expect( inserted.isValid ).toBe( true );
+	expect( inserted.attributes.style.color.text ).toBe(
+		'var(--wp--preset--color--brand-blue)'
+	);
+} );
+
+test( 'pattern surface custom color preview inserts the theme brand preset', async ( {
+	page,
+}, testInfo ) => {
+	const patternRequests = [];
+	await mockAdaptedPatternRecommendations( page, patternRequests );
+	const item = await openAdaptedPatternRecommendation(
+		page,
+		patternRequests,
+		{
+			patternContent:
+				'<!-- wp:paragraph {"textColor":"primary"} --><p class="has-primary-color has-text-color">Brand pattern content</p><!-- /wp:paragraph -->',
+			palette: [
+				{
+					slug: 'green-700',
+					name: 'Evergreen 700 (brand)',
+					color: '#2e4a3a',
+				},
+			],
+		}
+	);
+	await item.getByRole( 'button', { name: 'Preview adapted' } ).click();
+	const panel = page.locator( '.flavor-agent-pattern-adaptation' ).first();
+	await expect( panel ).toContainText( 'primary -> green-700' );
+	const adapted = panel
+		.locator( '.flavor-agent-pattern-adaptation__panel--adapted' )
+		.frameLocator( 'iframe' )
+		.locator( '.has-green-700-color' );
+	await expect( adapted ).toHaveCSS( 'color', 'rgb(46, 74, 58)' );
+	await testInfo.attach( 'custom-color-preview', {
+		body: await page.screenshot(),
+		contentType: 'image/png',
+	} );
+	await panel.getByRole( 'button', { name: /^Insert adapted/ } ).click();
+	await expectSnackbarMessage(
+		page,
+		`Pattern "${ ADAPTED_PATTERN_TITLE }" inserted.`
+	);
+	const insertedColor = await page.evaluate(
+		() =>
+			window.wp.data
+				.select( 'core/block-editor' )
+				.getBlocks()
+				.find(
+					( block ) =>
+						String( block.attributes.content || '' ) ===
+						'Brand pattern content'
+				)?.attributes.textColor
+	);
+	expect( insertedColor ).toBe( 'green-700' );
+} );
+
+test( 'pattern surface explains an unmapped color and keeps original insertion available', async ( {
+	page,
+}, testInfo ) => {
+	const patternRequests = [];
+	await mockAdaptedPatternRecommendations( page, patternRequests );
+	const item = await openAdaptedPatternRecommendation(
+		page,
+		patternRequests,
+		{
+			patternContent:
+				'<!-- wp:paragraph {"textColor":"unmapped-brand"} --><p class="has-unmapped-brand-color has-text-color">Unmapped pattern content</p><!-- /wp:paragraph -->',
+		}
+	);
+	await item.getByRole( 'button', { name: 'Preview adapted' } ).click();
+	const panel = page.locator( '.flavor-agent-pattern-adaptation' ).first();
+	await expect( panel.getByRole( 'status' ) ).toContainText(
+		'The color “unmapped-brand” has no matching role'
+	);
+	await expect(
+		panel.getByRole( 'button', { name: /^Insert adapted/ } )
+	).toBeDisabled();
+	await expect(
+		panel.getByRole( 'button', { name: 'Insert original', exact: true } )
+	).toBeEnabled();
+	await testInfo.attach( 'unmapped-color-preview', {
+		body: await page.screenshot(),
+		contentType: 'image/png',
+	} );
+	await panel
+		.getByRole( 'button', { name: 'Insert original', exact: true } )
+		.click();
+	await expectSnackbarMessage(
+		page,
+		`Pattern "${ ADAPTED_PATTERN_TITLE }" inserted.`
+	);
+} );
+
 test( 'pattern surface adapted preview inserts adapted blocks', async ( {
 	page,
 } ) => {
@@ -4112,13 +4537,9 @@ test( 'pattern surface adapted preview inserts adapted blocks', async ( {
 	await expect( previewPanel.getByText( 'Original pattern' ) ).toBeVisible();
 	await expect( previewPanel.getByText( 'Adapted result' ) ).toBeVisible();
 	await expect(
-		previewPanel.getByText(
-			'Heading level matched to nearby headings'
-		)
+		previewPanel.getByText( 'Heading level matched to nearby headings' )
 	).toBeVisible();
-	await expect(
-		previewPanel.getByText( '5 -> 3' )
-	).toBeVisible();
+	await expect( previewPanel.getByText( '5 -> 3' ) ).toBeVisible();
 	await expect(
 		previewPanel.locator(
 			'.flavor-agent-pattern-adaptation__panel--original .flavor-agent-pattern-adaptation__preview'
@@ -4755,6 +5176,409 @@ test( '@wp70-site-editor global styles surface renders contrast advisory annotat
 	expect( state.applyButtonVisible ).toBe( false );
 	expect( styleRequests.length ).toBeGreaterThan( 0 );
 } );
+
+test( '@wp70-site-editor style book applies and undoes paragraph colors with default block support', async ( {
+	page,
+} ) => {
+	const styleRequests = [];
+	const response = JSON.parse( JSON.stringify( STYLE_BOOK_RESPONSE ) );
+	response.suggestions[ 0 ].description =
+		'Use ink text on the paper background for paragraph emphasis.';
+	Object.assign( response.suggestions[ 0 ].operations[ 0 ], {
+		blockName: STYLE_BOOK_BLOCK_NAME,
+		value: 'var:preset|color|ink',
+		presetSlug: 'ink',
+		cssVar: 'var(--wp--preset--color--ink)',
+	} );
+	response.suggestions[ 0 ].operations.push( {
+		type: 'set_block_styles',
+		blockName: STYLE_BOOK_BLOCK_NAME,
+		path: [ 'color', 'background' ],
+		value: 'var:preset|color|paper',
+		valueType: 'preset',
+		presetType: 'color',
+		presetSlug: 'paper',
+	} );
+	await mockRecommendationRoute(
+		page,
+		recommendationAbilityRoute( 'recommend-style' ),
+		styleRequests,
+		response
+	);
+	await page.goto( '/wp-admin/site-editor.php', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	await waitForFlavorAgent( page );
+	await dismissWelcomeGuide( page );
+	await dismissSiteEditorWelcomeGuide( page );
+	await enableMockedRecommendationSurfaces( page, [ 'global-styles' ] );
+	await page.waitForFunction( () =>
+		Boolean(
+			window.wp?.data
+				?.select( 'core' )
+				?.__experimentalGetCurrentGlobalStylesId?.()
+		)
+	);
+	await enableSiteEditorGlobalStylesSidebar( page );
+	await injectStyleBookExample( page, {
+		blockName: STYLE_BOOK_BLOCK_NAME,
+		blockTitle: STYLE_BOOK_BLOCK_TITLE,
+	} );
+	const colorSupport = await page.evaluate(
+		() => window.wp.blocks.getBlockType( 'core/paragraph' ).supports.color
+	);
+	expect( colorSupport ).toBeTruthy();
+	expect( colorSupport.text ).toBeUndefined();
+	expect( colorSupport.background ).toBeUndefined();
+
+	const initialState = await getGlobalStylesState( page );
+	const promptInput = await openStyleBookRecommendationsPanel( page );
+	const panel = page.locator( '.flavor-agent-style-book-panel' ).first();
+	await promptInput.fill( STYLE_BOOK_PROMPT );
+	await panel
+		.getByRole( 'button', { name: 'Get Style Suggestions' } )
+		.click();
+	await expect.poll( () => styleRequests.length ).toBe( 1 );
+	await panel
+		.getByRole( 'button', {
+			name: 'Review Strengthen paragraph emphasis',
+			exact: true,
+		} )
+		.click();
+	await expect(
+		panel.getByText( 'Review Before Apply', { exact: true } )
+	).toBeVisible();
+	await panel
+		.getByRole( 'button', { name: 'Confirm Apply', exact: true } )
+		.click();
+	await expect
+		.poll( () => getGlobalStylesState( page ) )
+		.toEqual(
+			expect.objectContaining( {
+				activityType: 'apply_style_book_suggestion',
+				styles: expect.objectContaining( {
+					blocks: expect.objectContaining( {
+						'core/paragraph': expect.objectContaining( {
+							color: {
+								text: 'var:preset|color|ink',
+								background: 'var:preset|color|paper',
+							},
+						} ),
+					} ),
+				} ),
+			} )
+		);
+	const activityRow = panel.locator( '.flavor-agent-activity-row' );
+	await expect( activityRow.getByText( 'Undo available' ) ).toBeVisible();
+	const applyToast = page.locator( '.flavor-agent-toast' ).first();
+	if ( await applyToast.isVisible().catch( () => false ) ) {
+		await applyToast
+			.getByRole( 'button', { name: 'Dismiss', exact: true } )
+			.click();
+	}
+	await activityRow
+		.getByRole( 'button', { name: 'Undo', exact: true } )
+		.click();
+	await expect
+		.poll( () => getGlobalStylesState( page ) )
+		.toEqual( expect.objectContaining( { styles: initialState.styles } ) );
+	await expect( activityRow.getByText( 'Undone' ) ).toBeVisible();
+} );
+
+for ( const [ colorProperty, presetSlug ] of [
+	[ 'text', 'ink' ],
+	[ 'background', 'paper' ],
+] ) {
+	test( `@wp70-site-editor style book refuses paragraph ${ colorProperty } when the theme disables block color controls`, async ( {
+		page,
+	}, testInfo ) => {
+		const styleRequests = [];
+		const response = JSON.parse( JSON.stringify( STYLE_BOOK_RESPONSE ) );
+		Object.assign( response.suggestions[ 0 ].operations[ 0 ], {
+			blockName: STYLE_BOOK_BLOCK_NAME,
+			path: [ 'color', colorProperty ],
+			value: `var:preset|color|${ presetSlug }`,
+			presetSlug,
+			cssVar: `var(--wp--preset--color--${ presetSlug })`,
+		} );
+		await mockRecommendationRoute(
+			page,
+			recommendationAbilityRoute( 'recommend-style' ),
+			styleRequests,
+			response
+		);
+		await page.goto( '/wp-admin/site-editor.php', {
+			waitUntil: 'domcontentloaded',
+		} );
+		await waitForWordPressReady( page );
+		await waitForFlavorAgent( page );
+		await dismissWelcomeGuide( page );
+		await dismissSiteEditorWelcomeGuide( page );
+		await enableMockedRecommendationSurfaces( page, [ 'global-styles' ] );
+		await page.waitForFunction( () =>
+			Boolean(
+				window.wp?.data
+					?.select( 'core' )
+					?.__experimentalGetCurrentGlobalStylesId?.()
+			)
+		);
+		await enableSiteEditorGlobalStylesSidebar( page );
+		const colorSupport = await page.evaluate( () => {
+			const settings = window.wp.data
+				.select( 'core/block-editor' )
+				.getSettings();
+			const features =
+				settings.features || settings.__experimentalFeatures || {};
+			const nextFeatures = {
+				...features,
+				color: { ...features.color, text: true, background: true },
+				blocks: {
+					...features.blocks,
+					'core/paragraph': {
+						...features.blocks?.[ 'core/paragraph' ],
+						color: {
+							...features.blocks?.[ 'core/paragraph' ]?.color,
+							text: false,
+							background: false,
+						},
+					},
+				},
+			};
+			window.wp.data.dispatch( 'core/block-editor' ).updateSettings( {
+				features: nextFeatures,
+				__experimentalFeatures: nextFeatures,
+			} );
+			return window.wp.blocks.getBlockType( 'core/paragraph' ).supports
+				.color;
+		} );
+		expect( colorSupport ).toBeTruthy();
+		expect( colorSupport.text ).toBeUndefined();
+		expect( colorSupport.background ).toBeUndefined();
+		await injectStyleBookExample( page, {
+			blockName: STYLE_BOOK_BLOCK_NAME,
+			blockTitle: STYLE_BOOK_BLOCK_TITLE,
+		} );
+
+		const initialState = await getGlobalStylesState( page );
+		const promptInput = await openStyleBookRecommendationsPanel( page );
+		const panel = page.locator( '.flavor-agent-style-book-panel' ).first();
+		await promptInput.fill( STYLE_BOOK_PROMPT );
+		await panel
+			.getByRole( 'button', { name: 'Get Style Suggestions' } )
+			.click();
+		await expect.poll( () => styleRequests.length ).toBe( 1 );
+		await panel
+			.getByRole( 'button', {
+				name: 'Review Strengthen paragraph emphasis',
+				exact: true,
+			} )
+			.click();
+		const initialActivityCount = await getSurfaceActivityCount(
+			page,
+			'style-book'
+		);
+		await panel
+			.getByRole( 'button', { name: 'Confirm Apply', exact: true } )
+			.click();
+		await expect(
+			panel
+				.locator( '.flavor-agent-status-notice__message' )
+				.getByText( `color.${ colorProperty } is no longer supported`, {
+					exact: false,
+				} )
+		).toBeVisible();
+		await expect
+			.poll( () => getGlobalStylesState( page ) )
+			.toEqual(
+				expect.objectContaining( { styles: initialState.styles } )
+			);
+		expect( await getSurfaceActivityCount( page, 'style-book' ) ).toBe(
+			initialActivityCount
+		);
+		await expect( panel.getByText( 'Undo available' ) ).toHaveCount( 0 );
+		await testInfo.attach( `theme-disabled-paragraph-${ colorProperty }`, {
+			body: await page.screenshot(),
+			contentType: 'image/png',
+		} );
+	} );
+}
+
+for ( const colorProperty of [ 'text', 'background' ] ) {
+	test( `@wp70-site-editor style book rejects low contrast paragraph ${ colorProperty } against an inherited root preset`, async ( {
+		page,
+	}, testInfo ) => {
+		const styleRequests = [];
+		const response = JSON.parse( JSON.stringify( STYLE_BOOK_RESPONSE ) );
+		Object.assign( response.suggestions[ 0 ].operations[ 0 ], {
+			blockName: STYLE_BOOK_BLOCK_NAME,
+			path: [ 'color', colorProperty ],
+			value: 'var:preset|color|local-light',
+			presetSlug: 'local-light',
+			cssVar: 'var(--wp--preset--color--local-light)',
+		} );
+		await mockRecommendationRoute(
+			page,
+			recommendationAbilityRoute( 'recommend-style' ),
+			styleRequests,
+			response
+		);
+		await page.goto( '/wp-admin/site-editor.php', {
+			waitUntil: 'domcontentloaded',
+		} );
+		await waitForWordPressReady( page );
+		await waitForFlavorAgent( page );
+		await dismissWelcomeGuide( page );
+		await dismissSiteEditorWelcomeGuide( page );
+		await enableMockedRecommendationSurfaces( page, [ 'global-styles' ] );
+		await page.waitForFunction( () =>
+			Boolean(
+				window.wp?.data
+					?.select( 'core' )
+					?.__experimentalGetCurrentGlobalStylesId?.()
+			)
+		);
+		await enableSiteEditorGlobalStylesSidebar( page );
+		await page.evaluate( ( proposedColorProperty ) => {
+			const core = window.wp.data.select( 'core' );
+			const globalStylesId =
+				core.__experimentalGetCurrentGlobalStylesId();
+			const record = core.getEditedEntityRecord(
+				'root',
+				'globalStyles',
+				globalStylesId
+			);
+			const inheritedColorProperty =
+				proposedColorProperty === 'text' ? 'background' : 'text';
+			window.wp.data
+				.dispatch( 'core' )
+				.editEntityRecord( 'root', 'globalStyles', globalStylesId, {
+					styles: {
+						...record.styles,
+						color: {
+							...record.styles?.color,
+							[ proposedColorProperty ]: '#000000',
+							[ inheritedColorProperty ]:
+								'var:preset|color|paper',
+						},
+						blocks: {
+							...record.styles?.blocks,
+							'core/paragraph': {
+								...record.styles?.blocks?.[ 'core/paragraph' ],
+								color: {},
+							},
+						},
+					},
+				} );
+		}, colorProperty );
+		await expect
+			.poll( async () => ( await getGlobalStylesState( page ) ).styles )
+			.toEqual(
+				expect.objectContaining( {
+					color: expect.objectContaining( {
+						[ colorProperty === 'text' ? 'background' : 'text' ]:
+							'var:preset|color|paper',
+					} ),
+				} )
+			);
+		await page.evaluate( () => {
+			const settings = window.wp.data
+				.select( 'core/block-editor' )
+				.getSettings();
+			const features =
+				settings.features || settings.__experimentalFeatures || {};
+			const nextFeatures = {
+				...features,
+				color: {
+					...features.color,
+					text: true,
+					background: true,
+					palette: {
+						theme: [
+							{ slug: 'paper', name: 'Paper', color: '#ffffff' },
+						],
+					},
+				},
+				blocks: {
+					...features.blocks,
+					'core/paragraph': {
+						...features.blocks?.[ 'core/paragraph' ],
+						color: {
+							text: true,
+							background: true,
+							palette: {
+								theme: [
+									{
+										slug: 'paper',
+										name: 'Paragraph paper',
+										color: '#000000',
+									},
+									{
+										slug: 'local-light',
+										name: 'Local light',
+										color: '#ffffff',
+									},
+								],
+							},
+						},
+					},
+				},
+			};
+			window.wp.data.dispatch( 'core/block-editor' ).updateSettings( {
+				features: nextFeatures,
+				__experimentalFeatures: nextFeatures,
+			} );
+		} );
+		await injectStyleBookExample( page, {
+			blockName: STYLE_BOOK_BLOCK_NAME,
+			blockTitle: STYLE_BOOK_BLOCK_TITLE,
+		} );
+		const initialState = await getGlobalStylesState( page );
+		expect(
+			initialState.styles.blocks[ STYLE_BOOK_BLOCK_NAME ].color
+		).toEqual( {} );
+		const promptInput = await openStyleBookRecommendationsPanel( page );
+		const panel = page.locator( '.flavor-agent-style-book-panel' ).first();
+		await promptInput.fill( STYLE_BOOK_PROMPT );
+		await panel
+			.getByRole( 'button', { name: 'Get Style Suggestions' } )
+			.click();
+		await expect.poll( () => styleRequests.length ).toBe( 1 );
+		await panel
+			.getByRole( 'button', {
+				name: 'Review Strengthen paragraph emphasis',
+				exact: true,
+			} )
+			.click();
+		const initialActivityCount = await getSurfaceActivityCount(
+			page,
+			'style-book'
+		);
+		await panel
+			.getByRole( 'button', { name: 'Confirm Apply', exact: true } )
+			.click();
+		const failureNotice = panel.locator(
+			'.flavor-agent-status-notice__message'
+		);
+		await expect( failureNotice ).toContainText( 'Contrast check: 1.0:1' );
+		await expect( failureNotice ).toContainText(
+			'at blocks.core/paragraph, below the 4.5:1 minimum.'
+		);
+		await expect
+			.poll( () => getGlobalStylesState( page ) )
+			.toEqual(
+				expect.objectContaining( { styles: initialState.styles } )
+			);
+		expect( await getSurfaceActivityCount( page, 'style-book' ) ).toBe(
+			initialActivityCount
+		);
+		await expect( panel.getByText( 'Undo available' ) ).toHaveCount( 0 );
+		await testInfo.attach( `inherited-root-contrast-${ colorProperty }`, {
+			body: await page.screenshot(),
+			contentType: 'image/png',
+		} );
+	} );
+}
 
 test( '@wp70-site-editor style book surface keeps stale results visible but disables review and apply until refresh', async ( {
 	page,

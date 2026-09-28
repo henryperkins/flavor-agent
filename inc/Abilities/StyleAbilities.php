@@ -304,8 +304,9 @@ final class StyleAbilities {
 	private static function build_shared_style_context( array $style_context, ?array $block_manifest = null, bool $include_variations = true ): array {
 		$current_config        = self::normalize_style_config( $style_context['currentConfig'] ?? [] );
 		$merged_config         = self::normalize_style_config( $style_context['mergedConfig'] ?? [] );
+		$theme_tokens          = ServerCollector::for_tokens( (string) ( $block_manifest['name'] ?? '' ) );
 		$supported_style_paths = is_array( $block_manifest )
-			? self::supported_block_style_paths_from_manifest( $block_manifest )
+			? self::supported_block_style_paths_from_manifest( $block_manifest, $theme_tokens )
 			: self::supported_style_paths();
 		$template_structure    = self::normalize_template_structure( $style_context['templateStructure'] ?? [] );
 		$template_visibility   = self::normalize_template_visibility( $style_context['templateVisibility'] ?? [] );
@@ -314,9 +315,13 @@ final class StyleAbilities {
 			'currentConfig'         => $current_config,
 			'mergedConfig'          => $merged_config,
 			'themeTokenDiagnostics' => self::normalize_map( $style_context['themeTokenDiagnostics'] ?? [] ),
-			'themeTokens'           => ServerCollector::for_tokens(),
+			'themeTokens'           => $theme_tokens,
 			'supportedStylePaths'   => $supported_style_paths,
 		];
+
+		if ( is_array( $block_manifest ) ) {
+			$context['globalThemeTokens'] = ServerCollector::for_tokens();
+		}
 
 		if ( $include_variations ) {
 			$available_variations            = array_values(
@@ -373,7 +378,10 @@ final class StyleAbilities {
 		];
 
 		if ( self::SURFACE_STYLE_BOOK === $surface ) {
-			$payload['blockManifest'] = self::normalize_review_block_manifest(
+			$payload['globalThemeTokens'] = self::normalize_review_theme_tokens(
+				self::normalize_map( $style_context['globalThemeTokens'] ?? [] )
+			);
+			$payload['blockManifest']     = self::normalize_review_block_manifest(
 				self::normalize_map( $style_context['blockManifest'] ?? [] )
 			);
 		}
@@ -759,11 +767,12 @@ final class StyleAbilities {
 	 * Public seam exposing the per-block supported style paths for server-side
 	 * apply validation.
 	 *
-	 * @param array<string, mixed> $block_manifest
+	 * @param array<string, mixed>      $block_manifest
+	 * @param array<string, mixed>|null $theme_tokens Resolved tokens for the target block.
 	 * @return array<int, array<string, mixed>>
 	 */
-	public static function supported_style_paths_for_block( array $block_manifest ): array {
-		return self::supported_block_style_paths_from_manifest( $block_manifest );
+	public static function supported_style_paths_for_block( array $block_manifest, ?array $theme_tokens = null ): array {
+		return self::supported_block_style_paths_from_manifest( $block_manifest, $theme_tokens );
 	}
 
 	/**
@@ -778,13 +787,14 @@ final class StyleAbilities {
 	}
 
 	/**
-	 * @param array<string, mixed> $block_manifest
+	 * @param array<string, mixed>      $block_manifest
+	 * @param array<string, mixed>|null $theme_tokens
 	 * @return array<int, array<string, mixed>>
 	 */
-	private static function supported_block_style_paths_from_manifest( array $block_manifest ): array {
-		$theme_tokens = ServerCollector::for_tokens();
-		$supports     = self::normalize_map( $block_manifest['supports'] ?? [] );
-		$paths        = [];
+	private static function supported_block_style_paths_from_manifest( array $block_manifest, ?array $theme_tokens = null ): array {
+		$theme_tokens ??= ServerCollector::for_tokens( (string) ( $block_manifest['name'] ?? '' ) );
+		$supports       = self::normalize_map( $block_manifest['supports'] ?? [] );
+		$paths          = [];
 
 		foreach ( self::BLOCK_STYLE_SUPPORT_PATHS as $spec ) {
 			$path          = is_array( $spec['path'] ?? null ) ? $spec['path'] : [];
@@ -842,6 +852,18 @@ final class StyleAbilities {
 	private static function block_supports_style_path( array $supports, array $support_paths ): bool {
 		foreach ( $support_paths as $support_path ) {
 			if ( ! is_array( $support_path ) || [] === $support_path ) {
+				continue;
+			}
+
+			// WordPress defaults text/background to enabled when color support
+			// is declared, including an empty object; only false opts out.
+			if ( 2 === count( $support_path ) && 'color' === $support_path[0] && in_array( $support_path[1], [ 'background', 'text' ], true ) ) {
+				$color = $supports['color'] ?? null;
+
+				if ( true === $color || ( is_array( $color ) && false !== ( $color[ $support_path[1] ] ?? true ) ) ) {
+					return true;
+				}
+
 				continue;
 			}
 

@@ -17,6 +17,7 @@ import {
 } from './theme-settings';
 import { FREEFORM_STYLE_VALIDATORS } from '../utils/style-validation';
 import { getStyleCapabilities } from '../utils/capability-flags';
+import { hasBlockColorSupport } from '../utils/block-color-support';
 
 /**
  * Collect the full design token manifest.
@@ -81,8 +82,66 @@ export function collectThemeTokenDiagnosticsFromSettings( settings = {} ) {
 	};
 }
 
-export function collectThemeTokensFromSettings( settings = {} ) {
-	const features = getThemeTokenFeatures( settings );
+const PRESET_FEATURE_PATHS = [
+	[ 'color', 'palette' ],
+	[ 'color', 'gradients' ],
+	[ 'color', 'duotone' ],
+	[ 'typography', 'fontSizes' ],
+	[ 'typography', 'fontFamilies' ],
+	[ 'spacing', 'spacingSizes' ],
+	[ 'shadow', 'presets' ],
+];
+
+function resolveBlockTokenFeatures( features, blockName ) {
+	const blockFeatures = features?.blocks?.[ blockName ];
+
+	if ( ! blockFeatures ) {
+		return features;
+	}
+
+	const resolved = { ...features };
+
+	for ( const [ group, values ] of Object.entries( blockFeatures ) ) {
+		resolved[ group ] = { ...features[ group ], ...values };
+	}
+
+	// Global preset CSS remains available to blocks. Resolve each origin set
+	// first, then let block-scoped presets override matching global slugs,
+	// regardless of origin (a block's theme preset beats a global user preset).
+	for ( const [ group, key ] of PRESET_FEATURE_PATHS ) {
+		if ( ! blockFeatures[ group ] ) {
+			continue;
+		}
+
+		resolved[ group ][ key ] = [
+			...new Map(
+				[
+					...mergeOrigins( features[ group ]?.[ key ] ),
+					...mergeOrigins( blockFeatures[ group ][ key ] ),
+				].map( ( preset ) => [ preset.slug, preset ] )
+			).values(),
+		];
+	}
+
+	return resolved;
+}
+
+/**
+ * Collect global tokens or the presets and controls effective for a block.
+ * Block collection includes inherited global presets, not just picker options.
+ *
+ * @param {Object} settings  Editor settings.
+ * @param {string} blockName Optional block type whose settings override globals.
+ * @return {Object} Theme token manifest.
+ */
+export function collectThemeTokensFromSettings(
+	settings = {},
+	blockName = ''
+) {
+	const features = resolveBlockTokenFeatures(
+		getThemeTokenFeatures( settings ),
+		blockName
+	);
 
 	return {
 		color: collectColorTokens( settings, features ),
@@ -278,7 +337,7 @@ export function getBlockStyleSupportedStylePathsFromTokens(
 	if (
 		hasColorPresets &&
 		tokens?.color?.backgroundEnabled &&
-		hasAnyBlockSupportPath( blockSupports, [ [ 'color', 'background' ] ] )
+		hasBlockColorSupport( blockSupports, 'background' )
 	) {
 		supportedPaths.push( {
 			path: [ 'color', 'background' ],
@@ -289,7 +348,7 @@ export function getBlockStyleSupportedStylePathsFromTokens(
 	if (
 		hasColorPresets &&
 		tokens?.color?.textEnabled &&
-		hasAnyBlockSupportPath( blockSupports, [ [ 'color', 'text' ] ] )
+		hasBlockColorSupport( blockSupports, 'text' )
 	) {
 		supportedPaths.push( {
 			path: [ 'color', 'text' ],
@@ -470,7 +529,7 @@ export function buildBlockStyleExecutionContractFromSettings(
 	blockType = {}
 ) {
 	return buildBlockStyleExecutionContract(
-		collectThemeTokensFromSettings( settings ),
+		collectThemeTokensFromSettings( settings, blockType?.name || '' ),
 		blockType
 	);
 }

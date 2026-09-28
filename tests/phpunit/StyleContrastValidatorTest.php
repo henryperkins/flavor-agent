@@ -588,6 +588,79 @@ final class StyleContrastValidatorTest extends TestCase {
 		);
 	}
 
+	/**
+	 * @dataProvider block_color_provenance_cases
+	 */
+	public function test_block_contrast_resolves_root_and_block_colors_in_their_declared_scope(
+		string $side,
+		string $root_color,
+		string $block_color,
+		bool $block_has_complement,
+		bool $passed
+	): void {
+		$complement = 'text' === $side ? 'background' : 'text';
+		$styles     = [ 'color' => [ $complement => 'var:preset|color|shared' ] ];
+		if ( $block_has_complement ) {
+			$styles['blocks']['core/paragraph']['color'][ $complement ] = 'var:preset|color|shared';
+		}
+
+		$result = StyleContrastValidator::evaluate(
+			[
+				[
+					'type'      => 'set_block_styles',
+					'blockName' => 'core/paragraph',
+					'path'      => [ 'color', $side ],
+					'value'     => 'var:preset|color|operation',
+				],
+			],
+			[
+				'styleContext' => [
+					'themeTokens'       => [
+						'colorPresets' => [
+							[
+								'slug'  => 'shared',
+								'color' => $block_color,
+							],
+							[
+								'slug'  => 'operation',
+								'color' => '#ffffff',
+							],
+						],
+					],
+					'globalThemeTokens' => [
+						'colorPresets' => [
+							[
+								'slug'  => 'shared',
+								'color' => $root_color,
+							],
+							[
+								'slug'  => 'operation',
+								'color' => '#000000',
+							],
+						],
+					],
+					'mergedConfig'      => [ 'styles' => $styles ],
+				],
+			]
+		);
+
+		$this->assertSame( $passed, $result['passed'] );
+		$this->assertSame( $passed ? null : 'low_ratio', $result['kind'] );
+	}
+
+	public static function block_color_provenance_cases(): array {
+		return [
+			'inherited white background fails'  => [ 'text', '#ffffff', '#000000', false, false ],
+			'inherited black background passes' => [ 'text', '#000000', '#ffffff', false, true ],
+			'inherited white text fails'        => [ 'background', '#ffffff', '#000000', false, false ],
+			'inherited black text passes'       => [ 'background', '#000000', '#ffffff', false, true ],
+			'block black background passes'     => [ 'text', '#ffffff', '#000000', true, true ],
+			'block white background fails'      => [ 'text', '#000000', '#ffffff', true, false ],
+			'block black text passes'           => [ 'background', '#ffffff', '#000000', true, true ],
+			'block white text fails'            => [ 'background', '#000000', '#ffffff', true, false ],
+		];
+	}
+
 	public function test_complement_returns_null_when_all_sources_empty(): void {
 		$this->assertNull(
 			StyleContrastValidator::merged_complement_hex(

@@ -87,6 +87,10 @@ User opens the Site Editor Styles sidebar
 
 Style operation types, surface restrictions, preset requirements, and variation constraints are canonical in `docs/reference/template-operations.md#style-operations`.
 
+Style Book's client execution contract and server allowlist follow [WordPress block-support defaults](https://developer.wordpress.org/block-editor/reference-guides/block-api/block-supports/#color): a declared `supports.color` enables text/background unless explicitly set to `false`. The client predicate is shared with pattern adaptation. Executable Style Book colors still require theme palette presets and enabled theme color controls; missing block color support or an explicit block/theme opt-out keeps the affected path unavailable.
+
+For Style Book, both sides resolve `settings.blocks[blockName]` over global theme settings. Per-block control flags override global flags; presets are merged by slug after default/theme/custom precedence is resolved within each scope, and block presets override matching global values. Recommendation allowlists, server freshness signatures, and apply validation use the target block's resolved tokens. Contrast checks use those tokens for block-level colors and retain global tokens for an inherited root text or background color, so a block palette override cannot change the canvas color during validation. Both token scopes participate in Style Book freshness. A paragraph-specific restriction therefore blocks paragraph execution without disabling another block or the global style surface. The server token cache separates block scopes and refreshes when the resolved settings change.
+
 ## Guardrails And Failure Modes
 
 - The style surfaces are hidden outside the Site Editor Styles sidebar

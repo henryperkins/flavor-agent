@@ -718,6 +718,388 @@ final class StyleAbilitiesTest extends TestCase {
 		);
 	}
 
+	/**
+	 * @dataProvider block_color_support_cases
+	 */
+	public function test_supported_block_style_paths_use_color_defaults( array $supports, array $facets ): void {
+		$paths = StyleAbilities::supported_style_paths_for_block( [ 'supports' => $supports ] );
+
+		$this->assertSame(
+			array_map(
+				static fn( string $facet ): array => [
+					'path'        => [ 'color', $facet ],
+					'valueSource' => 'color',
+				],
+				$facets
+			),
+			$paths
+		);
+	}
+
+	public static function block_color_support_cases(): array {
+		return [
+			'omitted'            => [ [], [] ],
+			'disabled'           => [ [ 'color' => false ], [] ],
+			'null'               => [ [ 'color' => null ], [] ],
+			'boolean'            => [ [ 'color' => true ], [ 'background', 'text' ] ],
+			'empty object'       => [ [ 'color' => [] ], [ 'background', 'text' ] ],
+			'paragraph defaults' => [
+				[
+					'color' => [
+						'gradients' => true,
+						'link'      => true,
+					],
+				],
+				[ 'background', 'text' ],
+			],
+			'explicit text'      => [ [ 'color' => [ 'text' => true ] ], [ 'background', 'text' ] ],
+			'background opt-out' => [ [ 'color' => [ 'background' => false ] ], [ 'text' ] ],
+			'text opt-out'       => [ [ 'color' => [ 'text' => false ] ], [ 'background' ] ],
+			'both opt-outs'      => [
+				[
+					'color' => [
+						'background' => false,
+						'text'       => false,
+					],
+				],
+				[],
+			],
+		];
+	}
+
+	public function test_default_block_color_support_still_requires_theme_presets_and_controls(): void {
+		foreach ( [ 'background', 'text' ] as $facet ) {
+			WordPressTestState::$global_settings = [
+				'color' => [
+					$facet    => false,
+					'palette' => [
+						[
+							'slug'  => 'accent',
+							'color' => '#ff5500',
+						],
+					],
+				],
+			];
+
+			$this->assertSame(
+				[
+					[
+						'path'        => [ 'color', 'text' === $facet ? 'background' : 'text' ],
+						'valueSource' => 'color',
+					],
+				],
+				StyleAbilities::supported_style_paths_for_block( [ 'supports' => [ 'color' => [] ] ] )
+			);
+		}
+
+		WordPressTestState::$global_settings = [
+			'color' => [
+				'background' => true,
+				'text'       => true,
+			],
+		];
+		$this->assertSame( [], StyleAbilities::supported_style_paths_for_block( [ 'supports' => [ 'color' => [] ] ] ) );
+	}
+
+	public function test_block_theme_color_opt_outs_disable_default_block_color_support(): void {
+		WordPressTestState::$global_settings['blocks']['core/paragraph']['color'] = [
+			'text'       => false,
+			'background' => false,
+		];
+
+		$this->assertSame(
+			[],
+			StyleAbilities::supported_style_paths_for_block(
+				[
+					'name'     => 'core/paragraph',
+					'supports' => [ 'color' => [] ],
+				]
+			)
+		);
+	}
+
+	public function test_block_theme_color_opt_ins_and_own_palette_enable_paths_when_globals_disable_them(): void {
+		WordPressTestState::$global_settings = [
+			'color'  => [
+				'text'       => false,
+				'background' => false,
+			],
+			'blocks' => [
+				'core/paragraph' => [
+					'color' => [
+						'text'       => true,
+						'background' => true,
+						'palette'    => [
+							[
+								'slug'  => 'paragraph-ink',
+								'color' => '#111111',
+							],
+						],
+					],
+				],
+			],
+		];
+
+		$this->assertSame(
+			[
+				[
+					'path'        => [ 'color', 'background' ],
+					'valueSource' => 'color',
+				],
+				[
+					'path'        => [ 'color', 'text' ],
+					'valueSource' => 'color',
+				],
+			],
+			StyleAbilities::supported_style_paths_for_block(
+				[
+					'name'     => 'core/paragraph',
+					'supports' => [ 'color' => [] ],
+				]
+			)
+		);
+	}
+
+	public function test_style_book_generation_drops_operations_disabled_for_the_target_block(): void {
+		$this->seed_style_book_color_recommendation( 'accent' );
+		WordPressTestState::$global_settings['blocks']['core/paragraph']['color'] = [
+			'text'       => false,
+			'background' => false,
+		];
+
+		$result = StyleAbilities::recommend_style( $this->style_book_request() );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'advisory', $result['suggestions'][0]['tone'] );
+		$this->assertSame( [], $result['suggestions'][0]['operations'] );
+		$this->assertContains( 'unsupported_path', array_column( $result['suggestions'][0]['validationReasons'], 'code' ) );
+		$this->assertStringNotContainsString( '- color.text (color)', WordPressTestState::$last_ai_client_prompt['text'] );
+		$this->assertStringNotContainsString( '- color.background (color)', WordPressTestState::$last_ai_client_prompt['text'] );
+	}
+
+	public function test_style_book_generation_uses_block_presets_and_inherited_global_presets(): void {
+		$this->seed_style_book_color_recommendation( 'paragraph-ink' );
+		WordPressTestState::$global_settings['color']['text']                     = false;
+		WordPressTestState::$global_settings['color']['background']               = false;
+		WordPressTestState::$global_settings['blocks']['core/paragraph']['color'] = [
+			'text'       => true,
+			'background' => true,
+			'palette'    => [
+				[
+					'slug'  => 'paragraph-ink',
+					'color' => '#111111',
+				],
+			],
+		];
+
+		$result = StyleAbilities::recommend_style( $this->style_book_request() );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( 'executable', $result['suggestions'][0]['tone'] );
+		$this->assertSame( [ 'paragraph-ink', 'base' ], array_column( $result['suggestions'][0]['operations'], 'presetSlug' ) );
+		$this->assertStringContainsString( 'paragraph-ink: #111111', WordPressTestState::$last_ai_client_prompt['text'] );
+		$this->assertStringContainsString( 'base: #ffffff', WordPressTestState::$last_ai_client_prompt['text'] );
+	}
+
+	/**
+	 * @dataProvider target_block_theme_changes
+	 */
+	public function test_style_book_signatures_detect_target_block_changes_and_ignore_sibling_settings( array $color_settings ): void {
+		\WP_Block_Type_Registry::get_instance()->register( 'core/paragraph', [ 'supports' => [ 'color' => [] ] ] );
+		$input                         = $this->style_book_request();
+		$input['resolveSignatureOnly'] = true;
+		$baseline                      = StyleAbilities::recommend_style( $input );
+
+		WordPressTestState::$global_settings['blocks']['core/heading']['color'] = $color_settings;
+		$sibling_changed = StyleAbilities::recommend_style( $input );
+		WordPressTestState::$global_settings['blocks']['core/paragraph']['color'] = $color_settings;
+		$target_changed = StyleAbilities::recommend_style( $input );
+
+		$this->assertIsArray( $baseline );
+		$this->assertIsArray( $sibling_changed );
+		$this->assertIsArray( $target_changed );
+		foreach ( [ 'reviewContextSignature', 'resolvedContextSignature' ] as $signature ) {
+			$this->assertSame( $baseline[ $signature ], $sibling_changed[ $signature ] );
+			$this->assertNotSame( $baseline[ $signature ], $target_changed[ $signature ] );
+		}
+	}
+
+	public static function target_block_theme_changes(): array {
+		return [
+			'disabled control' => [ [ 'text' => false ] ],
+			'changed preset'   => [
+				[
+					'palette' => [
+						[
+							'slug'  => 'accent',
+							'color' => '#111111',
+						],
+					],
+				],
+			],
+			'new preset'       => [
+				[
+					'palette' => [
+						[
+							'slug'  => 'paragraph-ink',
+							'color' => '#111111',
+						],
+					],
+				],
+			],
+		];
+	}
+
+	/**
+	 * @dataProvider inherited_color_complement_cases
+	 */
+	public function test_style_book_generation_normalizes_contrast_using_server_global_presets_for_inherited_colors(
+		string $side,
+		string $root_color,
+		string $block_color,
+		bool $passed
+	): void {
+		$this->seed_style_book_color_recommendation( 'operation' );
+		WordPressTestState::$global_settings['color']['palette']                             = [
+			[
+				'slug'  => 'shared',
+				'color' => $root_color,
+			],
+		];
+		WordPressTestState::$global_settings['blocks']['core/paragraph']['color']['palette'] = [
+			[
+				'slug'  => 'shared',
+				'color' => $block_color,
+			],
+			[
+				'slug'  => 'operation',
+				'color' => '#ffffff',
+			],
+		];
+		$response                                 = json_decode( WordPressTestState::$ai_client_generate_text_result, true );
+		$operation                                = $response['suggestions'][0]['operations'][0];
+		$operation['path']                        = [ 'color', $side ];
+		$response['suggestions'][0]['operations'] = [ $operation ];
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode( $response );
+
+		$input      = $this->style_book_request();
+		$complement = 'text' === $side ? 'background' : 'text';
+		$input['styleContext']['mergedConfig']['styles']['color'][ $complement ] = 'var:preset|color|shared';
+		// Caller-provided tokens must not change the root color used for safety.
+		$input['styleContext']['globalThemeTokens'] = [
+			'colorPresets' => [
+				[
+					'slug'  => 'shared',
+					'color' => $block_color,
+				],
+			],
+		];
+		$result                                     = StyleAbilities::recommend_style( $input );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( $passed ? 'executable' : 'advisory', $result['suggestions'][0]['tone'] );
+		if ( $passed ) {
+			$this->assertSame( [ [ 'color', $side ] ], array_column( $result['suggestions'][0]['operations'], 'path' ) );
+		} else {
+			$this->assertSame( [], $result['suggestions'][0]['operations'] );
+			$this->assertContains( 'failed_contrast', array_column( $result['suggestions'][0]['validationReasons'], 'code' ) );
+		}
+	}
+
+	public static function inherited_color_complement_cases(): array {
+		return [
+			'white text on inherited white fails'          => [ 'text', '#ffffff', '#000000', false ],
+			'white text on inherited black passes'         => [ 'text', '#000000', '#ffffff', true ],
+			'white background under inherited white fails' => [ 'background', '#ffffff', '#000000', false ],
+			'white background under inherited black passes' => [ 'background', '#000000', '#ffffff', true ],
+		];
+	}
+
+	public function test_style_book_signatures_detect_global_preset_changes_masked_by_block_overrides(): void {
+		\WP_Block_Type_Registry::get_instance()->register( 'core/paragraph', [ 'supports' => [ 'color' => [] ] ] );
+		WordPressTestState::$global_settings['color']['palette']                             = [
+			[
+				'slug'  => 'shared',
+				'color' => '#ffffff',
+			],
+		];
+		WordPressTestState::$global_settings['blocks']['core/paragraph']['color']['palette'] = [
+			[
+				'slug'  => 'shared',
+				'color' => '#000000',
+			],
+		];
+		$input                         = $this->style_book_request();
+		$input['resolveSignatureOnly'] = true;
+		$input['styleContext']['mergedConfig']['styles']['color']['background'] = 'var:preset|color|shared';
+		$baseline = StyleAbilities::recommend_style( $input );
+
+		WordPressTestState::$global_settings['color']['palette'][0]['color'] = '#000000';
+		$changed = StyleAbilities::recommend_style( $input );
+
+		$this->assertIsArray( $baseline );
+		$this->assertIsArray( $changed );
+		foreach ( [ 'reviewContextSignature', 'resolvedContextSignature' ] as $signature ) {
+			$this->assertNotSame( $baseline[ $signature ], $changed[ $signature ] );
+		}
+	}
+
+	private function style_book_request(): array {
+		return [
+			'scope'        => [
+				'surface'        => 'style-book',
+				'globalStylesId' => '17',
+				'blockName'      => 'core/paragraph',
+			],
+			'styleContext' => [
+				'currentConfig' => [ 'styles' => [] ],
+				'mergedConfig'  => [ 'styles' => [] ],
+			],
+		];
+	}
+
+	private function seed_style_book_color_recommendation( string $text_slug ): void {
+		\WP_Block_Type_Registry::get_instance()->register( 'core/paragraph', [ 'supports' => [ 'color' => [] ] ] );
+		WordPressTestState::$global_settings['color']['palette'] = [
+			[
+				'slug'  => 'accent',
+				'color' => '#111111',
+			],
+			[
+				'slug'  => 'base',
+				'color' => '#ffffff',
+			],
+		];
+		$operations = [];
+		foreach ( [
+			'text'       => $text_slug,
+			'background' => 'base',
+		] as $facet => $slug ) {
+			$operations[] = [
+				'type'       => 'set_block_styles',
+				'blockName'  => 'core/paragraph',
+				'path'       => [ 'color', $facet ],
+				'value'      => 'var:preset|color|' . $slug,
+				'valueType'  => 'preset',
+				'presetType' => 'color',
+				'presetSlug' => $slug,
+			];
+		}
+		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Readable paragraph',
+						'description' => 'Use the paragraph ink and inherited canvas.',
+						'category'    => 'color',
+						'tone'        => 'executable',
+						'operations'  => $operations,
+					],
+				],
+			]
+		);
+	}
+
 	public function test_supported_block_style_paths_never_offer_text_shadow(): void {
 		// #73320 adds no block.json support, so the block scope can never gate
 		// on it. Guards against a well-meaning addition to the block allowlist
@@ -1026,7 +1408,7 @@ final class StyleAbilitiesTest extends TestCase {
 			'- color.text (color)',
 			(string) ( $request_body['input'] ?? '' )
 		);
-		$this->assertStringNotContainsString(
+		$this->assertStringContainsString(
 			'- color.background (color)',
 			(string) ( $request_body['input'] ?? '' )
 		);

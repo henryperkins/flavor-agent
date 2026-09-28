@@ -149,6 +149,7 @@ function buildThemeParitySnapshot( settings = {}, features = {} ) {
 				layout.allowCustomContentAndWideSize !== false,
 		},
 		elements: normalizeComparableValue( features?.styles?.elements || {} ),
+		blocks: normalizeComparableValue( features?.blocks || {} ),
 		blockPseudoStyles: collectBlockPseudoStylesForParity( features ),
 	} );
 }

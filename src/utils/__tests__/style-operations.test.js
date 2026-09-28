@@ -708,26 +708,129 @@ describe( 'style-operations', () => {
 		expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
 	} );
 
-	test( 'applyGlobalStyleSuggestionOperations updates block-scoped preset-backed style paths', () => {
+	test.each( [
+		{ background: true, text: true },
+		{},
+		{ gradients: true, link: true },
+	] )(
+		'applyGlobalStyleSuggestionOperations updates block colors with support %j',
+		( color ) => {
+			registeredBlockTypes[ 'core/paragraph' ].supports.color = color;
+
+			const result = applyGlobalStyleSuggestionOperations(
+				{
+					operations: [
+						{
+							type: 'set_block_styles',
+							blockName: 'core/paragraph',
+							path: [ 'color', 'background' ],
+							value: 'var:preset|color|contrast',
+							valueType: 'preset',
+							presetSlug: 'contrast',
+							presetType: 'color',
+						},
+						{
+							type: 'set_block_styles',
+							blockName: 'core/paragraph',
+							path: [ 'color', 'text' ],
+							value: 'var:preset|color|accent',
+							valueType: 'preset',
+							presetSlug: 'accent',
+							presetType: 'color',
+						},
+					],
+				},
+				undefined,
+				{
+					surface: 'style-book',
+					scope: { blockName: 'core/paragraph' },
+				}
+			);
+
+			expect( result.ok ).toBe( true );
+			expect(
+				result.afterConfig.styles.blocks[ 'core/paragraph' ].color.text
+			).toBe( 'var:preset|color|accent' );
+			expect(
+				result.afterConfig.styles.blocks[ 'core/paragraph' ].color
+					.background
+			).toBe( 'var:preset|color|contrast' );
+			expect( coreDispatch.editEntityRecord ).toHaveBeenCalledWith(
+				'root',
+				'globalStyles',
+				'17',
+				expect.objectContaining( {
+					styles: expect.objectContaining( {
+						blocks: {
+							'core/paragraph': {
+								color: {
+									background: 'var:preset|color|contrast',
+									text: 'var:preset|color|accent',
+								},
+							},
+						},
+					} ),
+				} )
+			);
+		}
+	);
+
+	test.each( [ 'background', 'text' ] )(
+		'rejects a Style Book %s operation disabled by the target block theme settings',
+		( facet ) => {
+			const presetSlug = facet === 'background' ? 'base' : 'contrast';
+			registeredBlockTypes[ 'core/paragraph' ].supports.color = {};
+			blockEditorSettings.features.blocks = {
+				'core/paragraph': { color: { [ facet ]: false } },
+			};
+			const before = JSON.parse( JSON.stringify( currentRecord ) );
+			const result = applyGlobalStyleSuggestionOperations(
+				{
+					operations: [
+						{
+							type: 'set_block_styles',
+							blockName: 'core/paragraph',
+							path: [ 'color', facet ],
+							value: `var:preset|color|${ presetSlug }`,
+							valueType: 'preset',
+							presetSlug,
+							presetType: 'color',
+						},
+					],
+				},
+				undefined,
+				{
+					surface: 'style-book',
+					scope: { blockName: 'core/paragraph' },
+				}
+			);
+			expect( result.ok ).toBe( false );
+			expect( result.error ).toContain( `color.${ facet }` );
+			expect( currentRecord ).toEqual( before );
+		}
+	);
+
+	test( 'checks Style Book contrast using target block preset overrides', () => {
+		blockEditorSettings.features.blocks = {
+			'core/paragraph': {
+				color: {
+					palette: {
+						theme: [ { slug: 'contrast', color: '#111111' } ],
+					},
+				},
+			},
+		};
+		const before = JSON.parse( JSON.stringify( currentRecord ) );
 		const result = applyGlobalStyleSuggestionOperations(
 			{
 				operations: [
 					{
 						type: 'set_block_styles',
 						blockName: 'core/paragraph',
-						path: [ 'color', 'background' ],
+						path: [ 'color', 'text' ],
 						value: 'var:preset|color|contrast',
 						valueType: 'preset',
 						presetSlug: 'contrast',
-						presetType: 'color',
-					},
-					{
-						type: 'set_block_styles',
-						blockName: 'core/paragraph',
-						path: [ 'color', 'text' ],
-						value: 'var:preset|color|accent',
-						valueType: 'preset',
-						presetSlug: 'accent',
 						presetType: 'color',
 					},
 				],
@@ -735,32 +838,131 @@ describe( 'style-operations', () => {
 			undefined,
 			{ surface: 'style-book', scope: { blockName: 'core/paragraph' } }
 		);
+		expect( result ).toEqual(
+			expect.objectContaining( { ok: false, code: 'failed_contrast' } )
+		);
+		expect( currentRecord ).toEqual( before );
+	} );
 
-		expect( result.ok ).toBe( true );
-		expect(
-			result.afterConfig.styles.blocks[ 'core/paragraph' ].color.text
-		).toBe( 'var:preset|color|accent' );
-		expect(
-			result.afterConfig.styles.blocks[ 'core/paragraph' ].color
-				.background
-		).toBe( 'var:preset|color|contrast' );
-		expect( coreDispatch.editEntityRecord ).toHaveBeenCalledWith(
-			'root',
-			'globalStyles',
-			'17',
-			expect.objectContaining( {
-				styles: expect.objectContaining( {
-					blocks: {
-						'core/paragraph': {
-							color: {
-								background: 'var:preset|color|contrast',
-								text: 'var:preset|color|accent',
-							},
+	test.each( [
+		[ 'text', 'root', 'light', false ],
+		[ 'text', 'root', 'dark', true ],
+		[ 'background', 'root', 'light', false ],
+		[ 'background', 'root', 'dark', true ],
+		[ 'text', 'block', 'light', true ],
+		[ 'text', 'block', 'dark', false ],
+		[ 'background', 'block', 'light', true ],
+		[ 'background', 'block', 'dark', false ],
+	] )(
+		'checks %s contrast against the %s complement palette for %s (passes: %s)',
+		( side, complementScope, presetSlug, expectedOk ) => {
+			const complementSide = side === 'text' ? 'background' : 'text';
+			blockEditorSettings.features.color.palette = {
+				theme: [
+					{ slug: 'inherited', color: '#ffffff' },
+					{ slug: 'light', color: '#ffffff' },
+					{ slug: 'dark', color: '#000000' },
+				],
+			};
+			blockEditorSettings.features.blocks = {
+				'core/paragraph': {
+					color: {
+						palette: {
+							theme: [ { slug: 'inherited', color: '#000000' } ],
 						},
 					},
-				} ),
-			} )
+				},
+			};
+			baseConfig.styles = {
+				color: { [ complementSide ]: 'var:preset|color|inherited' },
+			};
+			currentRecord.styles = {};
+			if ( complementScope === 'block' ) {
+				currentRecord.styles.blocks = {
+					'core/paragraph': {
+						color: {
+							[ complementSide ]: 'var:preset|color|inherited',
+						},
+					},
+				};
+			}
+			const before = JSON.parse( JSON.stringify( currentRecord ) );
+			const result = applyGlobalStyleSuggestionOperations(
+				{
+					operations: [
+						{
+							type: 'set_block_styles',
+							blockName: 'core/paragraph',
+							path: [ 'color', side ],
+							value: `var:preset|color|${ presetSlug }`,
+							valueType: 'preset',
+							presetSlug,
+							presetType: 'color',
+						},
+					],
+				},
+				undefined,
+				{
+					surface: 'style-book',
+					scope: { blockName: 'core/paragraph' },
+				}
+			);
+			expect( result.ok ).toBe( expectedOk );
+			const expectedRecord = JSON.parse( JSON.stringify( before ) );
+			if ( expectedOk ) {
+				expectedRecord.styles.blocks = {
+					'core/paragraph': {
+						color: {
+							...before.styles.blocks?.[ 'core/paragraph' ]
+								?.color,
+							[ side ]: `var:preset|color|${ presetSlug }`,
+						},
+					},
+				};
+			}
+			expect( currentRecord ).toEqual( expectedRecord );
+			expect( result.code ).toBe(
+				expectedOk ? undefined : 'failed_contrast'
+			);
+			expect( coreDispatch.editEntityRecord ).toHaveBeenCalledTimes(
+				expectedOk ? 1 : 0
+			);
+		}
+	);
+
+	test( 'applies a target block color preset enabled over a global opt-out', () => {
+		blockEditorSettings.features.color.text = false;
+		blockEditorSettings.features.blocks = {
+			'core/paragraph': {
+				color: {
+					text: true,
+					palette: {
+						theme: [ { slug: 'local-ink', color: '#ffffff' } ],
+					},
+				},
+			},
+		};
+		const result = applyGlobalStyleSuggestionOperations(
+			{
+				operations: [
+					{
+						type: 'set_block_styles',
+						blockName: 'core/paragraph',
+						path: [ 'color', 'text' ],
+						value: 'var:preset|color|local-ink',
+						valueType: 'preset',
+						presetSlug: 'local-ink',
+						presetType: 'color',
+					},
+				],
+			},
+			undefined,
+			{ surface: 'style-book', scope: { blockName: 'core/paragraph' } }
 		);
+		expect( result.ok ).toBe( true );
+		expect(
+			currentRecord.styles.blocks[ 'core/paragraph' ].color.text
+		).toBe( 'var:preset|color|local-ink' );
 	} );
 
 	test( 'applyGlobalStyleSuggestionOperations rejects stale Style Book block targets', () => {

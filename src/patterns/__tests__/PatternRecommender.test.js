@@ -1627,13 +1627,12 @@ describe( 'PatternRecommender', () => {
 	} );
 
 	test( 'records adaptation_blocked and renders the blocked preview state', () => {
-		// A plain paragraph with no preceding heading, no sibling/root align,
-		// and no theme presets triggers no adaptation rule, so the engine
-		// returns a blocked result.
 		const pattern = {
 			name: 'theme/plain',
 			title: 'Plain',
-			blocks: [ { name: 'core/paragraph', attributes: {} } ],
+			blocks: [
+				{ name: 'core/paragraph', attributes: { textColor: 'accent' } },
+			],
 		};
 		const inserterContainer = renderReadyPatternShelf( { pattern } );
 
@@ -1650,7 +1649,7 @@ describe( 'PatternRecommender', () => {
 			} )
 		);
 		expect( inserterContainer.textContent ).toContain(
-			'Flavor Agent could not build a safe adaptation for this pattern.'
+			'The theme presets needed for this adjustment are unavailable.'
 		);
 
 		// Blocked UX: the adapted action stays present but disabled; original
@@ -1667,6 +1666,271 @@ describe( 'PatternRecommender', () => {
 		).map( ( button ) => button.textContent );
 		expect( labels ).toContain( 'Insert original' );
 		expect( labels ).toContain( 'Close' );
+	} );
+
+	test( 'inserts an unchanged preview through the original freshness and insertion path', async () => {
+		const pattern = {
+			name: 'theme/plain',
+			title: 'Plain',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: { content: 'Original content' },
+				},
+			],
+		};
+		const inserterContainer = renderReadyPatternShelf( { pattern } );
+		act( () =>
+			findButtonByText( inserterContainer, 'Preview adapted' ).click()
+		);
+		const preview = inserterContainer.querySelector(
+			'.flavor-agent-pattern-adaptation'
+		);
+		expect( preview.textContent ).toContain( 'No changes needed' );
+		expect( findButtonByText( preview, 'Insert adapted' ) ).toBeUndefined();
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'adapted_preview_shown',
+				reason: 'no_changes_needed',
+			} )
+		);
+		await act( async () =>
+			findButtonByText( preview, 'Insert original' ).click()
+		);
+		expect( mockResolvePatternRecommendationSignature ).toHaveBeenCalled();
+		expect(
+			state.blockEditor.blocks[ 'root-a' ][ 0 ].attributes.content
+		).toBe( 'Original content' );
+		expect(
+			inserterContainer.querySelector(
+				'.flavor-agent-pattern-adaptation'
+			)
+		).toBeNull();
+	} );
+
+	test( 'passes specific unmapped color diagnostics from the engine to the preview', () => {
+		state.blockEditor.settings = {
+			__experimentalFeatures: {
+				color: {
+					palette: {
+						theme: [ { slug: 'ink-900', name: 'Ink 900' } ],
+					},
+				},
+			},
+		};
+		state.blockRegistry.blockTypes[ 'core/paragraph' ] = {
+			supports: { color: { text: true } },
+		};
+		const pattern = {
+			name: 'theme/plain',
+			title: 'Plain',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: { textColor: 'unknown-color' },
+				},
+			],
+		};
+		const inserterContainer = renderReadyPatternShelf( { pattern } );
+		act( () =>
+			findButtonByText( inserterContainer, 'Preview adapted' ).click()
+		);
+		expect(
+			inserterContainer.querySelector(
+				'.flavor-agent-pattern-adaptation'
+			).textContent
+		).toContain( 'The color “unknown-color” has no matching role' );
+	} );
+
+	test( 'blocks rather than reports no changes when a pattern preset is missing from the theme', () => {
+		state.blockEditor.settings = {
+			__experimentalFeatures: {
+				typography: {
+					fontSizes: {
+						theme: [
+							{ slug: 'medium', name: 'Medium', size: '1rem' },
+						],
+					},
+				},
+			},
+		};
+		state.blockRegistry.blockTypes[ 'core/paragraph' ] = {
+			supports: { typography: { fontSize: true } },
+		};
+		const pattern = {
+			name: 'theme/plain',
+			title: 'Plain',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: { fontSize: 'gigantic' },
+				},
+			],
+		};
+		const inserterContainer = renderReadyPatternShelf( { pattern } );
+		act( () =>
+			findButtonByText( inserterContainer, 'Preview adapted' ).click()
+		);
+		const preview = inserterContainer.querySelector(
+			'.flavor-agent-pattern-adaptation'
+		);
+
+		expect( preview.textContent ).toContain(
+			'The font size preset “gigantic” is not available in this theme.'
+		);
+		expect( preview.textContent ).not.toContain( 'No changes needed' );
+		expect( findButtonByText( preview, 'Insert adapted' ).disabled ).toBe(
+			true
+		);
+		expect( mockRecordRecommendationOutcome ).toHaveBeenCalledWith(
+			expect.objectContaining( {
+				event: 'adaptation_blocked',
+				reason: 'unresolved_theme_preset',
+			} )
+		);
+	} );
+
+	test( 'shows an unchanged preview and inserts a valid block-specific font preset', async () => {
+		state.blockEditor.settings = {
+			__experimentalFeatures: {
+				typography: {
+					fontSizes: { theme: [ { slug: 'medium', size: '1rem' } ] },
+				},
+				blocks: {
+					'core/paragraph': {
+						typography: {
+							fontSizes: {
+								theme: [
+									{ slug: 'paragraph-large', size: '2rem' },
+								],
+							},
+						},
+					},
+				},
+			},
+		};
+		state.blockRegistry.blockTypes[ 'core/paragraph' ] = {
+			supports: { typography: { fontSize: true } },
+		};
+		const pattern = {
+			name: 'theme/plain',
+			title: 'Plain',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: {
+						fontSize: 'paragraph-large',
+						content: 'Scoped typography',
+					},
+				},
+			],
+		};
+		const inserterContainer = renderReadyPatternShelf( { pattern } );
+		act( () =>
+			findButtonByText( inserterContainer, 'Preview adapted' ).click()
+		);
+		const preview = inserterContainer.querySelector(
+			'.flavor-agent-pattern-adaptation'
+		);
+		expect( preview.textContent ).toContain( 'No changes needed' );
+		expect(
+			preview.querySelector( '[aria-label="Original pattern"]' )
+		).not.toBeNull();
+		expect( findButtonByText( preview, 'Insert adapted' ) ).toBeUndefined();
+		await act( async () =>
+			findButtonByText( preview, 'Insert original' ).click()
+		);
+		expect( state.blockEditor.blocks[ 'root-a' ][ 0 ].attributes ).toEqual(
+			{
+				fontSize: 'paragraph-large',
+				content: 'Scoped typography',
+			}
+		);
+	} );
+
+	test( 'reports missing border colors with the registered core border support key', () => {
+		state.blockRegistry.blockTypes[ 'core/group' ] = {
+			supports: { __experimentalBorder: { color: true } },
+		};
+		const pattern = {
+			name: 'theme/bordered',
+			title: 'Bordered',
+			blocks: [
+				{
+					name: 'core/group',
+					attributes: { borderColor: 'missing-brand' },
+				},
+			],
+		};
+		const inserterContainer = renderReadyPatternShelf( { pattern } );
+		act( () =>
+			findButtonByText( inserterContainer, 'Preview adapted' ).click()
+		);
+		const preview = inserterContainer.querySelector(
+			'.flavor-agent-pattern-adaptation'
+		);
+		expect( preview.textContent ).toContain(
+			'The color preset “missing-brand” is not available'
+		);
+		expect( findButtonByText( preview, 'Insert adapted' ).disabled ).toBe(
+			true
+		);
+		expect( findButtonByText( preview, 'Insert original' ).disabled ).toBe(
+			false
+		);
+	} );
+
+	test( 'revalidates block-specific color mappings before adapted insertion', async () => {
+		state.blockEditor.settings = {
+			__experimentalFeatures: {
+				blocks: {
+					'core/paragraph': {
+						color: {
+							palette: {
+								theme: [
+									{
+										slug: 'local-brand',
+										name: 'Brand',
+										color: '#123456',
+									},
+								],
+							},
+						},
+					},
+				},
+			},
+		};
+		state.blockRegistry.blockTypes[ 'core/paragraph' ] = {
+			supports: { color: {} },
+		};
+		const pattern = {
+			name: 'theme/plain',
+			title: 'Plain',
+			blocks: [
+				{
+					name: 'core/paragraph',
+					attributes: { textColor: 'primary' },
+				},
+			],
+		};
+		const inserterContainer = renderReadyPatternShelf( { pattern } );
+		act( () =>
+			findButtonByText( inserterContainer, 'Preview adapted' ).click()
+		);
+		const preview = inserterContainer.querySelector(
+			'.flavor-agent-pattern-adaptation'
+		);
+		expect( preview.textContent ).toContain( 'primary -> local-brand' );
+		state.blockEditor.settings.__experimentalFeatures.blocks[
+			'core/paragraph'
+		].color.palette.theme = [
+			{ slug: 'replacement-brand', name: 'Brand', color: '#654321' },
+		];
+		await act( async () =>
+			findButtonByText( preview, 'Insert adapted' ).click()
+		);
+		expect( mockInsertBlocks ).not.toHaveBeenCalled();
+		expect( preview.textContent ).toContain( 'out of date' );
 	} );
 
 	test( 'inserts adapted preview blocks through the shared server freshness gate', async () => {

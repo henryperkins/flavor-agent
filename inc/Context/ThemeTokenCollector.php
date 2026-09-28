@@ -6,6 +6,16 @@ namespace FlavorAgent\Context;
 
 final class ThemeTokenCollector {
 
+	private const PRESET_FEATURE_PATHS = [
+		[ 'color', 'palette' ],
+		[ 'color', 'gradients' ],
+		[ 'color', 'duotone' ],
+		[ 'typography', 'fontSizes' ],
+		[ 'typography', 'fontFamilies' ],
+		[ 'spacing', 'spacingSizes' ],
+		[ 'shadow', 'presets' ],
+	];
+
 	private static ?string $cached_hash = null;
 
 	private static ?array $cached_tokens = null;
@@ -45,10 +55,10 @@ final class ThemeTokenCollector {
 		];
 	}
 
-	public function for_tokens(): array {
-		$settings      = wp_get_global_settings();
+	public function for_tokens( string $block_name = '' ): array {
+		$settings      = $this->resolve_block_settings( wp_get_global_settings(), $block_name );
 		$global_styles = wp_get_global_styles();
-		$cache_hash    = md5( serialize( [ $settings, $global_styles ] ) );
+		$cache_hash    = md5( serialize( [ $block_name, $settings, $global_styles ] ) );
 
 		if ( self::$cached_hash === $cache_hash && is_array( self::$cached_tokens ) ) {
 			return self::$cached_tokens;
@@ -408,6 +418,54 @@ final class ThemeTokenCollector {
 				static fn( array $variation ): bool => [] !== $variation
 			)
 		);
+	}
+
+	/**
+	 * Resolve the controls and available preset values effective for a block.
+	 * Global presets remain inherited; block presets override matching slugs.
+	 *
+	 * @param array<string, mixed> $settings
+	 * @return array<string, mixed>
+	 */
+	private function resolve_block_settings( array $settings, string $block_name ): array {
+		$block_settings = $settings['blocks'][ $block_name ] ?? null;
+
+		if ( '' === $block_name || ! is_array( $block_settings ) ) {
+			return $settings;
+		}
+
+		$resolved = $settings;
+
+		foreach ( $block_settings as $group => $values ) {
+			if ( is_array( $values ) ) {
+				$resolved[ $group ] = array_replace(
+					is_array( $settings[ $group ] ?? null ) ? $settings[ $group ] : [],
+					$values
+				);
+			}
+		}
+
+		foreach ( self::PRESET_FEATURE_PATHS as [ $group, $key ] ) {
+			if ( ! is_array( $block_settings[ $group ] ?? null ) ) {
+				continue;
+			}
+
+			// Resolve each scope's origins first: a block theme preset overrides
+			// a global custom preset with the same slug, just as scoped CSS does.
+			$presets = array_merge(
+				$this->merge_presets( $settings[ $group ][ $key ] ?? [] ),
+				$this->merge_presets( $block_settings[ $group ][ $key ] ?? [] )
+			);
+			$by_slug = [];
+
+			foreach ( $presets as $preset ) {
+				$by_slug[ $preset['slug'] ?? '' ] = $preset;
+			}
+
+			$resolved[ $group ][ $key ] = array_values( $by_slug );
+		}
+
+		return $resolved;
 	}
 
 	private function merge_presets( array|string $feature ): array {

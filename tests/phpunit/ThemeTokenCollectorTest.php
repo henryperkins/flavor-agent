@@ -186,6 +186,169 @@ final class ThemeTokenCollectorTest extends TestCase {
 		$this->assertSame( 'one', $second['colorPresets'][0]['slug'] );
 	}
 
+	public function test_block_tokens_override_controls_and_inherit_unspecified_settings(): void {
+		WordPressTestState::$global_settings = [
+			'color'      => [
+				'text'       => true,
+				'background' => false,
+				'custom'     => false,
+			],
+			'typography' => [ 'lineHeight' => false ],
+			'border'     => [ 'radius' => true ],
+			'blocks'     => [
+				'core/paragraph' => [
+					'color'      => [
+						'text'       => false,
+						'background' => true,
+					],
+					'typography' => [ 'lineHeight' => true ],
+				],
+			],
+		];
+
+		$tokens = ( new ThemeTokenCollector() )->for_tokens( 'core/paragraph' );
+
+		$this->assertFalse( $tokens['enabledFeatures']['textColor'] );
+		$this->assertTrue( $tokens['enabledFeatures']['backgroundColor'] );
+		$this->assertFalse( $tokens['enabledFeatures']['customColors'] );
+		$this->assertTrue( $tokens['enabledFeatures']['lineHeight'] );
+		$this->assertTrue( $tokens['enabledFeatures']['borderRadius'] );
+	}
+
+	/**
+	 * @dataProvider block_preset_families
+	 */
+	public function test_block_presets_override_global_slugs_after_resolving_origins_and_keep_inherited_presets(
+		string $group,
+		string $setting_key,
+		string $token_key,
+		string $value_key,
+		mixed $global_value,
+		mixed $block_value,
+		mixed $custom_value
+	): void {
+		WordPressTestState::$global_settings = [
+			$group   => [
+				$setting_key => [
+					'default' => [
+						[
+							'slug'     => 'shared',
+							$value_key => $global_value,
+						],
+						[
+							'slug'     => 'global-only',
+							$value_key => $global_value,
+						],
+					],
+					'custom'  => [
+						[
+							'slug'     => 'shared',
+							$value_key => $custom_value,
+						],
+					],
+				],
+			],
+			'blocks' => [
+				'core/paragraph' => [
+					$group => [
+						$setting_key => [
+							'theme'  => [
+								[
+									'slug'     => 'shared',
+									$value_key => $block_value,
+								],
+								[
+									'slug'     => 'block-only',
+									$value_key => $block_value,
+								],
+							],
+							'custom' => [
+								[
+									'slug'     => 'block-only',
+									$value_key => $custom_value,
+								],
+							],
+						],
+					],
+				],
+			],
+		];
+
+		$tokens  = ( new ThemeTokenCollector() )->for_tokens( 'core/paragraph' );
+		$presets = array_column( $tokens[ $token_key ], null, 'slug' );
+
+		$this->assertSame( [ 'shared', 'global-only', 'block-only' ], array_keys( $presets ) );
+		$this->assertSame( $block_value, $presets['shared'][ $value_key ] );
+		$this->assertSame( $global_value, $presets['global-only'][ $value_key ] );
+		$this->assertSame( $custom_value, $presets['block-only'][ $value_key ] );
+	}
+
+	public static function block_preset_families(): array {
+		return [
+			'colors'        => [ 'color', 'palette', 'colorPresets', 'color', '#111111', '#222222', '#333333' ],
+			'gradients'     => [ 'color', 'gradients', 'gradientPresets', 'gradient', 'linear-gradient(#111, #fff)', 'linear-gradient(#222, #fff)', 'linear-gradient(#333, #fff)' ],
+			'duotone'       => [ 'color', 'duotone', 'duotonePresets', 'colors', [ '#111111', '#ffffff' ], [ '#222222', '#ffffff' ], [ '#333333', '#ffffff' ] ],
+			'font sizes'    => [ 'typography', 'fontSizes', 'fontSizePresets', 'size', '1rem', '2rem', '3rem' ],
+			'font families' => [ 'typography', 'fontFamilies', 'fontFamilyPresets', 'fontFamily', 'serif', 'sans-serif', 'monospace' ],
+			'spacing'       => [ 'spacing', 'spacingSizes', 'spacingPresets', 'size', '1rem', '2rem', '3rem' ],
+			'shadows'       => [ 'shadow', 'presets', 'shadowPresets', 'shadow', '0 1px #111', '0 2px #222', '0 3px #333' ],
+		];
+	}
+
+	public function test_block_token_cache_is_isolated_from_siblings_and_global_collection(): void {
+		WordPressTestState::$global_settings = [
+			'color'  => [
+				'text'    => true,
+				'palette' => [
+					[
+						'slug'  => 'global',
+						'color' => '#111111',
+					],
+				],
+			],
+			'blocks' => [
+				'core/paragraph' => [
+					'color' => [
+						'text'    => false,
+						'palette' => [
+							[
+								'slug'  => 'paragraph',
+								'color' => '#222222',
+							],
+						],
+					],
+				],
+				'core/heading'   => [
+					'color' => [
+						'palette' => [
+							[
+								'slug'  => 'heading',
+								'color' => '#333333',
+							],
+						],
+					],
+				],
+			],
+		];
+
+		$collector = new ThemeTokenCollector();
+		$paragraph = $collector->for_tokens( 'core/paragraph' );
+		$heading   = $collector->for_tokens( 'core/heading' );
+		$global    = $collector->for_tokens();
+
+		$this->assertSame( [ 'global', 'paragraph' ], array_column( $paragraph['colorPresets'], 'slug' ) );
+		$this->assertFalse( $paragraph['enabledFeatures']['textColor'] );
+		$this->assertSame( [ 'global', 'heading' ], array_column( $heading['colorPresets'], 'slug' ) );
+		$this->assertTrue( $heading['enabledFeatures']['textColor'] );
+		$this->assertSame( [ 'global' ], array_column( $global['colorPresets'], 'slug' ) );
+		$this->assertTrue( $global['enabledFeatures']['textColor'] );
+		$this->assertSame( $paragraph, $collector->for_tokens( 'core/paragraph' ) );
+		$this->assertSame( $global, $collector->for_tokens( 'core/missing' ) );
+
+		WordPressTestState::$global_settings['blocks']['core/paragraph']['color']['text'] = true;
+		$this->assertTrue( $collector->for_tokens( 'core/paragraph' )['enabledFeatures']['textColor'] );
+	}
+
 	public function test_for_tokens_recomputes_when_settings_hash_changes(): void {
 		WordPressTestState::$global_settings = [
 			'color' => [
