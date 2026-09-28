@@ -38,6 +38,7 @@ final class WordPressAIClient {
 		'top_logprobs'      => 'topLogprobs',
 	];
 	private const SCHEMA_UNION_LIMIT          = 16;
+	private const NUMERIC_SCHEMA_CONSTRAINTS  = [ 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf' ];
 	/**
 	 * Byte ceiling above which a response schema is treated as grammar-heavy.
 	 * A proxy for compiled-grammar cost, not a provider-published limit — the
@@ -163,8 +164,8 @@ final class WordPressAIClient {
 				'hasSchema'       => is_array( $schema ) && [] !== $schema,
 			]
 		);
-		// Built on demand so the grammar-limit retry below can get a genuinely
-		// schema-free builder. Holding on to the pre-schema handle would not:
+		// Built on demand so schema compatibility retries get a fresh builder.
+		// Holding on to the pre-schema handle would not:
 		// apply_output_schema() only shallow-clones, so if the AI Client builder
 		// keeps its output schema on a shared sub-object (a ModelConfig DTO, say)
 		// the "without schema" handle points at the mutated state and the retry
@@ -285,8 +286,21 @@ final class WordPressAIClient {
 
 			if ( is_wp_error( $result ) && null !== $schema ) {
 				$normalized_error = self::normalize_ai_client_error( $result );
+				$fallback_reason  = '';
+				$retry_schema     = $schema;
 
 				if ( self::is_output_schema_grammar_limit_error( $normalized_error ) ) {
+					$fallback_reason = 'grammar_limit';
+					$retry_schema    = null;
+				} elseif ( self::is_output_schema_numeric_constraint_error( $normalized_error ) ) {
+					$retry_schema = self::remove_schema_keywords( $schema, self::NUMERIC_SCHEMA_CONSTRAINTS );
+
+					if ( $retry_schema !== $schema ) {
+						$fallback_reason = 'unsupported_numeric_constraints';
+					}
+				}
+
+				if ( '' !== $fallback_reason ) {
 					if ( $trace_consumed ) {
 						RequestTrace::event(
 							'ai.chat.output_schema_fallback',
@@ -294,29 +308,33 @@ final class WordPressAIClient {
 						);
 					}
 
-					$request_diagnostics['requestSummary']['outputSchemaFallback'] = 'grammar_limit';
+					$request_diagnostics['requestSummary']['outputSchemaFallback'] = $fallback_reason;
 					$retry_prompt = $build_prompt();
+
+					if ( ! is_wp_error( $retry_prompt ) ) {
+						$retry_prompt = self::apply_output_schema( $retry_prompt, $retry_schema );
+					}
 
 					if ( is_wp_error( $retry_prompt ) ) {
 						$result = $retry_prompt;
 					} else {
-						$schema                  = null;
+						$schema                  = $retry_schema;
 						$prompt                  = $retry_prompt;
 						$request_timeout_seconds = self::request_timeout_seconds(
 							$resolved_provider,
 							$reasoning_effort,
-							null
+							$schema
 						);
 						$request_diagnostics     = self::build_request_diagnostics(
 							$system_prompt,
 							$user_prompt,
 							$resolved_provider,
 							$reasoning_effort,
-							null,
+							$schema,
 							$request_timeout_seconds,
 							$selection
 						);
-						$request_diagnostics['requestSummary']['outputSchemaFallback'] = 'grammar_limit';
+						$request_diagnostics['requestSummary']['outputSchemaFallback'] = $fallback_reason;
 						$result = self::call_prompt_method_with_request_timeout(
 							$prompt,
 							'generate_text_result',
@@ -954,7 +972,7 @@ final class WordPressAIClient {
 
 		return self::remove_schema_keywords(
 			$schema,
-			[ 'minimum', 'maximum', 'exclusiveMinimum', 'exclusiveMaximum', 'multipleOf' ]
+			self::NUMERIC_SCHEMA_CONSTRAINTS
 		);
 	}
 
@@ -1622,6 +1640,25 @@ final class WordPressAIClient {
 		// Match the known constrained-decoding grammar limit responses.
 		return str_contains( $message, 'compiled grammar is too large' )
 			|| str_contains( $message, 'schema is too complex for compilation' );
+	}
+
+	private static function is_output_schema_numeric_constraint_error( \WP_Error $error ): bool {
+		$message = self::normalize_ai_client_error_message( $error->get_error_message() );
+
+		// Provider-managed requests may select Anthropic without exposing its slug.
+		// Relax numeric constraints only after an explicit schema rejection; other
+		// validation errors must retain their original failure and schema contract.
+		if ( 1 !== preg_match(
+			'/output_(?:format|config\.format)\.schema:\s*For [\'"](?:number|integer)[\'"] type, properties ([a-zA-Z,\s]+) are not supported/i',
+			$message,
+			$matches
+		) ) {
+			return false;
+		}
+
+		$keywords = array_map( 'trim', explode( ',', $matches[1] ) );
+
+		return [] === array_diff( $keywords, self::NUMERIC_SCHEMA_CONSTRAINTS );
 	}
 
 	private static function connector_approval_error_data( \WP_Error $error ): array {

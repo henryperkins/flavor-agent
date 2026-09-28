@@ -918,6 +918,111 @@ final class WordPressAIClientTest extends TestCase {
 		);
 	}
 
+	public function test_chat_retries_numeric_schema_rejection_with_bounds_removed_and_structure_preserved(): void {
+		WordPressTestState::$ai_client_supported = true;
+		$attempts                                = [];
+		add_filter(
+			'http_request_args',
+			static function ( array $args ) use ( &$attempts ): array {
+				$attempts[] = WordPressTestState::$last_ai_client_prompt;
+				WordPressTestState::$ai_client_generate_text_result = 1 === count( $attempts )
+					? new \WP_Error(
+						'wp_ai_client_request_failed',
+						"Bad Request (400) - output_format.schema: For 'number' type, properties maximum, minimum are not supported"
+					)
+					: '{"scores":[0.8],"minimum":"label","kind":"safe"}';
+
+				return $args;
+			}
+		);
+
+		$result = WordPressAIClient::chat(
+			'System.',
+			'User.',
+			null,
+			'medium',
+			[
+				'type'       => 'object',
+				'properties' => [
+					'scores'  => [
+						'type'  => 'array',
+						'items' => [ '$ref' => '#/$defs/score' ],
+					],
+					'minimum' => [ 'type' => 'string' ],
+					'kind'    => [
+						'type' => 'string',
+						'enum' => [ 'safe' ],
+					],
+				],
+				'$defs'      => [
+					'score' => [
+						'type'             => [ 'number', 'null' ],
+						'minimum'          => 0,
+						'maximum'          => 1,
+						'exclusiveMinimum' => -1,
+						'exclusiveMaximum' => 2,
+						'multipleOf'       => 0.1,
+					],
+				],
+			],
+			[ 'temperature' => 0.3 ]
+		);
+
+		$this->assertSame( '{"scores":[0.8],"minimum":"label","kind":"safe"}', $result );
+		$this->assertCount( 2, $attempts );
+		$this->assertCount( 2, WordPressTestState::$ai_client_prompt_calls );
+		$this->assertSame( 0, $attempts[0]['json_schema']['$defs']['score']['minimum'] );
+		$this->assertSame( 1, $attempts[0]['json_schema']['$defs']['score']['maximum'] );
+		$retry_schema = $attempts[1]['json_schema'];
+		$this->assertSame( [ 'type' => [ 'number', 'null' ] ], $retry_schema['$defs']['score'] );
+		$this->assertSame( [ '$ref' => '#/$defs/score' ], $retry_schema['properties']['scores']['items'] );
+		$this->assertSame( [ 'type' => 'string' ], $retry_schema['properties']['minimum'] );
+		$this->assertSame( [ 'safe' ], $retry_schema['properties']['kind']['enum'] );
+		$this->assertSame( [ 'scores', 'minimum', 'kind' ], $retry_schema['required'] );
+		$this->assertFalse( $retry_schema['additionalProperties'] );
+		$this->assertSame( 'System.', $attempts[1]['system'] );
+		$this->assertSame( 'medium', $attempts[1]['reasoning'] );
+		$this->assertSame( 0.3, $attempts[1]['model_config']['temperature'] );
+		$this->assertArrayNotHasKey( 'provider', $attempts[1] );
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+		$this->assertSame( 'unsupported_numeric_constraints', $meta['requestSummary']['outputSchemaFallback'] ?? null );
+	}
+
+	/**
+	 * @dataProvider numeric_schema_error_cases
+	 */
+	public function test_chat_limits_numeric_schema_retries_to_matching_rejections( string $message, int $expected_attempts, string $surface = 'block' ): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = new \WP_Error( 'wp_ai_client_request_failed', $message );
+		$attempts = 0;
+		add_filter(
+			'http_request_args',
+			static function ( array $args ) use ( &$attempts ): array {
+				++$attempts;
+				return $args;
+			}
+		);
+
+		$result = WordPressAIClient::chat( 'System.', 'User.', null, null, ResponseSchema::get( $surface ) );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( $message, $result->get_error_message() );
+		$this->assertSame( $expected_attempts, $attempts );
+	}
+
+	public static function numeric_schema_error_cases(): array {
+		return [
+			'repeated rejection stops after one retry' => [ "Bad Request (400) - output_format.schema: For 'number' type, properties maximum, minimum are not supported", 2 ],
+			'integer constraint rejection'             => [ "Bad Request (400) - output_config.format.schema: For 'integer' type, properties multipleOf are not supported", 2 ],
+			'authentication failure'                   => [ 'Unauthorized (401) - invalid API key', 1 ],
+			'unrelated bad request'                    => [ 'Bad Request (400) - maximum output tokens exceeded', 1 ],
+			'non-numeric schema rejection'             => [ "Bad Request (400) - output_format.schema: For 'string' type, properties minLength are not supported", 1 ],
+			'mixed unsupported schema keywords'        => [ "Bad Request (400) - output_format.schema: For 'number' type, properties minimum, enum are not supported", 1 ],
+			'no numeric constraints to remove'         => [ "Bad Request (400) - output_format.schema: For 'number' type, properties maximum, minimum are not supported", 1, 'content' ],
+			'no output schema supplied'                => [ "Bad Request (400) - output_format.schema: For 'number' type, properties maximum, minimum are not supported", 1, 'unknown' ],
+		];
+	}
+
 	public function test_chat_finishes_its_trace_when_the_schema_fallback_prompt_cannot_be_built(): void {
 		WordPressTestState::$ai_client_supported            = true;
 		WordPressTestState::$ai_client_generate_text_result = new \WP_Error(

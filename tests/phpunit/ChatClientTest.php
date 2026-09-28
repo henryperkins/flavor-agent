@@ -278,6 +278,56 @@ final class ChatClientTest extends TestCase {
 		);
 	}
 
+	/**
+	 * @dataProvider provider_managed_recommendation_surfaces
+	 */
+	public function test_provider_managed_recommendations_retry_rejected_numeric_schema_constraints( string $surface ): void {
+		WordPressTestState::$ai_client_supported = true;
+		$attempt_schemas                         = [];
+		add_filter(
+			'http_request_args',
+			static function ( array $args ) use ( &$attempt_schemas ): array {
+				$attempt_schemas[]                                  = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
+				WordPressTestState::$ai_client_generate_text_result = 1 === count( $attempt_schemas )
+					? new \WP_Error(
+						'wp_ai_client_request_failed',
+						"Bad Request (400) - output_format.schema: For 'number' type, properties maximum, minimum are not supported",
+						[ 'status' => 400 ]
+					)
+					: '{"explanation":"OK."}';
+
+				return $args;
+			}
+		);
+
+		$result = ChatClient::chat( 'System.', 'User.', ResponseSchema::get( $surface ) );
+
+		$this->assertSame( '{"explanation":"OK."}', $result );
+		$this->assertCount( 2, $attempt_schemas );
+		$this->assertIsArray( $attempt_schemas[0] );
+		$this->assertIsArray( $attempt_schemas[1] );
+		$this->assertStringContainsString( '"minimum":0', wp_json_encode( $attempt_schemas[0] ) );
+		$this->assertDoesNotMatchRegularExpression(
+			'/"(?:minimum|maximum|exclusiveMinimum|exclusiveMaximum|multipleOf)":/',
+			wp_json_encode( $attempt_schemas[1] )
+		);
+		$this->assertSame( $attempt_schemas[0]['required'], $attempt_schemas[1]['required'] );
+		$this->assertFalse( $attempt_schemas[1]['additionalProperties'] );
+		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
+	}
+
+	public static function provider_managed_recommendation_surfaces(): array {
+		return [
+			'block'         => [ 'block' ],
+			'template'      => [ 'template' ],
+			'template part' => [ 'template_part' ],
+			'post blocks'   => [ 'post_blocks' ],
+			'style'         => [ 'style' ],
+			'navigation'    => [ 'navigation' ],
+			'pattern'       => [ 'pattern' ],
+		];
+	}
+
 	public function test_connector_json_schema_closes_object_nodes_for_schema_compatible_connector(): void {
 		WordPressTestState::$options                            = [
 			'flavor_agent_openai_provider' => 'openai',
