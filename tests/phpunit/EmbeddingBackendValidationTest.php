@@ -500,7 +500,8 @@ final class EmbeddingBackendValidationTest extends TestCase {
 		$this->assertSame( 'OpenAI connector output', $result );
 		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
 		$this->assertArrayNotHasKey( 'reasoning', WordPressTestState::$last_ai_client_prompt );
-		$this->assertArrayNotHasKey( 'customOptions', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt['customOptions'] ?? [] );
+		$this->assertSame( 16384, WordPressTestState::$last_ai_client_prompt['model_config']['maxTokens'] ?? null );
 		$this->assertSame( [], WordPressTestState::$last_remote_post );
 	}
 

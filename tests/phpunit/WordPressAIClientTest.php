@@ -305,6 +305,142 @@ final class WordPressAIClientTest extends TestCase {
 			],
 			WordPressTestState::$last_ai_client_prompt['model_config'] ?? null
 		);
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+		$this->assertSame( 500, $meta['requestSummary']['maxOutputTokens'] ?? null );
+	}
+
+	public function test_chat_provides_room_for_thinking_and_response_tokens_when_no_limit_is_supplied(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
+
+		$this->assertSame( '{"explanation":"OK."}', WordPressAIClient::chat( 'System.', 'User.' ) );
+		$this->assertSame( 16384, WordPressTestState::$last_ai_client_prompt['model_config']['maxTokens'] ?? null );
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+		$this->assertSame( 16384, $meta['requestSummary']['maxOutputTokens'] ?? null );
+	}
+
+	/**
+	 * @dataProvider incomplete_result_provider
+	 */
+	public function test_chat_reports_incomplete_sdk_results_without_retrying_or_exposing_thinking(
+		string $finish_reason,
+		string $text,
+		string $expected_code
+	): void {
+		self::register_ai_provider_connector( 'anthropic', 'Anthropic' );
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = self::sdk_text_result( $finish_reason, $text );
+
+		$result = WordPressAIClient::chat( 'System.', 'User.' );
+		$meta   = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( $expected_code, $result->get_error_code() );
+		$this->assertSame( 502, $result->get_error_data()['status'] ?? null );
+		if ( 'length' === $finish_reason ) {
+			$this->assertStringContainsString( 'token limit', $result->get_error_message() );
+		}
+		$this->assertSame( 'anthropic', $meta['provider'] );
+		$this->assertSame( 'claude-sonnet-5', $meta['model'] );
+		$this->assertSame( $finish_reason, $meta['responseSummary']['finishReason'] ?? null );
+		$this->assertSame( strlen( $text ), $meta['responseSummary']['bodyBytes'] ?? null );
+		$this->assertSame(
+			[
+				'total'  => 17852,
+				'input'  => 13756,
+				'output' => 4096,
+			],
+			$meta['tokenUsage']
+		);
+		$this->assertSame( $expected_code, $meta['errorSummary']['code'] ?? null );
+		$this->assertSame( [ 'User.' ], WordPressTestState::$ai_client_prompt_calls );
+		$this->assertStringNotContainsString( 'private thinking', wp_json_encode( $meta ) );
+	}
+
+	public static function incomplete_result_provider(): array {
+		return [
+			'thinking exhausts the output limit'     => [ 'length', '', 'incomplete_response' ],
+			'partial JSON exhausts the output limit' => [ 'length', '{"explanation":', 'incomplete_response' ],
+			'empty output with no token limit'       => [ 'stop', '', 'empty_response' ],
+		];
+	}
+
+	public function test_chat_records_the_actual_sdk_provider_and_model_on_success_and_clears_them_for_the_next_request(): void {
+		self::register_ai_provider_connector( 'anthropic', 'Anthropic' );
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = self::sdk_text_result( 'stop', '{"explanation":"OK."}' );
+
+		$this->assertSame( '{"explanation":"OK."}', WordPressAIClient::chat( 'System.', 'User.' ) );
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+		$this->assertSame( 'anthropic', $meta['provider'] );
+		$this->assertSame( 'claude-sonnet-5', $meta['model'] );
+		$this->assertSame( 'Anthropic', $meta['connectorLabel'] );
+		$this->assertSame( 'stop', $meta['responseSummary']['finishReason'] ?? null );
+		$this->assertArrayNotHasKey( 'errorSummary', $meta );
+
+		WordPressTestState::$ai_client_generate_text_result = '';
+		$this->assertInstanceOf( \WP_Error::class, WordPressAIClient::chat( 'System.', 'Next request.' ) );
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+		$this->assertSame( 'provider-managed', $meta['model'] );
+		$this->assertArrayNotHasKey( 'finishReason', $meta['responseSummary'] );
+	}
+
+	/**
+	 * Match GenerativeAiResult::toArray() and its content-only toText() contract.
+	 */
+	private static function sdk_text_result( string $finish_reason, string $text ): object {
+		return new class( $finish_reason, $text ) {
+			public function __construct( private string $finish_reason, private string $text ) {}
+
+			// phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- Mirrors the SDK method.
+			public function toText(): string {
+				if ( '' === $this->text ) {
+					throw new \RuntimeException( 'No text content found in first candidate.' );
+				}
+
+				return $this->text;
+			}
+
+			// phpcs:ignore WordPress.NamingConventions.ValidFunctionName.MethodNameInvalid -- Mirrors the SDK method.
+			public function toArray(): array {
+				return [
+					'id'               => 'msg-fixture',
+					'providerMetadata' => [
+						'id'   => 'anthropic',
+						'name' => 'Anthropic',
+					],
+					'modelMetadata'    => [
+						'id'   => 'claude-sonnet-5',
+						'name' => 'Claude Sonnet 5',
+					],
+					'tokenUsage'       => [
+						'promptTokens'     => 13756,
+						'completionTokens' => 4096,
+						'totalTokens'      => 17852,
+					],
+					'candidates'       => [
+						[
+							'finishReason' => $this->finish_reason,
+							'message'      => [
+								'role'  => 'model',
+								'parts' => [
+									[
+										'type'    => 'text',
+										'channel' => 'thought',
+										'text'    => 'private thinking',
+									],
+									[
+										'type'    => 'text',
+										'channel' => 'content',
+										'text'    => $this->text,
+									],
+								],
+							],
+						],
+					],
+				];
+			}
+		};
 	}
 
 	public function test_chat_applies_preferred_text_models_to_direct_ai_client_prompt(): void {
@@ -983,6 +1119,8 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( 'System.', $attempts[1]['system'] );
 		$this->assertSame( 'medium', $attempts[1]['reasoning'] );
 		$this->assertSame( 0.3, $attempts[1]['model_config']['temperature'] );
+		$this->assertSame( 16384, $attempts[0]['model_config']['maxTokens'] );
+		$this->assertSame( 16384, $attempts[1]['model_config']['maxTokens'] );
 		$this->assertArrayNotHasKey( 'provider', $attempts[1] );
 		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
 		$this->assertSame( 'unsupported_numeric_constraints', $meta['requestSummary']['outputSchemaFallback'] ?? null );
@@ -1228,7 +1366,7 @@ final class WordPressAIClientTest extends TestCase {
 
 		$this->assertSame( '{"explanation":"Use the accent color."}', $result );
 		$this->assertArrayNotHasKey( 'reasoning', WordPressTestState::$last_ai_client_prompt );
-		$this->assertArrayNotHasKey( 'customOptions', WordPressTestState::$last_ai_client_prompt );
+		$this->assertSame( [], WordPressTestState::$last_ai_client_prompt['customOptions'] ?? [] );
 	}
 
 	public function test_chat_records_token_and_latency_metrics_when_the_ai_client_returns_structured_metadata(): void {

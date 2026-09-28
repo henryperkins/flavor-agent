@@ -473,6 +473,39 @@ describe( 'activity log utils', () => {
 		} );
 	} );
 
+	test( 'normalizeActivityEntries exposes the model, budget, and finish reason for a thinking-only response', () => {
+		const [ entry ] = normalizeActivityEntries( [
+			createEntry( {
+				request: {
+					ai: {
+						providerLabel: 'Anthropic',
+						model: 'claude-sonnet-5',
+						requestSummary: { maxOutputTokens: 16384 },
+						responseSummary: {
+							bodyBytes: 0,
+							processingMs: 55720,
+							finishReason: 'length',
+						},
+						errorSummary: {
+							wrappedMessage:
+								'The AI model reached a token limit before completing the response.',
+						},
+					},
+				},
+			} ),
+		] );
+
+		expect( entry ).toMatchObject( {
+			provider: 'Anthropic',
+			model: 'claude-sonnet-5',
+			requestPayload: '16384 max output tokens',
+			responseSummary:
+				'0 bytes · 55720 ms processing · finish reason length',
+			transportError:
+				'The AI model reached a token limit before completing the response.',
+		} );
+	} );
+
 	test( 'normalizeActivityEntries derives operation, document, path, and diff metadata', () => {
 		const entries = normalizeActivityEntries( [
 			createEntry( {

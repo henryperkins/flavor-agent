@@ -1262,6 +1262,10 @@ function getRequestDiagnostics( request = {}, admin = {} ) {
 		[ 'ai', 'responseSummary', 'processingMs' ],
 		[ 'responseSummary', 'processingMs' ],
 	] );
+	const finishReason = getFirstString( request, [
+		[ 'ai', 'responseSummary', 'finishReason' ],
+		[ 'responseSummary', 'finishReason' ],
+	] );
 	const retryAfter = getFirstNumber( request, [
 		[ 'ai', 'responseSummary', 'retryAfter' ],
 		[ 'responseSummary', 'retryAfter' ],
@@ -1326,6 +1330,7 @@ function getRequestDiagnostics( request = {}, admin = {} ) {
 			httpStatus !== null ? `HTTP ${ httpStatus }` : null,
 			responseBodyBytes !== null ? `${ responseBodyBytes } bytes` : null,
 			processingMs !== null ? `${ processingMs } ms processing` : null,
+			finishReason ? `finish reason ${ finishReason }` : null,
 			retryAfter !== null ? `${ retryAfter } s retry-after` : null,
 			responseRegion ? `region ${ responseRegion }` : null,
 		]

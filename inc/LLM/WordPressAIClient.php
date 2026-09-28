@@ -24,6 +24,8 @@ final class WordPressAIClient {
 	private const PROMPT_PREVENTED_CODE       = 'prompt_prevented';
 	private const PROMPT_PREVENTED_MESSAGE    = 'AI is currently disabled on this site by the wp_ai_client_prevent_prompt filter.';
 	private const DEFAULT_REQUEST_TIMEOUT     = 90;
+	// Reasoning models share this budget between thinking and answer text.
+	private const DEFAULT_MAX_OUTPUT_TOKENS   = 16384;
 	private const REASONING_EFFORTS           = [ 'low', 'medium', 'high', 'xhigh' ];
 	private const MODEL_CONFIG_OPTION_KEY_MAP = [
 		'candidate_count'   => 'candidateCount',
@@ -155,6 +157,7 @@ final class WordPressAIClient {
 		$selection         = self::resolve_provider_model_selection( $provider );
 		$resolved_provider = $selection['provider'];
 		$model_options     = WordPressAIPolicy::sanitize_text_generation_options( $model_options ?? [] );
+		$model_options    += [ 'max_tokens' => self::DEFAULT_MAX_OUTPUT_TOKENS ];
 		$system_prompt     = WordPressAIPolicy::system_instruction(
 			$system_prompt,
 			$ability_name,
@@ -239,7 +242,8 @@ final class WordPressAIClient {
 			$reasoning_effort,
 			$schema,
 			$request_timeout_seconds,
-			$selection
+			$selection,
+			$model_options['max_tokens']
 		);
 		$trace_consumed          = RequestTrace::is_consumed();
 		$owns_trace              = $trace_consumed && ! RequestTrace::is_active();
@@ -332,7 +336,8 @@ final class WordPressAIClient {
 							$reasoning_effort,
 							$schema,
 							$request_timeout_seconds,
-							$selection
+							$selection,
+							$model_options['max_tokens']
 						);
 						$request_diagnostics['requestSummary']['outputSchemaFallback'] = $fallback_reason;
 						$result = self::call_prompt_method_with_request_timeout(
@@ -392,7 +397,10 @@ final class WordPressAIClient {
 			return $result;
 		}
 
-		$parsed           = self::normalize_generated_text_result( $result, $started_at, $request_diagnostics );
+		$parsed = self::normalize_generated_text_result( $result, $started_at, $request_diagnostics );
+		if ( is_array( $parsed['configuration'] ?? null ) ) {
+			Provider::record_runtime_chat_configuration( $parsed['configuration'] );
+		}
 		$response_context = [
 			'textBytes'       => strlen( $parsed['text'] ),
 			'textEmpty'       => '' === $parsed['text'],
@@ -411,12 +419,16 @@ final class WordPressAIClient {
 		Provider::record_runtime_chat_metrics( $parsed['metrics'] );
 		Provider::record_runtime_chat_diagnostics( $parsed['diagnostics'] );
 
-		if ( '' === $parsed['text'] ) {
-			$error         = new \WP_Error(
-				'empty_response',
-				'The WordPress AI client returned an empty response.',
+		$token_limit_reached = 'length' === ( $parsed['diagnostics']['responseSummary']['finishReason'] ?? '' );
+		if ( $token_limit_reached || '' === $parsed['text'] ) {
+			$error = new \WP_Error(
+				$token_limit_reached ? 'incomplete_response' : 'empty_response',
+				$token_limit_reached
+					? 'The AI model reached a token limit before completing the response.'
+					: 'The WordPress AI client returned an empty response.',
 				[ 'status' => 502 ]
 			);
+			Provider::record_runtime_chat_diagnostics( self::with_error_summary( $parsed['diagnostics'], $error ) );
 			$error_context = self::build_error_trace_context( $error );
 			if ( $trace_consumed ) {
 				RequestTrace::event(
@@ -1813,7 +1825,7 @@ final class WordPressAIClient {
 	/**
 	 * @param string|array<string, mixed>|object $result
 	 * @param array<string, mixed> $request_diagnostics
-	 * @return array{text: string, metrics: array<string, mixed>|null, diagnostics: array<string, mixed>|null}
+	 * @return array{text: string, metrics: array<string, mixed>|null, diagnostics: array<string, mixed>, configuration?: array{provider: string, model: string}|null}
 	 */
 	private static function normalize_generated_text_result( mixed $result, float $started_at, array $request_diagnostics ): array {
 		$elapsed_ms = max( 0, (int) round( ( microtime( true ) - $started_at ) * 1000 ) );
@@ -1866,14 +1878,31 @@ final class WordPressAIClient {
 			$metrics['latencyMs'] = $latency_ms;
 		}
 
+		// GenerativeAiResult metadata identifies the actual selected model even
+		// when the request left provider selection to Settings > Connectors.
+		$provider_id   = $result['providerMetadata']['id'] ?? null;
+		$model_id      = $result['modelMetadata']['id'] ?? null;
+		$configuration = is_string( $provider_id ) && '' !== trim( $provider_id )
+			? [
+				'provider' => $provider_id,
+				'model'    => is_string( $model_id ) ? $model_id : '',
+			]
+			: null;
+		$finish_reason = $result['candidates'][0]['finishReason'] ?? null;
+		$finish_reason = in_array( $finish_reason, [ 'stop', 'length', 'content_filter', 'tool_calls', 'error' ], true )
+			? $finish_reason
+			: '';
+
 		return [
-			'text'        => $text,
-			'metrics'     => $metrics,
-			'diagnostics' => self::with_response_summary(
+			'text'          => $text,
+			'metrics'       => $metrics,
+			'configuration' => $configuration,
+			'diagnostics'   => self::with_response_summary(
 				$request_diagnostics,
 				$text,
 				(int) $metrics['latencyMs'],
-				self::extract_provider_request_id( $result )
+				self::extract_provider_request_id( $result ),
+				$finish_reason
 			),
 		];
 	}
@@ -1890,13 +1919,15 @@ final class WordPressAIClient {
 		?string $reasoning_effort,
 		?array $schema,
 		int $timeout_seconds,
-		array $selection
+		array $selection,
+		int $max_output_tokens
 	): array {
 		$provider         = is_string( $provider ) ? sanitize_key( $provider ) : '';
 		$request_payload  = [
 			'provider'     => $provider,
 			'instructions' => $system_prompt,
 			'input'        => $user_prompt,
+			'max_tokens'   => $max_output_tokens,
 		];
 		$reasoning_effort = self::normalize_reasoning_effort_value( $reasoning_effort );
 		$resolved_model   = trim( (string) ( $selection['model'] ?? '' ) );
@@ -1926,6 +1957,7 @@ final class WordPressAIClient {
 					'bodyBytes'             => self::json_byte_length( $request_payload ),
 					'instructionsChars'     => strlen( $system_prompt ),
 					'inputChars'            => strlen( $user_prompt ),
+					'maxOutputTokens'       => $max_output_tokens,
 					'reasoningEffort'       => $reasoning_effort,
 					'resolvedProvider'      => $provider,
 					'resolvedModel'         => '' !== $provider
@@ -1948,7 +1980,8 @@ final class WordPressAIClient {
 		array $diagnostics,
 		string $text,
 		int $processing_ms,
-		string $provider_request_id = ''
+		string $provider_request_id = '',
+		string $finish_reason = ''
 	): array {
 		$response_summary = [
 			'bodyBytes'    => strlen( $text ),
@@ -1957,6 +1990,9 @@ final class WordPressAIClient {
 
 		if ( '' !== $provider_request_id ) {
 			$response_summary['providerRequestId'] = $provider_request_id;
+		}
+		if ( '' !== $finish_reason ) {
+			$response_summary['finishReason'] = $finish_reason;
 		}
 
 		$diagnostics['responseSummary'] = $response_summary;

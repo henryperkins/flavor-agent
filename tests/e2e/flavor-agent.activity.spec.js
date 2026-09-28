@@ -195,6 +195,68 @@ test( 'AI Activity page loads entries, updates selection, and exposes the filter
 	).toBeVisible();
 } );
 
+test( 'AI Activity identifies a model response that exhausted its token budget', async ( {
+	page,
+} ) => {
+	const error =
+		'The AI model reached a token limit before completing the response.';
+	const entry = {
+		...ACTIVITY_ENTRIES[ 0 ],
+		id: 'activity-output-limit',
+		type: 'request_diagnostic',
+		suggestion: 'Block request failed: ' + error,
+		undo: { status: 'failed', canUndo: false, error },
+		request: {
+			ai: {
+				providerLabel: 'Anthropic',
+				model: 'claude-sonnet-5',
+				requestSummary: { maxOutputTokens: 16384 },
+				responseSummary: {
+					bodyBytes: 0,
+					processingMs: 55720,
+					finishReason: 'length',
+				},
+				errorSummary: { code: 'incomplete_response', wrappedMessage: error },
+			},
+		},
+	};
+	await page.route(
+		'**/wp-json/flavor-agent/v1/activity**',
+		async ( route ) => {
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(
+					buildActivityResponse( route.request().url(), [ entry ], {
+						summary: { applied: 0, failed: 1 },
+					} )
+				),
+			} );
+		}
+	);
+	await page.goto(
+		'/wp-admin/options-general.php?page=flavor-agent-activity',
+		{ waitUntil: 'domcontentloaded' }
+	);
+	await waitForWordPressReady( page );
+	const sidebar = page.locator( '.flavor-agent-activity-log__sidebar' );
+	await expect( sidebar ).toContainText( 'Request failed' );
+	await sidebar.getByText( 'Provider diagnostics', { exact: true } ).click();
+	await expect(
+		sidebar.getByText( 'claude-sonnet-5', { exact: true } )
+	).toBeVisible();
+	await expect(
+		sidebar.getByText( '16384 max output tokens', { exact: true } )
+	).toBeVisible();
+	await expect(
+		sidebar.getByText(
+			'0 bytes · 55720 ms processing · finish reason length',
+			{ exact: true }
+		)
+	).toBeVisible();
+	await expect( sidebar.getByText( error, { exact: true } ).last() ).toBeVisible();
+} );
+
 test( 'AI Activity linked-row mode clears the URL and keeps discovery badges visible', async ( {
 	page,
 } ) => {
