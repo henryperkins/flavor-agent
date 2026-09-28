@@ -2073,6 +2073,7 @@ final class ActivityRepositoryTest extends TestCase {
 
 	public function test_create_merges_newer_terminal_undo_state_when_the_row_already_exists(): void {
 		Repository::install();
+		WordPressTestState::$capabilities['edit_theme_options'] = true;
 
 		Repository::create(
 			$this->build_template_entry( 'activity-1', '2026-03-24T10:00:00Z' )
@@ -2093,6 +2094,7 @@ final class ActivityRepositoryTest extends TestCase {
 
 		$this->assertIsArray( $merged );
 		$this->assertSame( 'undone', $merged['undo']['status'] ?? null );
+		$this->assertSame( 'client-reported', $merged['undo']['verification'] ?? null );
 		$this->assertSame(
 			'2026-03-24T10:05:00+00:00',
 			$merged['undo']['updatedAt'] ?? null
@@ -2447,12 +2449,18 @@ final class ActivityRepositoryTest extends TestCase {
 
 		$entries = [
 			[
-				'id'    => 'pending-1',
-				'apply' => [ 'status' => 'pending' ],
+				'id'        => 'pending-1',
+				'type'      => 'apply_global_styles_suggestion',
+				'surface'   => 'global-styles',
+				'applyLane' => 'server-executed',
+				'apply'     => [ 'status' => 'pending' ],
 			],
 			[
-				'id'    => 'pending-2',
-				'apply' => [ 'status' => 'pending' ],
+				'id'        => 'pending-2',
+				'type'      => 'apply_global_styles_suggestion',
+				'surface'   => 'global-styles',
+				'applyLane' => 'server-executed',
+				'apply'     => [ 'status' => 'pending' ],
 			],
 			[
 				'id'    => 'applied-1',
@@ -2481,8 +2489,11 @@ final class ActivityRepositoryTest extends TestCase {
 
 		$entries = [
 			[
-				'id'    => 'overdue-1',
-				'apply' => [
+				'id'        => 'overdue-1',
+				'type'      => 'apply_global_styles_suggestion',
+				'surface'   => 'global-styles',
+				'applyLane' => 'server-executed',
+				'apply'     => [
 					'status'    => 'pending',
 					'expiresAt' => gmdate( 'c', time() - 60 ),
 				],

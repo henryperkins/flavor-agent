@@ -20,6 +20,8 @@ import {
 	getBlockActivityUndoState,
 	getPendingActivitySyncType,
 	getResolvedActivityEntries,
+	isServerManagedActivity,
+	getServerManagedUndoMessage,
 } from './activity-history';
 import {
 	buildUndoAttributeUpdates,
@@ -899,6 +901,12 @@ export function createUndoActivityAction( {
 				} catch {
 					// Fall back to the local activity cache when the server is unavailable.
 				}
+			}
+
+			if ( isServerManagedActivity( activity ) ) {
+				const message = getServerManagedUndoMessage( activity );
+				localDispatch( setUndoState( 'error', message, activityId ) );
+				return { ok: false, error: message };
 			}
 
 			const entityEntries = getEntityActivityEntries(

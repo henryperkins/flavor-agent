@@ -309,6 +309,7 @@ final class ApplyAbilitiesTest extends TestCase {
 				'before'          => [],
 				'after'           => [],
 				'executionResult' => 'pending',
+				'applyLane'       => 'server-executed',
 				'undo'            => [ 'status' => 'not_applicable' ],
 				'request'         => [
 					'apply' => [
@@ -438,7 +439,7 @@ final class ApplyAbilitiesTest extends TestCase {
 	}
 
 	/**
-	 * Persist an executed editor-shaped Global Styles row whose snapshots
+	 * Persist an executed server-authored Global Styles row whose snapshots
 	 * match the seeded entity state.
 	 *
 	 * @return array<string, mixed>
@@ -447,6 +448,7 @@ final class ApplyAbilitiesTest extends TestCase {
 		$created = \FlavorAgent\Activity\Repository::create(
 			[
 				'type'       => 'apply_global_styles_suggestion',
+				'applyLane'  => 'server-executed',
 				'surface'    => 'global-styles',
 				'target'     => [ 'globalStylesId' => self::GLOBAL_STYLES_ID ],
 				'suggestion' => 'Accent text',
@@ -511,6 +513,7 @@ final class ApplyAbilitiesTest extends TestCase {
 			[
 				'id'              => $id,
 				'type'            => 'apply_post_blocks_suggestion',
+				'applyLane'       => 'server-executed',
 				'surface'         => 'post-blocks',
 				'target'          => $target,
 				'suggestion'      => 'Replace the paragraph',
@@ -1172,7 +1175,7 @@ final class ApplyAbilitiesTest extends TestCase {
 		$result = ApplyAbilities::undo_activity( [ 'activityId' => (string) $created['id'] ] );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'flavor_agent_undo_surface_unsupported', $result->get_error_code() );
+		$this->assertSame( 'flavor_agent_activity_not_undoable', $result->get_error_code() );
 	}
 
 	public function test_undo_activity_works_for_approved_external_rows(): void {
@@ -1238,6 +1241,7 @@ final class ApplyAbilitiesTest extends TestCase {
 		$activity = Repository::create(
 			[
 				'id'              => 'template-undo-row',
+				'applyLane'       => 'server-executed',
 				'type'            => 'apply_template_suggestion',
 				'surface'         => 'template',
 				'target'          => [
@@ -1330,6 +1334,7 @@ final class ApplyAbilitiesTest extends TestCase {
 		$activity = Repository::create(
 			[
 				'id'              => 'template-part-undo-row',
+				'applyLane'       => 'server-executed',
 				'type'            => 'apply_template_part_suggestion',
 				'surface'         => 'template-part',
 				'target'          => [

@@ -2,7 +2,12 @@ import { Button } from '@wordpress/components';
 import { useEffect, useRef, useState } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 
-import { isDiagnosticActivityEntry } from '../store/activity-history';
+import {
+	isDiagnosticActivityEntry,
+	isServerManagedActivity,
+	isServerExecutedApply,
+	getServerManagedUndoMessage,
+} from '../store/activity-history';
 import { formatCount } from '../utils/format-count';
 import { truncateActivityTitle } from '../utils/activity-title';
 
@@ -106,6 +111,15 @@ function getExternalApplyStatus( entry ) {
 function getStatusLabel( entry ) {
 	const isEditorApply = entry?.applyLane === 'editor-state';
 	if (
+		isServerManagedActivity( entry ) &&
+		! isServerExecutedApply( entry )
+	) {
+		return {
+			label: __( 'Undo unavailable', 'flavor-agent' ),
+			tone: 'review',
+		};
+	}
+	if (
 		isDiagnosticActivityEntry( entry ) &&
 		entry?.undo?.status !== 'failed'
 	) {
@@ -177,6 +191,16 @@ function getStatusLabel( entry ) {
 
 	if (
 		entry?.undo?.status === 'available' &&
+		isServerManagedActivity( entry )
+	) {
+		return {
+			label: __( 'Applied on server', 'flavor-agent' ),
+			tone: 'success',
+		};
+	}
+
+	if (
+		entry?.undo?.status === 'available' &&
 		entry?.undo?.canUndo === true
 	) {
 		return {
@@ -201,6 +225,13 @@ function getStatusLabel( entry ) {
 }
 
 function getExternalApplyMessage( entry ) {
+	if (
+		isServerManagedActivity( entry ) &&
+		( ! isServerExecutedApply( entry ) ||
+			entry?.undo?.status === 'available' )
+	) {
+		return getServerManagedUndoMessage( entry );
+	}
 	const status = getExternalApplyStatus( entry );
 
 	switch ( status ) {
@@ -407,6 +438,7 @@ export default function AIActivitySection( {
 						const externalApplyMessage =
 							getExternalApplyMessage( entry );
 						const canUndo =
+							! isServerManagedActivity( entry ) &&
 							entry?.undo?.status === 'available' &&
 							entry?.undo?.canUndo === true &&
 							typeof onUndo === 'function';

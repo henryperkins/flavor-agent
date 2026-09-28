@@ -39,6 +39,43 @@ export const ORDERED_UNDO_BLOCKED_ERROR = __(
 	'flavor-agent'
 );
 
+export const SERVER_UNDO_REQUIRED_MESSAGE = __(
+	'Use server-side undo through the connected agent to reverse this change.',
+	'flavor-agent'
+);
+
+export function isServerExecutedApply( entry ) {
+	const types = {
+		'global-styles': 'apply_global_styles_suggestion',
+		'style-book': 'apply_style_book_suggestion',
+		template: 'apply_template_suggestion',
+		'template-part': 'apply_template_part_suggestion',
+		'post-blocks': 'apply_post_blocks_suggestion',
+	};
+	return (
+		entry?.applyLane === 'server-executed' &&
+		Object.hasOwn( types, entry?.surface ) &&
+		types[ entry.surface ] === entry?.type
+	);
+}
+
+export function getServerManagedUndoMessage( entry ) {
+	return isServerExecutedApply( entry )
+		? SERVER_UNDO_REQUIRED_MESSAGE
+		: __(
+				'Undo is unavailable for this activity. Review the current content before making changes.',
+				'flavor-agent'
+		  );
+}
+
+export function isServerManagedActivity( entry ) {
+	return (
+		entry?.applyLane === 'server-executed' ||
+		Object.hasOwn( entry || {}, 'apply' ) ||
+		Object.hasOwn( entry?.request || {}, 'apply' )
+	);
+}
+
 let activitySequence = 0;
 
 function isRequestDiagnosticEntry( entry ) {
@@ -340,8 +377,11 @@ function getBaseUndoState( entry ) {
 }
 
 function getPreliminaryUndoState( entry, runtimeUndoState = null ) {
-	const timestamp = normalizeActivityTimestamp( entry?.timestamp );
 	const baseUndo = getBaseUndoState( entry );
+	if ( isServerManagedActivity( entry ) ) {
+		return { ...baseUndo, canUndo: false };
+	}
+	const timestamp = normalizeActivityTimestamp( entry?.timestamp );
 
 	if ( ! runtimeUndoState ) {
 		return buildUndoState( timestamp, baseUndo );

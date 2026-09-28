@@ -93,6 +93,7 @@ final class PersistenceOutcomeTest extends TestCase {
 	}
 
 	public function test_replayed_apply_cannot_relabel_an_existing_historical_row(): void {
+		WordPressTestState::$capabilities['edit_post'] = true;
 		$entry = $this->apply_entry();
 		unset( $entry['applyLane'] );
 		Repository::create( $entry );

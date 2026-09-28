@@ -283,6 +283,7 @@ test( 'AI Activity renders the rich visual diff viewer for pending governance ro
 			id: 'activity-style-apply',
 			type: 'apply_global_styles_suggestion',
 			surface: 'global-styles',
+			applyLane: 'server-executed',
 			status: 'pending',
 			target: {
 				globalStylesId: '17',
@@ -340,13 +341,17 @@ test( 'AI Activity renders the rich visual diff viewer for pending governance ro
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify(
-					buildActivityResponse( route.request().url(), governanceEntries, {
-						summary: {
-							total: 1,
-							applied: 0,
-							pending: 1,
-						},
-					} )
+					buildActivityResponse(
+						route.request().url(),
+						governanceEntries,
+						{
+							summary: {
+								total: 1,
+								applied: 0,
+								pending: 1,
+							},
+						}
+					)
 				),
 			} );
 		}
@@ -380,7 +385,9 @@ test( 'AI Activity renders the rich visual diff viewer for pending governance ro
 	await expect( diffRow ).toContainText( 'Proposed only' );
 	await expect( diffRow ).toContainText( 'Not applied' );
 	await expect(
-		diffRow.locator( '.flavor-agent-activity-log__visual-diff-chip' ).first()
+		diffRow
+			.locator( '.flavor-agent-activity-log__visual-diff-chip' )
+			.first()
 	).toBeVisible();
 	await expect(
 		page.locator( '.flavor-agent-activity-log__detail-section' ).filter( {
@@ -388,6 +395,71 @@ test( 'AI Activity renders the rich visual diff viewer for pending governance ro
 		} )
 	).toBeVisible();
 } );
+
+for ( const [ label, identity ] of [
+	[ 'editor lane', { applyLane: 'editor-state' } ],
+	[ 'missing lane', {} ],
+	[
+		'non-apply type',
+		{ applyLane: 'server-executed', type: 'request_diagnostic' },
+	],
+] ) {
+	test( `AI Activity rejects governance claims from a row with ${ label }`, async ( {
+		page,
+	} ) => {
+		const entry = {
+			...ACTIVITY_ENTRIES[ 0 ],
+			type: 'apply_global_styles_suggestion',
+			surface: 'global-styles',
+			status: 'pending',
+			apply: {
+				status: 'pending',
+				requestedBy: 7,
+				decidedBy: 1,
+				decidedByName: 'Site Admin',
+				executedAt: '2026-06-10T00:00:00Z',
+				attestationStatus: 'recorded',
+			},
+			undo: {
+				status: 'undone',
+				verification: 'client-reported',
+				attestationStatus: 'recorded',
+			},
+			...identity,
+		};
+		await page.route(
+			'**/wp-json/flavor-agent/v1/activity**',
+			async ( route ) => {
+				await route.fulfill( {
+					status: 200,
+					contentType: 'application/json',
+					body: JSON.stringify(
+						buildActivityResponse( route.request().url(), [
+							entry,
+						] )
+					),
+				} );
+			}
+		);
+		await page.goto(
+			'/wp-admin/options-general.php?page=flavor-agent-activity'
+		);
+		await waitForWordPressReady( page );
+		const sidebar = page.locator( '.flavor-agent-activity-log__sidebar' );
+		await expect( sidebar ).toContainText( entry.suggestion );
+		await expect( sidebar ).not.toContainText( 'Governance evidence' );
+		await expect( sidebar ).not.toContainText( 'Site Admin' );
+		await expect( sidebar ).not.toContainText(
+			'Undo attestation recorded'
+		);
+		await expect(
+			page.getByRole( 'button', { name: 'Approve', exact: true } )
+		).toHaveCount( 0 );
+		await expect(
+			page.getByRole( 'button', { name: 'Reject', exact: true } )
+		).toHaveCount( 0 );
+	} );
+}
 
 test( 'AI Activity page renders an inline load error instead of the empty activity copy', async ( {
 	page,

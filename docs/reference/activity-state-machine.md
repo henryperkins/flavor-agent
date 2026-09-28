@@ -18,6 +18,10 @@ Use it when you need to answer:
 
 Activity history is also maintained as a scoped client session. `loadActivitySession()` hydrates the current scope, merges any pending local entries, and then refreshes from the server-backed activity repository for that same scope.
 
+Client activity creation accepts the `applied`, `failed`, `review`, and `diagnostic` execution results. Approval lifecycle results and the `server-executed` lane are reserved for server authors. The create route removes `request.apply`, `undo.attestationStatus`, and `undo.attestationErrorCode`. Terminal undo states (`undone` or `failed`) received on this route are stored with `undo.verification: "client-reported"`; they do not establish server execution or an undo attestation.
+
+Creation checks the incoming entry's own permission context. Collection reads authorize their requested scope or global mode independently of extraneous `id` or `entry` parameters, and scoped reads filter out rows requiring additional capabilities. IDs linked to retained attestations stay reserved after the corresponding activity row is pruned.
+
 When server hydration requests `groupBySurface=true`, the repository returns the latest bounded window for each surface independently. A noisy read-only surface such as pattern request diagnostics must not evict executable history from template, block, style, or other surfaces in the same scope.
 
 ## External Apply Lifecycle (pre-apply)
@@ -125,13 +129,18 @@ The client also enforces this rule before sending the request:
 
 ## Retry and Merge Behavior
 
-When a `POST /activity` create request arrives for an entry that already exists (duplicate `activity_id`), the server merges rather than rejecting:
+When a `POST /activity` create request arrives for an entry that already exists (duplicate `activity_id`), the server first checks access to the stored entry and requires the same author, document scope, surface, and activity type. Rows carrying apply metadata or the `server-executed` lane reject editor retries. These checks also precede returning an unchanged row.
 
-- If the existing entry is `available` and the incoming entry is `failed` or `undone`, the server updates the existing row with the incoming undo state
+- If the matching editor entry is `available` and the incoming entry is `failed` or `undone`, the server records the incoming undo as `client-reported`, removes attestation claims, and preserves the original execution result. The write compares the previous undo state so a concurrent transition cannot be overwritten.
 - This handles the case where the client's original create response was lost but a local undo was already applied
+
+External apply decisions, review claims, pending counts, and admin notices require the `server-executed` lane and the apply activity type matching the row's surface. Older rows without that identity cannot enter these governance paths merely by carrying `request.apply`.
+
+The external `undo-activity` ability also requires that server apply identity before executing a stored snapshot or reporting an idempotent undo. Editor-authored and legacy rows without apply metadata remain available to the editor's own undo flow; the ability does not promote their snapshots into server authority. The inline editor activity UI disables local undo for rows carrying apply metadata or the server execution lane and directs available server changes to the connected agent's server-side undo.
 
 Undo sync retries follow a similar reconciliation model:
 
+- `POST /activity/{id}/undo` records a client report for editor rows. It rejects rows carrying apply metadata or the server execution lane; those require the `undo-activity` ability to check and reverse live state.
 - transient failures keep the local entry pending with `persistence.syncType = "undo"`
 - `409 flavor_agent_activity_undo_blocked` is treated as an authoritative non-retryable failure
 - `409 flavor_agent_activity_invalid_undo_transition` triggers a server refresh so the client can adopt the already-persisted `undone` or `failed` state instead of inventing a new local failure

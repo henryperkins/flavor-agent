@@ -24,6 +24,35 @@ import { getStyleBookUiState } from '../../style-book/dom';
 import { getBlockStructuralActivitySignature } from '../../utils/block-structural-actions';
 
 describe( 'activity history helpers', () => {
+	test.each( [
+		{ applyLane: 'server-executed' },
+		{ request: { apply: { status: 'available' } } },
+		{ apply: { status: 'available' } },
+	] )(
+		'keeps server apply history out of editor undo eligibility: %j',
+		( provenance ) => {
+			const entry = {
+				id: 'server-apply',
+				type: 'apply_global_styles_suggestion',
+				surface: 'global-styles',
+				target: { globalStylesId: '17' },
+				undo: { status: 'available', canUndo: true },
+				...provenance,
+			};
+			const runtimeResolver = () => ( {
+				status: 'available',
+				canUndo: true,
+			} );
+			expect(
+				getResolvedActivityEntries( [ entry ], runtimeResolver )[ 0 ]
+					.undo.canUndo
+			).toBe( false );
+			expect(
+				getLatestUndoableActivity( [ entry ], runtimeResolver )
+			).toBeNull();
+		}
+	);
+
 	test( 'registers new editor applies independently of display trimming and preserves v4 cache compatibility', () => {
 		window.sessionStorage.clear();
 		window.flavorAgentData = {

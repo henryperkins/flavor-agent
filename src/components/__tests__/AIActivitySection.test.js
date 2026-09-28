@@ -11,6 +11,72 @@ import AIActivitySection from '../AIActivitySection';
 const { getContainer, getRoot } = setupReactTest();
 
 describe( 'AIActivitySection', () => {
+	test( 'directs server-executed activity to server undo without an editor Undo button', () => {
+		act( () => {
+			getRoot().render(
+				<AIActivitySection
+					entries={ [
+						{
+							id: 'server-apply',
+							type: 'apply_global_styles_suggestion',
+							suggestion: 'Approved palette change',
+							surface: 'global-styles',
+							applyLane: 'server-executed',
+							undo: { status: 'available', canUndo: true },
+						},
+					] }
+					onUndo={ jest.fn() }
+				/>
+			);
+		} );
+		expect( getContainer().textContent ).toContain( 'server-side undo' );
+		expect(
+			Array.from( getContainer().querySelectorAll( 'button' ) ).some(
+				( button ) => button.textContent === 'Undo'
+			)
+		).toBe( false );
+	} );
+
+	test.each( [
+		{ apply: { status: 'executed' } },
+		{ request: { apply: { status: 'executed' } } },
+		{ applyLane: 'server-executed', type: 'apply_template_suggestion' },
+	] )(
+		'does not attribute an untrusted apply row to server execution: %j',
+		( identity ) => {
+			act( () => {
+				getRoot().render(
+					<AIActivitySection
+						entries={ [
+							{
+								id: 'legacy-apply',
+								type: 'apply_global_styles_suggestion',
+								surface: 'global-styles',
+								undo: { status: 'available', canUndo: true },
+								...identity,
+							},
+						] }
+						onUndo={ jest.fn() }
+					/>
+				);
+			} );
+			expect( getContainer().textContent ).not.toContain(
+				'Applied on server'
+			);
+			expect( getContainer().textContent ).not.toContain(
+				'connected agent'
+			);
+			expect( getContainer().textContent ).toContain(
+				'Undo is unavailable'
+			);
+			expect(
+				Array.from( getContainer().querySelectorAll( 'button' ) ).some(
+					( button ) => button.textContent === 'Undo'
+				)
+			).toBe( false );
+		}
+	);
+
 	beforeEach( () => {
 		delete window.flavorAgentData;
 	} );
@@ -382,6 +448,8 @@ describe( 'AIActivitySection', () => {
 					entries={ [
 						{
 							id: 'activity-pending',
+							type: 'apply_global_styles_suggestion',
+							applyLane: 'server-executed',
 							suggestion: 'Adjust the site palette',
 							surface: 'global-styles',
 							executionResult: 'pending',
@@ -395,6 +463,8 @@ describe( 'AIActivitySection', () => {
 						},
 						{
 							id: 'activity-rejected',
+							type: 'apply_style_book_suggestion',
+							applyLane: 'server-executed',
 							suggestion: 'Tighten button contrast',
 							surface: 'style-book',
 							executionResult: 'rejected',
@@ -409,6 +479,8 @@ describe( 'AIActivitySection', () => {
 						},
 						{
 							id: 'activity-expired',
+							type: 'apply_global_styles_suggestion',
+							applyLane: 'server-executed',
 							suggestion: 'Refresh link color',
 							surface: 'global-styles',
 							executionResult: 'expired',
@@ -422,6 +494,8 @@ describe( 'AIActivitySection', () => {
 						},
 						{
 							id: 'activity-failed',
+							type: 'apply_style_book_suggestion',
+							applyLane: 'server-executed',
 							suggestion: 'Apply paragraph spacing',
 							surface: 'style-book',
 							executionResult: 'failed',

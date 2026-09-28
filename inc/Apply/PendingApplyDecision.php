@@ -105,6 +105,10 @@ final class PendingApplyDecision {
 			);
 		}
 
+		if ( ! ActivityRepository::is_server_executed_apply( $entry ) ) {
+			return new \WP_Error( 'flavor_agent_apply_not_pending', 'Only server-authored external applies accept decisions.', [ 'status' => 409 ] );
+		}
+
 		$entry  = ActivityRepository::maybe_expire_pending_apply( $entry, $storage_context );
 		$apply  = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
 		$status = (string) ( $apply['status'] ?? '' );

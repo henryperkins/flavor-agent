@@ -383,6 +383,53 @@ describe( 'createUndoActivityAction', () => {
 		undoGlobalStyleSuggestionOperations.mockReturnValue( { ok: true } );
 	} );
 
+	test.each( [ 'available', 'failed', 'undone' ] )(
+		'refuses local mutation or terminal sync for a server apply with %s undo',
+		async ( status ) => {
+			const document = {
+				scopeKey: 'global_styles:17',
+				postType: 'global_styles',
+				entityId: '17',
+			};
+			const entry = {
+				id: 'server-apply',
+				type: 'apply_global_styles_suggestion',
+				surface: 'global-styles',
+				applyLane: 'server-executed',
+				document,
+				target: { globalStylesId: '17' },
+				undo: { status, canUndo: true },
+				persistence: { status: 'local' },
+			};
+			undoGlobalStyleSuggestionOperations.mockClear();
+			const updateActivityUndoState = jest.fn();
+			const undoActivity = createUndoActivityAction( {
+				getCurrentActivityScope: () => document,
+				setActivitySession: jest.fn(),
+				setUndoState: ( nextStatus, error ) => ( {
+					type: 'SET_UNDO_STATE',
+					status: nextStatus,
+					error,
+				} ),
+				updateActivityUndoState,
+			} );
+			const result = await undoActivity( entry.id )( {
+				dispatch: jest.fn(),
+				registry: {},
+				select: {
+					getActivityScopeKey: () => document.scopeKey,
+					getActivityLog: () => [ entry ],
+				},
+			} );
+			expect( result.ok ).toBe( false );
+			expect( result.error ).toContain( 'server-side undo' );
+			expect(
+				undoGlobalStyleSuggestionOperations
+			).not.toHaveBeenCalled();
+			expect( updateActivityUndoState ).not.toHaveBeenCalled();
+		}
+	);
+
 	test( 'targets the provided toast activity scope before resolving the undo entry', async () => {
 		const targetDocument = {
 			scopeKey: 'global_styles:17',

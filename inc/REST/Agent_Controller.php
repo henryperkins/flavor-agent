@@ -617,6 +617,7 @@ final class Agent_Controller {
 				)
 			)
 			: ActivityRepository::query( $activity_filters );
+		$entries = array_values( array_filter( $entries, [ ActivityPermissions::class, 'can_access_entry' ] ) );
 
 		return new \WP_REST_Response(
 			[
@@ -728,13 +729,30 @@ final class Agent_Controller {
 		}
 
 		$entry = self::sanitize_structured_value( $entry );
+		if ( ! ActivityPermissions::can_access_entry( $entry ) ) {
+			return ActivityPermissions::forbidden_error();
+		}
 		if ( in_array( $entry['after']['outcome']['event'] ?? '', PersistenceOutcome::SERVER_EVENTS, true ) ) {
 			return new \WP_Error( 'flavor_agent_persistence_server_authorship_required', 'Only the server can record a persistence verdict.', [ 'status' => 403 ] );
 		}
 		if ( 'server-executed' === ( $entry['applyLane'] ?? null ) ) {
 			return new \WP_Error( 'flavor_agent_activity_invalid_entry', 'The server execution lane cannot be set by an editor activity request.', [ 'status' => 400 ] );
 		}
-		$result = ActivityRepository::create( $entry );
+		$execution_result = $entry['executionResult'] ?? 'applied';
+		if ( ! is_string( $execution_result ) || ! in_array( trim( $execution_result ), [ 'applied', 'failed', 'review', 'diagnostic' ], true ) ) {
+			return new \WP_Error( 'flavor_agent_activity_invalid_entry', 'Editor activity requests cannot set governance execution results.', [ 'status' => 400 ] );
+		}
+
+		// Approval and attestation evidence is authored only by the server.
+		if ( is_array( $entry['request'] ?? null ) ) {
+			unset( $entry['request']['apply'] );
+		}
+		$entry['undo'] = Serializer::normalize_undo_for_storage(
+			is_array( $entry['undo'] ?? null ) ? $entry['undo'] : [],
+			Serializer::normalize_timestamp( $entry['timestamp'] ?? null ),
+			true
+		);
+		$result        = ActivityRepository::create( $entry );
 
 		if ( \is_wp_error( $result ) ) {
 			return $result;
@@ -759,7 +777,8 @@ final class Agent_Controller {
 			'' !== $status ? $status : 'undone',
 			$request->has_param( 'error' )
 				? (string) $request->get_param( 'error' )
-				: null
+				: null,
+			client_supplied: true
 		);
 
 		if ( \is_wp_error( $result ) ) {

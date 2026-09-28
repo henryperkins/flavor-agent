@@ -31,6 +31,7 @@ final class ApplyClaimTest extends TestCase {
 			'before'          => [],
 			'after'           => [],
 			'executionResult' => 'pending',
+			'applyLane'       => 'server-executed',
 			'undo'            => [ 'status' => 'not_applicable' ],
 			'request'         => [
 				'prompt' => 'darker',

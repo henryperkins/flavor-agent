@@ -61,6 +61,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 				'before'          => [],
 				'after'           => [],
 				'executionResult' => 'pending',
+				'applyLane'       => 'server-executed',
 				'undo'            => [ 'status' => 'not_applicable' ],
 				'request'         => [
 					'prompt'    => 'darker',
@@ -706,7 +707,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 		$this->assertSame( 'failed', $result['executionResult'] );
 	}
 
-	public function test_unsupported_executor_consumes_the_claim_as_failed_before_execution(): void {
+	public function test_unsupported_surface_is_rejected_before_claiming_or_execution(): void {
 		$pending = $this->create_pending_entry(
 			[
 				'id'      => 'unsupported-executor',
@@ -716,10 +717,9 @@ final class ExternalApplyLifecycleTest extends TestCase {
 
 		$result = \FlavorAgent\Apply\PendingApplyDecision::decide( (string) $pending['id'], 'approve' );
 
-		$this->assertIsArray( $result );
-		$this->assertSame( 'failed', $result['apply']['status'] );
-		$this->assertSame( 'flavor_agent_apply_surface_unsupported', $result['apply']['failureCode'] );
-		$this->assertSame( 'failed', $result['executionResult'] );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'flavor_agent_apply_not_pending', $result->get_error_code() );
+		$this->assertSame( 'pending', Repository::find( (string) $pending['id'] )['executionResult'] );
 	}
 
 	public function test_unexpected_baseline_exception_consumes_the_claim_as_failed_before_execution(): void {
@@ -2760,6 +2760,7 @@ final class ExternalApplyLifecycleTest extends TestCase {
 				'before'          => [],
 				'after'           => [],
 				'executionResult' => 'pending',
+				'applyLane'       => 'server-executed',
 				'undo'            => [ 'status' => 'not_applicable' ],
 				'request'         => [
 					'prompt'    => 'trim the heading',

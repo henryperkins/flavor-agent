@@ -197,7 +197,7 @@ final class Serializer {
 	 * @param array<string, mixed> $undo
 	 * @return array<string, mixed>
 	 */
-	public static function normalize_undo_for_storage( array $undo, string $timestamp ): array {
+	public static function normalize_undo_for_storage( array $undo, string $timestamp, bool $client_supplied = false ): array {
 		$status = self::normalize_string( $undo['status'] ?? self::UNDO_STATUS_AVAILABLE );
 
 		if ( ! in_array( $status, [ self::UNDO_STATUS_AVAILABLE, self::UNDO_STATUS_FAILED, self::UNDO_STATUS_NOT_APPLICABLE, self::UNDO_STATUS_REVIEW, self::UNDO_STATUS_UNDONE ], true ) ) {
@@ -216,7 +216,14 @@ final class Serializer {
 				: null,
 		];
 
-		$attestation_status = self::normalize_string( $undo['attestationStatus'] ?? '' );
+		if ( in_array( $status, [ self::UNDO_STATUS_UNDONE, self::UNDO_STATUS_FAILED ], true ) ) {
+			$verification = $client_supplied ? 'client-reported' : self::normalize_string( $undo['verification'] ?? '' );
+			if ( in_array( $verification, [ 'server', 'client-reported' ], true ) ) {
+				$normalized['verification'] = $verification;
+			}
+		}
+
+		$attestation_status = $client_supplied ? '' : self::normalize_string( $undo['attestationStatus'] ?? '' );
 
 		if ( in_array( $attestation_status, [ 'recorded', 'not_configured', 'failed', 'not_applicable' ], true ) ) {
 			$normalized['attestationStatus']    = $attestation_status;

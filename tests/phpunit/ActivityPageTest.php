@@ -70,6 +70,7 @@ final class ActivityPageTest extends TestCase {
 		$this->create_pending_entry(
 			[
 				'id'       => 'pending-notice',
+				'type'     => 'apply_style_book_suggestion',
 				'surface'  => 'style-book',
 				'target'   => [
 					'globalStylesId' => '17',
@@ -235,6 +236,7 @@ final class ActivityPageTest extends TestCase {
 				'before'          => [],
 				'after'           => [],
 				'executionResult' => 'pending',
+				'applyLane'       => 'server-executed',
 				'undo'            => [ 'status' => 'not_applicable' ],
 				'request'         => [
 					'prompt'    => 'darker',

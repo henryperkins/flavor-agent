@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace FlavorAgent\Abilities;
 
 use FlavorAgent\Activity\RecommendationOutcome;
+use FlavorAgent\Activity\Permissions;
 use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Apply\ExternalApplyExecutorRegistry;
 use FlavorAgent\Apply\PostBlocksApplyExecutor;
@@ -871,6 +872,7 @@ final class ApplyAbilities {
 				'limit'    => $input['limit'] ?? ActivityRepository::DEFAULT_PER_PAGE,
 			]
 		);
+		$entries = array_values( array_filter( $entries, [ Permissions::class, 'can_access_entry' ] ) );
 		$entries = array_map( [ ActivityRepository::class, 'maybe_expire_pending_apply' ], $entries );
 
 		if ( '' !== $status ) {
@@ -911,6 +913,10 @@ final class ApplyAbilities {
 				'Flavor Agent could not find that activity entry.',
 				[ 'status' => 404 ]
 			);
+		}
+
+		if ( ! ActivityRepository::is_server_executed_apply( $entry ) ) {
+			return new \WP_Error( 'flavor_agent_activity_not_undoable', 'External undo requires a server-executed apply activity.', [ 'status' => 409 ] );
 		}
 
 		$entry    = ActivityRepository::maybe_expire_pending_apply( $entry, $storage_context );

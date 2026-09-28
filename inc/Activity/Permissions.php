@@ -50,6 +50,15 @@ final class Permissions {
 			}
 			return $has_entry || current_user_can( 'edit_posts' ) || current_user_can( 'edit_theme_options' ) || current_user_can( 'manage_options' );
 		}
+		// Collection reads consume filters, not an activity ID or an entry.
+		// Ignore unrelated parameters so their permission target cannot differ
+		// from the scope the controller will actually return.
+		if ( 'GET' === $request->get_method() ) {
+			if ( true === $request->get_param( 'global' ) || '' === trim( (string) $request->get_param( 'scopeKey' ) ) ) {
+				return current_user_can( 'manage_options' );
+			}
+			return self::can_access_context( self::resolve_request_context( $request ) );
+		}
 		if ( self::is_global_request( $request ) ) {
 			return current_user_can( 'manage_options' );
 		}

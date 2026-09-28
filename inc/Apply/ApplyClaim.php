@@ -56,6 +56,10 @@ final class ApplyClaim {
 			return self::not_found_error();
 		}
 
+		if ( ! ActivityRepository::is_server_executed_apply( $entry ) ) {
+			return new \WP_Error( 'flavor_agent_apply_not_pending', 'Only server-authored external applies accept review claims.', [ 'status' => 409 ] );
+		}
+
 		$entry  = ActivityRepository::maybe_expire_pending_apply( $entry );
 		$apply  = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
 		$status = (string) ( $apply['status'] ?? '' );
@@ -99,6 +103,9 @@ final class ApplyClaim {
 
 		if ( ! is_array( $entry ) ) {
 			return self::not_found_error();
+		}
+		if ( ! ActivityRepository::is_server_executed_apply( $entry ) ) {
+			return new \WP_Error( 'flavor_agent_apply_not_pending', 'Only server-authored external applies accept review claims.', [ 'status' => 409 ] );
 		}
 
 		$existing = self::get( $activity_id );

@@ -31,6 +31,7 @@ $GLOBALS['wpdb']->query( "TRUNCATE TABLE {$table_name}" );
 	'id' => '${ id }',
 	'type' => 'apply_global_styles_suggestion',
 	'surface' => 'global-styles',
+	'applyLane' => 'server-executed',
 	'target' => array( 'globalStylesId' => '999999' ),
 	'suggestion' => 'External: use the accent text preset',
 	'before' => array(),
@@ -177,6 +178,7 @@ $baseline = \\FlavorAgent\\Attestation\\BlockContentCanonicalizer::digest( (stri
 	'id' => '${ id }',
 	'type' => 'apply_template_suggestion',
 	'surface' => 'template',
+	'applyLane' => 'server-executed',
 	'target' => array(
 		'templateRef' => $template_ref,
 		'templateType' => 'home',
@@ -399,7 +401,9 @@ test.describe( 'external apply approvals', () => {
 		);
 		const envelope = await envelopeResponse.json();
 		const statement = JSON.parse(
-			Buffer.from( envelope.statement_b64, 'base64url' ).toString( 'utf8' )
+			Buffer.from( envelope.statement_b64, 'base64url' ).toString(
+				'utf8'
+			)
 		);
 
 		const subjectResponse = await page.request.get(
@@ -429,8 +433,12 @@ test.describe( 'external apply approvals', () => {
 			subject.subject_digest
 		);
 
-		await sidebar.getByRole( 'button', { name: 'Run verification' } ).click();
+		await sidebar
+			.getByRole( 'button', { name: 'Run verification' } )
+			.click();
 		await expect( sidebar.getByText( 'Signature valid' ) ).toBeVisible();
-		await expect( sidebar.getByText( 'Live subject matches' ) ).toBeVisible();
+		await expect(
+			sidebar.getByText( 'Live subject matches' )
+		).toBeVisible();
 	} );
 } );

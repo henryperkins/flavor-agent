@@ -3,6 +3,7 @@ import { humanTimeDiff } from '@wordpress/date';
 
 import {
 	getResolvedActivityUndoState,
+	isServerExecutedApply,
 	ORDERED_UNDO_BLOCKED_ERROR,
 } from '../store/activity-history';
 import { truncateActivityTitle } from '../utils/activity-title';
@@ -1753,6 +1754,7 @@ export function getAttestationLaneLabel( lane ) {
 
 export function isPendingExternalApply( entry ) {
 	return (
+		isServerExecutedApply( entry ) &&
 		entry?.status === 'pending' &&
 		Boolean( entry?.apply ) &&
 		typeof entry.apply === 'object'
@@ -2691,7 +2693,7 @@ export function getGovernanceDetails(
 	entry = {},
 	{ themeColorPresetIndex = {} } = {}
 ) {
-	if ( ! entry?.apply ) {
+	if ( ! isServerExecutedApply( entry ) || ! entry?.apply ) {
 		return null;
 	}
 
@@ -2720,7 +2722,9 @@ export function getGovernanceDetails(
 	const undoStatus =
 		typeof entry?.undo?.status === 'string' ? entry.undo.status : '';
 	const undoAttestationStatus = normalizeAttestationRecordingStatus(
-		entry?.undo?.attestationStatus
+		entry?.undo?.verification === 'client-reported'
+			? ''
+			: entry?.undo?.attestationStatus
 	);
 	const undoReason =
 		typeof entry?.undo?.error === 'string' && entry.undo.error.trim()

@@ -797,6 +797,7 @@ describe( 'activity log utils', () => {
 		const entries = normalizeActivityEntries( [
 			createEntry( {
 				type: 'apply_template_suggestion',
+				applyLane: 'server-executed',
 				surface: 'template',
 				target: {
 					templateRef: 'theme//home',
@@ -1017,6 +1018,8 @@ describe( 'activity log utils', () => {
 		const [ pending ] = normalizeActivityEntries( [
 			createEntry( {
 				id: 'activity-pending',
+				type: 'apply_global_styles_suggestion',
+				applyLane: 'server-executed',
 				status: 'pending',
 				surface: 'global-styles',
 				apply: {
@@ -1278,6 +1281,7 @@ describe( 'external apply helpers', () => {
 		return createEntry( {
 			id: 'activity-style-apply',
 			type: 'apply_global_styles_suggestion',
+			applyLane: 'server-executed',
 			surface: 'global-styles',
 			status: 'pending',
 			suggestion: 'External: use the accent text preset',
@@ -1321,6 +1325,7 @@ describe( 'external apply helpers', () => {
 		return createEntry( {
 			id: 'activity-template-part-apply',
 			type: 'apply_template_part_suggestion',
+			applyLane: 'server-executed',
 			surface: 'template-part',
 			status: 'pending',
 			suggestion: 'External: insert the header pattern',
@@ -1368,6 +1373,7 @@ describe( 'external apply helpers', () => {
 		return createEntry( {
 			id: 'activity-post-blocks-apply',
 			type: 'apply_post_blocks_suggestion',
+			applyLane: 'server-executed',
 			surface: 'post-blocks',
 			status: 'pending',
 			suggestion: 'External: trim the heading',
@@ -1413,6 +1419,7 @@ describe( 'external apply helpers', () => {
 		return createEntry( {
 			id: 'activity-template-apply',
 			type: 'apply_template_suggestion',
+			applyLane: 'server-executed',
 			surface: 'template',
 			status: 'pending',
 			suggestion: 'External: insert the hero pattern',
@@ -1454,13 +1461,10 @@ describe( 'external apply helpers', () => {
 		} );
 	}
 
-	test( 'isPendingExternalApply requires pending status and an apply payload', () => {
-		expect(
-			isPendingExternalApply( {
-				status: 'pending',
-				apply: { status: 'pending' },
-			} )
-		).toBe( true );
+	test( 'isPendingExternalApply requires a pending server apply identity', () => {
+		expect( isPendingExternalApply( createStyleApplyEntry() ) ).toBe(
+			true
+		);
 		expect( isPendingExternalApply( { status: 'applied' } ) ).toBe( false );
 		expect( isPendingExternalApply( { status: 'pending' } ) ).toBe( false );
 		expect( isPendingExternalApply( null ) ).toBe( false );
@@ -1591,6 +1595,7 @@ describe( 'external apply helpers', () => {
 		expect(
 			getActivityStatusLabel( {
 				type: 'apply_global_styles_suggestion',
+				applyLane: 'server-executed',
 				status: 'failed',
 				statusLabel: 'Undo unavailable',
 				executionResult: 'failed',

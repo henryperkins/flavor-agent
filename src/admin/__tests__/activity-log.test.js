@@ -277,6 +277,7 @@ function createExternalApplyEntry( overrides = {} ) {
 	return createEntry( {
 		id: 'activity-external-apply',
 		type: 'apply_global_styles_suggestion',
+		applyLane: 'server-executed',
 		suggestion: 'External: use the accent text preset',
 		status: 'pending',
 		statusLabel: 'Pending approval',

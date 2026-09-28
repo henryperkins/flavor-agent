@@ -208,6 +208,12 @@ final class Repository {
 			return self::merge_existing_entry( $existing_row, $normalized );
 		}
 
+		// Attestations outlive pruned activity rows. Their IDs remain reserved
+		// so a later row cannot inherit unrelated signed evidence on hydration.
+		if ( null !== AttestationRepository::find_by_related_activity( $activity_id ) ) {
+			return new \WP_Error( 'flavor_agent_activity_invalid_entry', 'That activity ID is reserved by retained attestation evidence.', [ 'status' => 409 ] );
+		}
+
 		$timestamp  = Serializer::normalize_timestamp( $normalized['timestamp'] ?? null );
 		$entity     = Serializer::derive_entity( $normalized );
 		$projection = self::build_admin_projection_from_entry( $normalized );
@@ -558,7 +564,7 @@ final class Repository {
 
 				$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : null;
 
-				if ( null === $apply || 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+				if ( ! self::is_server_executed_apply( $entry ) || null === $apply || 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
 					return $entry;
 				}
 
@@ -792,7 +798,8 @@ final class Repository {
 		string $status,
 		?string $error = null,
 		array $metadata = [],
-		?ActivityStorageContext $context = null
+		?ActivityStorageContext $context = null,
+		bool $client_supplied = false
 	) {
 		$database = null !== $context ? $context->database() : self::current_database();
 
@@ -822,7 +829,10 @@ final class Repository {
 			);
 		}
 
-		$current_entry    = Serializer::hydrate_row( $current_row );
+		$current_entry = Serializer::hydrate_row( $current_row );
+		if ( $client_supplied && ( 'server-executed' === $current_entry['applyLane'] || array_key_exists( 'apply', $current_entry['request'] ) ) ) {
+			return new \WP_Error( 'flavor_agent_activity_invalid_undo_transition', 'Server apply activity requires a server-executed undo.', [ 'status' => 409 ] );
+		}
 		$current_undo     = is_array( $current_entry['undo'] ?? null ) ? $current_entry['undo'] : [];
 		$prior_undo_state = (string) ( $current_row['undo_state'] ?? '' );
 
@@ -866,7 +876,8 @@ final class Repository {
 
 		$undo               = Serializer::normalize_undo_for_storage(
 			$undo_state,
-			$timestamp
+			$timestamp,
+			$client_supplied
 		);
 		$encoded_undo_state = Serializer::encode_json( $undo );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
@@ -956,7 +967,7 @@ final class Repository {
 		$entry = Serializer::hydrate_row( $row );
 		$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
 
-		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+		if ( ! self::is_server_executed_apply( $entry ) || 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
 			return new \WP_Error(
 				'flavor_agent_apply_invalid_transition',
 				'Flavor Agent external applies only claim pending decisions.',
@@ -1164,7 +1175,7 @@ final class Repository {
 		$entry = Serializer::hydrate_row( $row );
 		$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
 
-		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+		if ( ! self::is_server_executed_apply( $entry ) || 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
 			return new \WP_Error(
 				'flavor_agent_apply_invalid_transition',
 				'Flavor Agent external applies only transition out of the pending state.',
@@ -1276,6 +1287,22 @@ final class Repository {
 		return ExternalApplyDecisionClaim::is_active( $value );
 	}
 
+	/** A request payload alone never establishes the server execution lane. */
+	public static function is_server_executed_apply( array $entry ): bool {
+		$expected_type = match ( $entry['surface'] ?? '' ) {
+			'global-styles' => 'apply_global_styles_suggestion',
+			'style-book' => 'apply_style_book_suggestion',
+			'template' => 'apply_template_suggestion',
+			'template-part' => 'apply_template_part_suggestion',
+			'post-blocks' => 'apply_post_blocks_suggestion',
+			default => null,
+		};
+
+		return 'server-executed' === ( $entry['applyLane'] ?? null )
+			&& null !== $expected_type
+			&& $expected_type === ( $entry['type'] ?? null );
+	}
+
 	/**
 	 * Lazily expire a hydrated pending external apply that is past its expiresAt.
 	 *
@@ -1285,7 +1312,7 @@ final class Repository {
 	public static function maybe_expire_pending_apply( array $entry, ?ActivityStorageContext $context = null ): array {
 		$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
 
-		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+		if ( ! self::is_server_executed_apply( $entry ) || 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
 			return $entry;
 		}
 
@@ -1359,7 +1386,7 @@ final class Repository {
 		foreach ( is_array( $rows ) ? $rows : [] as $row ) {
 			$entry = self::maybe_expire_pending_apply( Serializer::hydrate_row( $row ) );
 
-			if ( 'pending' === (string) ( $entry['apply']['status'] ?? '' ) ) {
+			if ( self::is_server_executed_apply( $entry ) && 'pending' === (string) ( $entry['apply']['status'] ?? '' ) ) {
 				++$count;
 			}
 		}
@@ -1413,7 +1440,7 @@ final class Repository {
 			];
 		}
 
-		if ( null === $latest ) {
+		if ( null === $latest || ! self::is_server_executed_apply( $latest ) ) {
 			return null;
 		}
 
@@ -1449,7 +1476,7 @@ final class Repository {
 		}
 
 		$sql = $wpdb->prepare(
-			'SELECT activity_id, user_id, surface, target_json, request_json, document_json, execution_result FROM %i WHERE execution_result = %s OR CONVERT(HEX(execution_result) USING utf8mb4) REGEXP %s ORDER BY created_at DESC, id DESC',
+			'SELECT activity_id, activity_type, apply_lane, user_id, surface, target_json, request_json, document_json, execution_result FROM %i WHERE execution_result = %s OR CONVERT(HEX(execution_result) USING utf8mb4) REGEXP %s ORDER BY created_at DESC, id DESC',
 			self::table_name(),
 			'pending',
 			ExternalApplyDecisionClaim::SQL_HEX_PATTERN
@@ -1517,6 +1544,8 @@ final class Repository {
 		$user_id = (int) ( $row['user_id'] ?? 0 );
 		$entry   = [
 			'id'              => trim( (string) ( $row['activity_id'] ?? '' ) ),
+			'type'            => (string) ( $row['activity_type'] ?? '' ),
+			'applyLane'       => (string) ( $row['apply_lane'] ?? '' ),
 			'surface'         => trim( (string) ( $row['surface'] ?? '' ) ),
 			'target'          => Serializer::decode_json( isset( $row['target_json'] ) ? (string) $row['target_json'] : '' ),
 			'document'        => Serializer::decode_json( isset( $row['document_json'] ) ? (string) $row['document_json'] : '' ),
@@ -1539,7 +1568,7 @@ final class Repository {
 	private static function maybe_expire_pending_external_apply_notice_entry( array $entry ): array {
 		$apply = is_array( $entry['apply'] ?? null ) ? $entry['apply'] : [];
 
-		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+		if ( ! self::is_server_executed_apply( $entry ) || 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
 			return $entry;
 		}
 
@@ -1807,7 +1836,29 @@ final class Repository {
 	private static function merge_existing_entry( array $existing_row, array $normalized ) {
 		global $wpdb;
 
-		$existing_entry  = self::hydrate_activity_row( $existing_row );
+		$existing_entry = self::hydrate_activity_row( $existing_row );
+
+		// A duplicate ID is an editor retry only within the original author's
+		// accessible scope. Check before every return, including a no-op retry.
+		if (
+			! Permissions::can_access_entry( $existing_entry )
+			|| (int) ( $existing_entry['userId'] ?? 0 ) !== (int) get_current_user_id()
+			|| ( $existing_entry['document']['scopeKey'] ?? '' ) !== ( $normalized['document']['scopeKey'] ?? '' )
+			|| $existing_entry['surface'] !== $normalized['surface']
+			|| $existing_entry['type'] !== $normalized['type']
+		) {
+			return Permissions::forbidden_error();
+		}
+
+		if (
+			'server-executed' === $existing_entry['applyLane']
+			|| 'server-executed' === $normalized['applyLane']
+			|| array_key_exists( 'apply', $existing_entry['request'] )
+			|| ( is_array( $normalized['request'] ) && array_key_exists( 'apply', $normalized['request'] ) )
+		) {
+			return new \WP_Error( 'flavor_agent_activity_invalid_entry', 'Server apply activity cannot be merged by an editor retry.', [ 'status' => 409 ] );
+		}
+
 		$existing_undo   = is_array( $existing_entry['undo'] ?? null ) ? $existing_entry['undo'] : [];
 		$incoming_undo   = is_array( $normalized['undo'] ?? null ) ? $normalized['undo'] : [];
 		$existing_status = (string) ( $existing_undo['status'] ?? '' );
@@ -1824,16 +1875,17 @@ final class Repository {
 		$updated_timestamp = Serializer::normalize_timestamp(
 			$incoming_undo['updatedAt'] ?? $normalized['timestamp'] ?? null
 		);
+		$incoming_undo     = Serializer::normalize_undo_for_storage( $incoming_undo, $updated_timestamp, true );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- Writes to the plugin-owned activity log table must execute immediately.
 		$updated = $wpdb->update(
 			self::table_name(),
 			[
-				'undo_state'       => Serializer::encode_json( $incoming_undo ),
-				'execution_result' => (string) $normalized['executionResult'],
-				'updated_at'       => Serializer::mysql_datetime_from_timestamp( $updated_timestamp ),
+				'undo_state' => Serializer::encode_json( $incoming_undo ),
+				'updated_at' => Serializer::mysql_datetime_from_timestamp( $updated_timestamp ),
 			],
 			[
 				'activity_id' => (string) ( $existing_row['activity_id'] ?? '' ),
+				'undo_state'  => (string) ( $existing_row['undo_state'] ?? '' ),
 			]
 		);
 
@@ -1843,6 +1895,9 @@ final class Repository {
 				'Flavor Agent could not merge the pending activity entry.',
 				[ 'status' => 500 ]
 			);
+		}
+		if ( 0 === (int) $updated ) {
+			return new \WP_Error( 'flavor_agent_activity_update_failed', 'The activity undo state changed during the editor retry.', [ 'status' => 409 ] );
 		}
 
 		$stored = self::find( (string) ( $existing_row['activity_id'] ?? '' ) );
@@ -5394,7 +5449,7 @@ final class Repository {
 			? $entry['apply']
 			: ( is_array( $entry['request']['apply'] ?? null ) ? $entry['request']['apply'] : [] );
 
-		if ( 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
+		if ( ! self::is_server_executed_apply( $entry ) || 'pending' !== (string) ( $apply['status'] ?? '' ) ) {
 			return false;
 		}
 
