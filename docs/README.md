@@ -60,7 +60,7 @@ Read these documents in this order:
    - `abilities-and-routes.md` — abilities, REST routes, permissions, and first-party callers.
    - `shared-internals.md` — cross-cutting store utilities, shared UI components, and context helpers.
    - `recommendation-ui-consistency.md` — current surface-model split, shared vocabulary, and intentional UI exceptions.
-   - `recommendation-outcome-followups.md` — approved proposed v1 dismissal/export contracts; runtime implementation remains pending, and the bounded real-site candidate retains provenance/qualification limits.
+   - `recommendation-outcome-followups.md` — implemented v1 dismissal/export contracts, privacy boundaries, and server-owned provenance; the earlier real-site candidate retains its qualification limits.
    - `cross-surface-validation-gates.md` — additive hard-stop validation rules and release evidence for multi-surface or shared-subsystem changes.
    - `governance-layer.md` — the governance-layer contract map: pillars, enforcing code paths, surface loop coverage, and external-agent parity boundaries.
    - `agents-api-integration.md` — adoption boundary and phased plan for using Agents API as an optional runtime over Flavor Agent abilities without replacing its governance state machines.
