@@ -139,3 +139,7 @@ a new scheduled pass, weekly pruning, whole-corpus currency, manual strict
 release validation, publication or deployment. Future scheduled behavior
 requires integrating the repair into its checkout. The existing corpus-validator
 worktree and its unmerged changes were preserved.
+
+## Later full refresh and scoped recovery
+
+The [v0.1.1 preparation record](2026-10-07-v0.1.1-release-validation.md#corpus-and-production-boundaries) separately records the later full scheduled run, exact-source upload recovery and effective-manifest census. Both updater runs ended `needs-attention`; default public and managed MCP freshness passed, while the census still had 8,177 pending desired keys and five errors. These later results retain zero deletions and every cleanup guard. They do not rewrite the earlier bounded remediation or establish full settlement.

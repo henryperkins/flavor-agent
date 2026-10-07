@@ -3,6 +3,8 @@
 > Created: 2026-03-25
 > Purpose: documentation entry point and maintenance contract for the repo
 
+Current v0.1.1 preparation: [release notes](releases/v0.1.1.md) and [exact candidate/archive validation](validation/2026-10-07-v0.1.1-release-validation.md). Local implementation and package gates passed; corpus settlement and production qualification/deployment retain separate evidence.
+
 ## Why This Exists
 
 Flavor Agent now has enough shipped surface area that a single document is no longer enough.
@@ -122,7 +124,7 @@ Each top-level doc has one job:
    - `developer-docs-public-corpus-runbook.md` — Who owns the built-in public Developer Docs grounding corpus? Which source scopes, refresh cadence, and validation evidence gate the current-release coverage warning?
    - `template-operations.md` — Which operation types are valid per surface? What fields and placements are required?
    - `activity-state-machine.md` — What undo states exist? Which transitions are valid? When is undo blocked?
-   - `recommendation-outcome-followups.md` — Approved proposed v1 explicit-dismissal and local fixture-export contracts, privacy review, sample coverage, and static-ranking boundary.
+   - `recommendation-outcome-followups.md` — Implemented v1 explicit-dismissal and local fixture-export contracts, privacy review, provenance requirements, sample coverage, and static-ranking boundary.
    - `wordpress-ai-roadmap-tracking.md` — Which upstream AI initiative collides with which Flavor Agent surface, and which board items are imminent?
    - `gutenberg-feature-tracking.md` — Which Gutenberg release stabilized an API the repo shims, and which iteration issue or forthcoming change should the repo watch?
    - `local-environment-setup.md` — Which local WordPress, Gutenberg, connector, and plugin-check setup is representative for manual testing?
