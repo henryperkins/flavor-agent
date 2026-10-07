@@ -91,6 +91,84 @@ function pollOptions( overrides = {} ) {
 	};
 }
 
+const UNCHANGED_SOURCE_URL =
+	'https://developer.wordpress.org/reference/functions/stable_fixture/';
+const UNCHANGED_SOURCE_HASH =
+	'e1c0a0f079a77710a87e35af62451b0fc36945380bdf7ae11ed330e4affa3e9b';
+const UNCHANGED_SOURCE_KEY =
+	'ai-search/wp-dev/developer.wordpress.org/reference-functions-stable-fixture/e1c0a0f079a77710/part-0001.md';
+
+function unchangedSourceItem( overrides = {} ) {
+	return {
+		key: UNCHANGED_SOURCE_KEY,
+		status: 'completed',
+		metadata: {
+			source_url: UNCHANGED_SOURCE_URL,
+			content_hash: UNCHANGED_SOURCE_HASH,
+			retrieved_at: '2026-06-17T04:08:06.623Z',
+			title: 'Stable Fixture',
+		},
+		...overrides,
+	};
+}
+
+async function processUnchangedSource( items, options = {}, lastmods = {} ) {
+	const uploads = [];
+	global.fetch = jest.fn( async ( url, init = {} ) => {
+		const href = String( url );
+		if ( href === UNCHANGED_SOURCE_URL ) {
+			return mockTextResponse(
+				docsHtml( {
+					canonical: UNCHANGED_SOURCE_URL,
+					title: 'Stable Fixture',
+					body: 'This stable reference body describes block metadata and has enough words to pass the document extraction boundary. '.repeat(
+						4
+					),
+				} ),
+				href,
+				'text/html'
+			);
+		}
+		if (
+			href.endsWith( '/instances/wp-dev/items' ) &&
+			init.method === 'POST'
+		) {
+			const file = init.body.get( 'file' );
+			const body = await new Promise( ( resolve, reject ) => {
+				const reader = new global.FileReader();
+				reader.onload = () => resolve( reader.result );
+				reader.onerror = () => reject( reader.error );
+				reader.readAsText( file );
+			} );
+			uploads.push( {
+				key: file.name,
+				metadata: JSON.parse( init.body.get( 'metadata' ) ),
+				body,
+			} );
+			return mockJsonResponse(
+				{ result: { key: file.name, status: 'queued' } },
+				href
+			);
+		}
+		throw new Error( `Unexpected fetch: ${ href }` );
+	} );
+	const processed = await processEntries(
+		[ UNCHANGED_SOURCE_URL ],
+		[ 'https://developer.wordpress.org/reference/' ],
+		{
+			dryRun: false,
+			instance: 'wp-dev',
+			now: Date.parse( '2026-10-07T11:40:00Z' ),
+			...options,
+		},
+		{ accountId: 'account', apiToken: 'token' },
+		new Map( items.map( ( item ) => [ item.key, item ] ) ),
+		lastmods,
+		existingItemsByUrl( items, options.now )
+	);
+	return { processed, uploads };
+}
+
 // Drives pollUntilSettled by scripting the two endpoints it reads: the instance /stats
 // active count and the per-item status in the listing.
 function settlementFetchMock( { active, itemStatus } ) {
@@ -2331,6 +2409,152 @@ describe( 'update-docs-ai-search helpers', () => {
 			)
 		).toHaveLength( 1 );
 	} );
+
+	test( 'refreshes unchanged stale crawl evidence despite an older sitemap lastmod', async () => {
+		const existing = unchangedSourceItem();
+		const { processed, uploads } = await processUnchangedSource(
+			[ existing ],
+			{},
+			{ [ UNCHANGED_SOURCE_URL ]: '2026-06-01T00:00:00Z' }
+		);
+
+		expect( processed.uploaded ).toHaveLength( 1 );
+		expect( processed.uploadErrors ).toEqual( [] );
+		expect( processed.desiredKeys.has( existing.key ) ).toBe( false );
+		expect( processed.desiredKeys.size ).toBe( 1 );
+		expect( uploads[ 0 ].key ).not.toBe( existing.key );
+		expect(
+			Buffer.byteLength( uploads[ 0 ].key, 'utf8' )
+		).toBeLessThanOrEqual( 128 );
+		expect( uploads[ 0 ].metadata.content_hash ).toBe(
+			UNCHANGED_SOURCE_HASH
+		);
+		expect( uploads[ 0 ].metadata.source_url ).toBe( UNCHANGED_SOURCE_URL );
+		expect( uploads[ 0 ].metadata.retrieved_at ).not.toBe(
+			existing.metadata.retrieved_at
+		);
+		expect( uploads[ 0 ].body ).toContain(
+			`retrieved_at: "${ uploads[ 0 ].metadata.retrieved_at }"`
+		);
+		expect( processed.manifest[ 0 ].retrievedAt ).toBe(
+			uploads[ 0 ].metadata.retrieved_at
+		);
+		expect( processed.skipped ).toEqual( [] );
+	} );
+
+	test( 'keeps stored crawl provenance when a fresh unchanged document is skipped', async () => {
+		const existing = unchangedSourceItem();
+		existing.metadata.retrieved_at = '2026-09-20T04:08:06.623Z';
+		const { processed, uploads } = await processUnchangedSource(
+			[ existing ],
+			{ fullRefetch: true }
+		);
+
+		expect( uploads ).toEqual( [] );
+		expect( processed.desiredKeys ).toEqual( new Set( [ existing.key ] ) );
+		expect( processed.manifest[ 0 ].retrievedAt ).toBe(
+			'2026-09-20T04:08:06.623Z'
+		);
+		expect( processed.manifest[ 0 ].bodyBytes ).toBe( 0 );
+	} );
+
+	test( 'keeps the newer fresh unchanged generation instead of reverting to its stale content key', async () => {
+		const original = unchangedSourceItem();
+		const refreshed = unchangedSourceItem( {
+			key: 'ai-search/wp-dev/developer.wordpress.org/reference-functions-stable-fixture/refreshed/part-0001.md',
+			metadata: {
+				...original.metadata,
+				retrieved_at: '2026-09-20T04:08:06.623Z',
+			},
+		} );
+		const { processed, uploads } = await processUnchangedSource(
+			[ original, refreshed ],
+			{ fullRefetch: true }
+		);
+
+		expect( uploads ).toEqual( [] );
+		expect( processed.desiredKeys ).toEqual( new Set( [ refreshed.key ] ) );
+		expect( processed.manifest[ 0 ].retrievedAt ).toBe(
+			'2026-09-20T04:08:06.623Z'
+		);
+	} );
+
+	test( 'preserves settlement blocking for an unchanged current pending generation', async () => {
+		const original = unchangedSourceItem();
+		const pending = unchangedSourceItem( {
+			key: 'ai-search/wp-dev/developer.wordpress.org/reference-functions-stable-fixture/refreshed/part-0001.md',
+			status: 'queued',
+			metadata: {
+				...original.metadata,
+				retrieved_at: '2026-09-20T04:08:06.623Z',
+			},
+		} );
+		const { processed, uploads } = await processUnchangedSource(
+			[ original, pending ],
+			{ fullRefetch: true }
+		);
+
+		expect( uploads ).toEqual( [] );
+		expect( processed.desiredKeys ).toEqual( new Set( [ pending.key ] ) );
+		expect(
+			isSettlementComplete(
+				evaluateSettlement(
+					[ original, pending ],
+					processed.desiredKeys
+				)
+			)
+		).toBe( false );
+	} );
+
+	test( 'reuses a completed replacement on the next run while a future-dated generation remains', async () => {
+		const future = unchangedSourceItem();
+		future.metadata.retrieved_at = '2099-01-01T00:00:00Z';
+		const first = await processUnchangedSource( [ future ], {
+			fullRefetch: true,
+			now: Date.now(),
+		} );
+		expect( first.uploads ).toHaveLength( 1 );
+		const replacement = {
+			key: first.uploads[ 0 ].key,
+			status: 'completed',
+			metadata: first.uploads[ 0 ].metadata,
+		};
+		const second = await processUnchangedSource( [ future, replacement ], {
+			fullRefetch: true,
+			now: Date.now(),
+		} );
+
+		expect( second.uploads ).toEqual( [] );
+		expect( second.processed.desiredKeys ).toEqual(
+			new Set( [ replacement.key ] )
+		);
+		expect( second.processed.manifest[ 0 ].retrievedAt ).toBe(
+			replacement.metadata.retrieved_at
+		);
+		expect( future.metadata.retrieved_at ).toBe( '2099-01-01T00:00:00Z' );
+	} );
+
+	test.each( [
+		[ '2026-07-09T11:40:00Z', false ],
+		[ '2026-07-09T11:39:59.999Z', true ],
+		[ '2026-10-07T11:40:00.001Z', true ],
+		[ '', true ],
+	] )(
+		'refreshes unchanged crawl evidence at the timestamp boundary %s when needed',
+		async ( retrievedAt, refresh ) => {
+			const existing = unchangedSourceItem();
+			existing.metadata.retrieved_at = retrievedAt;
+			const { processed, uploads } = await processUnchangedSource(
+				[ existing ],
+				{ fullRefetch: true }
+			);
+
+			expect( uploads ).toHaveLength( refresh ? 1 : 0 );
+			expect( processed.desiredKeys.has( existing.key ) ).toBe(
+				! refresh
+			);
+		}
+	);
 
 	test( 'findSupersededSourceItems selects older same-source generations only for desired identities', () => {
 		const sourceUrl = 'https://developer.wordpress.org/reference/functions/wp_register_ability/';
