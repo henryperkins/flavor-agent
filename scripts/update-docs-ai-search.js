@@ -1585,9 +1585,10 @@ function isFreshByLastmod( lastmod, existingItem ) {
  * be matched to the item already in the corpus.
  *
  * @param {Array<object>} items
+ * @param {number} now Current observation time in epoch milliseconds.
  * @return {Map<string, object>}
  */
-function existingItemsByUrl( items ) {
+function existingItemsByUrl( items, now = Date.now() ) {
 	const map = new Map();
 	for ( const item of Array.isArray( items ) ? items : [] ) {
 		if ( ! item || typeof item !== 'object' ) {
@@ -1595,9 +1596,21 @@ function existingItemsByUrl( items ) {
 		}
 		const metadata = item.metadata && typeof item.metadata === 'object' ? item.metadata : {};
 		const normalized = normalizeTrustedUrl( metadata.source_url || metadata.sourceUrl || '' );
+		const previous = map.get( normalized );
+		const candidateRetrievedAt = itemRetrievedAtMs( item );
+		const previousRetrievedAt = itemRetrievedAtMs( previous );
+		const candidateValid =
+			Number.isFinite( candidateRetrievedAt ) &&
+			candidateRetrievedAt <= now;
+		const previousValid =
+			Number.isFinite( previousRetrievedAt ) &&
+			previousRetrievedAt <= now;
 		if (
 			normalized &&
-			( ! map.has( normalized ) || itemRetrievedAtMs( item ) > itemRetrievedAtMs( map.get( normalized ) ) )
+			( ! previous ||
+				( candidateValid && ! previousValid ) ||
+				( candidateValid === previousValid &&
+					candidateRetrievedAt > previousRetrievedAt ) )
 		) {
 			map.set( normalized, item );
 		}

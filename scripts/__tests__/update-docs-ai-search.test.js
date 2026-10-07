@@ -164,7 +164,7 @@ async function processUnchangedSource( items, options = {}, lastmods = {} ) {
 		{ accountId: 'account', apiToken: 'token' },
 		new Map( items.map( ( item ) => [ item.key, item ] ) ),
 		lastmods,
-		existingItemsByUrl( items )
+		existingItemsByUrl( items, options.now )
 	);
 	return { processed, uploads };
 }
@@ -2504,6 +2504,34 @@ describe( 'update-docs-ai-search helpers', () => {
 				)
 			)
 		).toBe( false );
+	} );
+
+	test( 'reuses a completed replacement on the next run while a future-dated generation remains', async () => {
+		const future = unchangedSourceItem();
+		future.metadata.retrieved_at = '2099-01-01T00:00:00Z';
+		const first = await processUnchangedSource( [ future ], {
+			fullRefetch: true,
+			now: Date.now(),
+		} );
+		expect( first.uploads ).toHaveLength( 1 );
+		const replacement = {
+			key: first.uploads[ 0 ].key,
+			status: 'completed',
+			metadata: first.uploads[ 0 ].metadata,
+		};
+		const second = await processUnchangedSource( [ future, replacement ], {
+			fullRefetch: true,
+			now: Date.now(),
+		} );
+
+		expect( second.uploads ).toEqual( [] );
+		expect( second.processed.desiredKeys ).toEqual(
+			new Set( [ replacement.key ] )
+		);
+		expect( second.processed.manifest[ 0 ].retrievedAt ).toBe(
+			replacement.metadata.retrieved_at
+		);
+		expect( future.metadata.retrieved_at ).toBe( '2099-01-01T00:00:00Z' );
 	} );
 
 	test.each( [
