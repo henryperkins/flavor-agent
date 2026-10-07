@@ -121,3 +121,13 @@ later GitHub release and its `v0.1.0-tag-verification.md` asset record completio
 of those retained gates and attachment of the verified zip, complete local
 logs, and this waiver. This approval did not itself create a tag or publish a
 release.
+
+## 2026-10-06 update
+
+The maintainer confirmed again that the account lock will not be removed, so
+hosted CI is retired rather than waived release by release. The three
+workflows above are disabled, the conditional fallback is now the standing
+release gate in
+[`../reference/cross-surface-validation-gates.md`](../reference/cross-surface-validation-gates.md#hosted-ci),
+and the corpus refresh runs from a local scheduled task described in
+[`../reference/developer-docs-public-corpus-runbook.md`](../reference/developer-docs-public-corpus-runbook.md).

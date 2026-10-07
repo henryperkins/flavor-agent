@@ -26,6 +26,18 @@ Full local sign-off also requires `lint-plugin` to run. If `output/verify/summar
 
 Cloudflare Browser Run screenshots from `npm run audit:screenshot` may be attached as supporting visual evidence for settings, wp-admin, block editor, or Site Editor review. They do not replace Playwright harness proof and do not clear the blocker/waiver requirement for missing browser assertions. See `docs/reference/browser-run-screenshot-audits.md` for the required target URL, credentials, temporary auth inputs, and artifact location.
 
+## Hosted CI
+
+GitHub Actions cannot run for this repository's account. Since 2026-08-23 every hosted job has failed before checkout with GitHub's billing-lock annotation, and on 2026-10-06 the maintainer confirmed the lock will not be removed. The `Verify`, `Build WordPress.com Plugin Artifact`, and `Update Developer Docs AI Search` workflows are disabled; their YAML stays as the reference definition of each job. No GitHub check counts as evidence, passing or failing.
+
+Every gate on this page is therefore met with local evidence. For a release, the procedure first approved as the `v0.1.0` waiver in [`../validation/2026-08-26-github-actions-zero-step.md`](../validation/2026-08-26-github-actions-zero-step.md) is the standing release gate, not a per-release exception:
+
+1. From a clean checkout of the immutable release candidate, run `npm run verify:strict` with Plugin Check and no skipped steps. Also run both WordPress 7.1 Site Editor legs (bundled editor and the pinned Gutenberg release), setting `FLAVOR_AGENT_WP70_GUTENBERG` per leg as `.github/workflows/verify.yml` does.
+2. Keep the complete stdout/stderr logs and `output/verify/summary.json`.
+3. Record environment versions, command lines, the candidate SHA, the artifact SHA-256, the archive inventory, and Plugin Check dispositions under `docs/validation/`.
+4. Reverify from the exact tag, or prove the attached archive is byte-identical to the verified candidate artifact.
+5. Attach the verified zip, the logs, and the checksums to the GitHub release.
+
 ## Validation Gates
 
 | Gate                                  | Trigger                                                                                                                | Required evidence                                                                                                                                                                                                                                                                                       |

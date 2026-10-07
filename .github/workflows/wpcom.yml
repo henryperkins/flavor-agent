@@ -1,3 +1,7 @@
+# Disabled: GitHub Actions cannot run for this repository's account (see
+# docs/reference/cross-surface-validation-gates.md#hosted-ci). This file stays as
+# the reference definition of the WordPress.com artifact build; build release
+# ZIPs with `npm run dist` instead.
 name: Build WordPress.com Plugin Artifact
 
 on:

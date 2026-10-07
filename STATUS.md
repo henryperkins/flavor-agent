@@ -29,8 +29,11 @@ The recorded verification failures were repaired by restoring the locked depende
 `v0.1.0` is the final initial release. The GitHub release is the canonical
 exact-tag evidence boundary and carries `flavor-agent.zip`, the complete local
 verification logs, the CI-waiver record, checksums, and the tag-verification
-record. GitHub-hosted jobs remain zero-step/non-passing because of the account
-billing lock; only runner execution is waived. All strict local, WordPress 7.1
+record. GitHub-hosted jobs could not run because of the account billing lock;
+only runner execution was waived. Since 2026-10-06 hosted CI is retired: the
+workflows are disabled, that waiver procedure is the [standing release
+gate](docs/reference/cross-surface-validation-gates.md#hosted-ci), and the docs
+corpus refreshes from a local scheduled task. All strict local, WordPress 7.1
 browser, Plugin Check, live corpus, Anthropic connector, visual, packaging,
 inventory, checksum, and exact-tag controls were retained and are satisfied by
 the attached release evidence.

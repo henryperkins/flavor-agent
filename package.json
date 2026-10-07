@@ -14,6 +14,7 @@
 		"audit:visual": "node scripts/browser-run-visual-audit.js",
 		"dist": "bash scripts/build-dist.sh",
 		"docs:ai-search:update": "node scripts/update-docs-ai-search.js",
+		"docs:ai-search:scheduled": "node scripts/update-docs-ai-search-scheduled.js",
 		"ensure:local-env": "node scripts/ensure-local-env.js",
 		"install:codex-skills": "node scripts/install-codex-skills.js",
 		"start": "wp-scripts start",

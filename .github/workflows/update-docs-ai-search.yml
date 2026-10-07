@@ -1,3 +1,7 @@
+# Disabled: GitHub Actions cannot run for this repository's account. The daily
+# refresh runs through `npm run docs:ai-search:scheduled` on a local scheduler; see
+# docs/reference/developer-docs-public-corpus-runbook.md (Scheduled Runs). This
+# file stays as the reference definition of the hosted job.
 name: Update Developer Docs AI Search
 
 on:
