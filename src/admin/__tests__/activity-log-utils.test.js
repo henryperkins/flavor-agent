@@ -18,6 +18,7 @@ import {
 	getStyleComparisonRows,
 	getStyleVisualDiffRows,
 	isPendingExternalApply,
+	shouldWarnUnattestedApproval,
 	normalizeActivityEntries,
 	normalizeActivityDiscoveryBadges,
 	normalizeGovernanceLearningReport,
@@ -73,6 +74,97 @@ function createStorage() {
 }
 
 describe( 'activity log utils', () => {
+	test.each( [ 'global-styles', 'style-book', 'template', 'template-part' ] )(
+		'warns an eligible %s approval when signing is explicitly unavailable',
+		( surface ) => {
+			expect(
+				shouldWarnUnattestedApproval( createEntry( { surface } ), {
+					attestation: {
+						signingAvailable: false,
+						eligibleSurfaces: [
+							'global-styles',
+							'style-book',
+							'template',
+							'template-part',
+						],
+					},
+				} )
+			).toBe( true );
+		}
+	);
+
+	test.each( [ 'post-blocks', 'block', 'unknown', undefined, null, 17 ] )(
+		'does not warn an ineligible or malformed %s surface',
+		( surface ) => {
+			expect(
+				shouldWarnUnattestedApproval(
+					{ surface },
+					{
+						attestation: {
+							signingAvailable: false,
+							eligibleSurfaces: [
+								'global-styles',
+								'post-blocks',
+							],
+						},
+					}
+				)
+			).toBe( false );
+		}
+	);
+
+	test.each( [
+		undefined,
+		null,
+		{},
+		[],
+		{ signingAvailable: false, eligibleSurfaces: [ 'global-styles' ] },
+		{ attestation: null },
+		{ attestation: [] },
+		{
+			attestation: {
+				signingAvailable: true,
+				eligibleSurfaces: [ 'global-styles' ],
+			},
+		},
+		{
+			attestation: {
+				signingAvailable: 0,
+				eligibleSurfaces: [ 'global-styles' ],
+			},
+		},
+		{
+			attestation: {
+				signingAvailable: 'false',
+				eligibleSurfaces: [ 'global-styles' ],
+			},
+		},
+		{ attestation: { eligibleSurfaces: [ 'global-styles' ] } },
+		{ attestation: { signingAvailable: false } },
+		{
+			attestation: {
+				signingAvailable: false,
+				eligibleSurfaces: 'global-styles',
+			},
+		},
+		{
+			attestation: {
+				signingAvailable: false,
+				eligibleSurfaces: [ 'global-styles', 17 ],
+			},
+		},
+	] )(
+		'does not falsely warn with missing, legacy or malformed boot data %p',
+		( bootData ) => {
+			expect(
+				shouldWarnUnattestedApproval(
+					{ surface: 'global-styles' },
+					bootData
+				)
+			).toBe( false );
+		}
+	);
+
 	test( 'normalizeGovernanceLearningReport rejects missing or malformed reports', () => {
 		expect( normalizeGovernanceLearningReport() ).toBeNull();
 		expect( normalizeGovernanceLearningReport( {} ) ).toBeNull();

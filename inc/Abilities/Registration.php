@@ -1204,7 +1204,7 @@ final class Registration {
 				'description'         => __( 'Return the applied global theme styles plus extracted element and block pseudo-state styles, along with the live Global Styles scope and context needed to call recommend-style or request-style-apply. Read-only.', 'flavor-agent' ),
 				'category'            => 'flavor-agent',
 				'execute_callback'    => [ InfraAbilities::class, 'get_theme_styles' ],
-				'permission_callback' => fn() => current_user_can( 'edit_posts' ),
+				'permission_callback' => fn() => current_user_can( 'edit_posts' ) || current_user_can( 'edit_theme_options' ),
 				'input_schema'        => [
 					'type'    => 'object',
 					'default' => [],

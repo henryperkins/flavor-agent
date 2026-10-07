@@ -1568,6 +1568,30 @@ final class RegistrationTest extends TestCase {
 		$this->assertTrue( $permission_callback( [] ) );
 	}
 
+	public function test_theme_styles_permission_accepts_either_editor_capability(): void {
+		Registration::register_category();
+		Registration::register_abilities();
+
+		$permission_callback = WordPressTestState::$registered_abilities['flavor-agent/get-theme-styles']['permission_callback'];
+		$cases               = [
+			'neither'    => [ [], false ],
+			'theme only' => [ [ 'edit_theme_options' => true ], true ],
+			'post only'  => [ [ 'edit_posts' => true ], true ],
+			'both'       => [
+				[
+					'edit_posts'         => true,
+					'edit_theme_options' => true,
+				],
+				true,
+			],
+		];
+
+		foreach ( $cases as $label => [ $capabilities, $allowed ] ) {
+			WordPressTestState::$capabilities = $capabilities;
+			$this->assertSame( $allowed, $permission_callback( [] ), $label );
+		}
+	}
+
 	public function test_theme_scoped_recommendation_permissions_ignore_numeric_entity_ids(): void {
 		Registration::register_category();
 		Registration::register_recommendation_abilities();

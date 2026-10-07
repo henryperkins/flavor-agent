@@ -127,6 +127,8 @@ The client also enforces this rule before sending the request:
 - Those rows are stored in the same activity table and can travel through the same global `GET /flavor-agent/v1/activity` admin/debug/evaluation feed when diagnostics are included, but they do not participate in the executable ordered-undo lifecycle.
 - The admin page resolves request diagnostics into `review` or `failed` buckets based on the recorded execution result and persisted undo payload. Outcome diagnostics stay `diagnostic`/`not_applicable`, while inline executable surfaces continue to care only about `available`, runtime `blocked`, `undone`, and `failed`.
 
+The current outcome catalogs reject `dismissed`. The [approved proposed explicit-dismissal v1 contract](recommendation-outcome-followups.md#proposed-explicit-dismissal-v1) is diagnostic, non-executable, nonterminal, and deduplicated; passive panel closure or noninteraction is never dismissal. It has no implemented state transition or recording action today.
+
 ## Retry and Merge Behavior
 
 When a `POST /activity` create request arrives for an entry that already exists (duplicate `activity_id`), the server first checks access to the stored entry and requires the same author, document scope, surface, and activity type. Rows carrying apply metadata or the `server-executed` lane reject editor retries. These checks also precede returning an unchanged row.

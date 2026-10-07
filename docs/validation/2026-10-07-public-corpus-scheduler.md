@@ -157,9 +157,12 @@ and must not retroactively turn this exercise into a pass.
 
 ## Final local artifact identities
 
-The log, summary and manifest below are the completed exercise outputs. Raw
-artifacts remain local; this record contains only safe extracted evidence and
-their SHA-256 identities.
+The table records the completed exercise outputs as observed at the evidence
+snapshot above. The dated log remains local. `summary.json` and `manifest.json`
+are mutable latest-run paths; the later automatic run replaced them. Their
+original captured SHA-256 identities and extracted results remain in this
+record and the separate local observation, rather than being attributed to the
+later files.
 
 | Artifact | Bytes | SHA-256 |
 | --- | ---: | --- |
@@ -255,6 +258,67 @@ source types `developer-blog`, `make-core`; `developerDocs: false`,
 Both source families were independently retrievable with current qualifying
 chunks. The original and post-run mixed queries still lacked a current
 stable-docs chunk within their eight returned chunks, and the latest item
-sweep still had three pending desired items. The scheduler's original
+sweep at that time still had three pending desired items. The scheduler's original
 `needs-attention` result remains unchanged. These observations do not prove
 complete corpus freshness, successful pruning or release/deployment readiness.
+
+## Separate later observation
+
+A read-only metadata sweep from 10:33:42 to 10:36:16 UTC found all 13,478 keys
+desired by the original exercise among 16,502 listed items: missing 0, pending
+0, desired-item errors 0. Each of the three formerly pending items now reported
+`completed`. This demonstrates their later completion; it does not change the
+original exercise's exit 1, settlement timeout, or guarded zero deletions.
+
+One separate default mixed-query probe at 10:36:21 UTC returned HTTP 200 and
+eight chunks, five current and three stale. Current release-cycle evidence was
+present; current Developer Docs evidence was absent. The mixed-source freshness
+gate therefore remained false. Targeted or later retrieval observations must
+not be substituted for a passing scheduled-update gate.
+
+The registered daily task independently started another scheduled run at
+10:17:02 UTC and still reported `Running` at 10:36:34 UTC. `LastTaskResult`
+267009 represented that running state, not a finished pass or failure. The
+paginated metadata sweep overlapped this separate run and was not a snapshot;
+it does not establish that run's final settlement or freshness result.
+
+The observer performed no uploads, deletes, reindexing, resync, manual updater
+retry, scheduler changes, or configuration changes. Safe counts and original
+artifact digests are retained in the ignored local `corpus-final-observation`
+record. The original failed run remains preserved.
+
+## Separate automatic daily run completion
+
+The independently scheduled run started at 10:17:02.006 UTC and completed at
+10:49:46.023 UTC with exit 1 and `needs-attention`. Its log identifies the same
+master SHA and `--poll-seconds=600`. The registered task was `Ready`, with
+`LastTaskResult: 1`, when inspected at 11:08:41 UTC.
+
+| Evidence | Final automatic-run value |
+| --- | --- |
+| Prepared / reused documents | 13,478 prepared; 4,150 reused |
+| Uploaded / skipped | 284 uploaded; 13,195 skipped |
+| Discovery / build / upload errors | 0 / 0 / 0 |
+| Desired-key settlement | Failed; 4 pending, 0 desired-item errors; separate missing count not exposed |
+| Settlement polls / elapsed / trajectory | 118 polls; 800,633 ms; active 284 to 4, then plateau |
+| Public validation at 10:49:44.385 UTC | HTTP 200; 8 chunks; 5 attempts; `validation.ok: false` |
+| Currentness | 5 current, 3 stale; release-cycle present, Developer Docs absent |
+| Same-source cleanup | Blocked: `replacement-not-settled`; 0 deleted |
+| Bulk stale cleanup | Disabled; Wednesday run without `--delete-stale` |
+| Total deleted | 0 |
+
+The 10:36 metadata sweep established later completion of the original run's
+desired keys while this new run was active. It did not establish settlement of
+the new run's replacement keys. Neither scheduled run passed mixed-source
+freshness; successful HTTP responses alone are insufficient.
+
+| Final automatic-run artifact | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `output/docs-ai-search/logs/scheduled-2026-10-07T10-17-02-006Z.log` | 9,495 | `c5b2e0fabda98ac54f93299a118ed778cd8f8639809fcbf4f9ef7167076dcb07` |
+| `output/docs-ai-search/summary.json` | 6,447 | `086e59dca67024e9cf5e0a729bc71265187d17a37f5f873a6bca711c9b08dcac` |
+| `output/docs-ai-search/manifest.json` | 6,798,820 | `50235fc26a863a3d35f0ad94a244cbe20e4a5e85fbff2ac95617aabc0dd84e11` |
+
+The summary and manifest identities above belong to the later run, not the
+original exercise. A separate ignored completion note retains its extracted
+results. Inspecting this completion performed local reads only; it did not
+retry the updater, issue remote probes, or alter the corpus or scheduler.

@@ -56,6 +56,10 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 
 This is still the first governance-console slice, not the final observability product. It includes external apply decisions, attestation discovery for eligible style/template/template-part lanes, structured diff and before/after summaries, a rendered backend/API aggregate report contract, the first selected-row action/discovery layer (focused-row banner, honest target/focused-view links, related-row pivots, passive evidence badges), and a first rich visual diff layer for style-governance rows. Broader cross-operator workflows and deeper observability remain open.
 
+## Outcome Follow-up Boundary
+
+The approved [proposed dismissal and fixture-export v1 contracts](../reference/recommendation-outcome-followups.md) define explicit user dismissal, an administrator-reviewed local allowlisted export, and sample provenance/denominators. Neither feature ships today: PHP/JS reject `dismissed`, and the [October 7 bounded production collection](../validation/2026-10-07-real-site-outcomes.md) is a local review candidate with deployed-SHA/config provenance and fixture qualification still open. Native fixtures are not real-site evidence. Reporting and collection do not change static ranking; adaptive ranking needs separate consent, design, and evaluation evidence.
+
 ## Request Logging Coexistence
 
 Core AI Request Logging (`Tools > AI Request Logs`) captures AI Client HTTP calls. Flavor Agent's activity repository captures apply/undo state. The two layers coexist; Flavor Agent does not replace core logs.

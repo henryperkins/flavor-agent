@@ -191,6 +191,63 @@ final class ActivityPageTest extends TestCase {
 		$this->assertSame( 42, $data['currentUserId'] );
 	}
 
+	public function test_boot_exposes_only_signing_availability_and_eligible_surfaces_when_enabled(): void {
+		$secret = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		add_filter( 'flavor_agent_attest_private_key', static fn () => $secret );
+
+		$data = $this->activity_boot_data();
+
+		$this->assertSame(
+			[
+				'signingAvailable' => true,
+				'eligibleSurfaces' => [ 'global-styles', 'style-book', 'template', 'template-part' ],
+			],
+			$data['attestation'] ?? null
+		);
+		$this->assertStringNotContainsString( $secret, (string) wp_json_encode( $data ) );
+	}
+
+	public function test_boot_reports_unavailable_signing_without_key_configuration(): void {
+		add_filter( 'flavor_agent_attest_private_key', static fn () => '' );
+
+		$data = $this->activity_boot_data();
+
+		$this->assertSame( false, $data['attestation']['signingAvailable'] ?? null );
+		$this->assertSame(
+			[ 'signingAvailable', 'eligibleSurfaces' ],
+			array_keys( $data['attestation'] ?? [] )
+		);
+	}
+
+	public function test_boot_survives_throwing_signing_configuration_without_exposing_exception_details(): void {
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () {
+				throw new \RuntimeException( 'private-key-secret request-identity-private' );
+			}
+		);
+
+		$data = $this->activity_boot_data();
+
+		$this->assertSame( false, $data['attestation']['signingAvailable'] ?? null );
+		$this->assertSame(
+			[ 'signingAvailable', 'eligibleSurfaces' ],
+			array_keys( $data['attestation'] ?? [] )
+		);
+		$this->assertStringNotContainsString( 'private-key-secret', (string) wp_json_encode( $data ) );
+		$this->assertStringNotContainsString( 'request-identity-private', (string) wp_json_encode( $data ) );
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function activity_boot_data(): array {
+		$method = new \ReflectionMethod( ActivityPage::class, 'build_activity_log_boot_data' );
+		$method->setAccessible( true );
+
+		return $method->invoke( null );
+	}
+
 	public function test_render_pending_external_apply_notice_includes_post_title_and_id_for_post_blocks(): void {
 		$this->create_pending_entry(
 			[

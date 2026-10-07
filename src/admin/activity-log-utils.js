@@ -1757,6 +1757,22 @@ export function getAttestationLaneLabel( lane ) {
 	}
 }
 
+export function shouldWarnUnattestedApproval( entry, bootData ) {
+	const attestation = bootData?.attestation;
+	const surface = entry?.surface;
+	return (
+		isPlainObject( attestation ) &&
+		attestation.signingAvailable === false &&
+		Array.isArray( attestation.eligibleSurfaces ) &&
+		attestation.eligibleSurfaces.every(
+			( value ) => typeof value === 'string' && value.length > 0
+		) &&
+		typeof surface === 'string' &&
+		surface !== 'post-blocks' &&
+		attestation.eligibleSurfaces.includes( surface )
+	);
+}
+
 export function isPendingExternalApply( entry ) {
 	return (
 		isServerExecutedApply( entry ) &&

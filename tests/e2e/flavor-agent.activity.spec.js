@@ -216,7 +216,10 @@ test( 'AI Activity identifies a model response that exhausted its token budget',
 					processingMs: 55720,
 					finishReason: 'length',
 				},
-				errorSummary: { code: 'incomplete_response', wrappedMessage: error },
+				errorSummary: {
+					code: 'incomplete_response',
+					wrappedMessage: error,
+				},
 			},
 		},
 	};
@@ -236,7 +239,9 @@ test( 'AI Activity identifies a model response that exhausted its token budget',
 	);
 	await page.goto(
 		'/wp-admin/options-general.php?page=flavor-agent-activity',
-		{ waitUntil: 'domcontentloaded' }
+		{
+			waitUntil: 'domcontentloaded',
+		}
 	);
 	await waitForWordPressReady( page );
 	const sidebar = page.locator( '.flavor-agent-activity-log__sidebar' );
@@ -251,10 +256,14 @@ test( 'AI Activity identifies a model response that exhausted its token budget',
 	await expect(
 		sidebar.getByText(
 			'0 bytes · 55720 ms processing · finish reason length',
-			{ exact: true }
+			{
+				exact: true,
+			}
 		)
 	).toBeVisible();
-	await expect( sidebar.getByText( error, { exact: true } ).last() ).toBeVisible();
+	await expect(
+		sidebar.getByText( error, { exact: true } ).last()
+	).toBeVisible();
 } );
 
 test( 'AI Activity linked-row mode clears the URL and keeps discovery badges visible', async ( {
@@ -336,6 +345,138 @@ test( 'AI Activity linked-row mode clears the URL and keeps discovery badges vis
 		page.locator( '.flavor-agent-activity-log__sidebar' )
 	).toContainText( 'Rewrite hero heading' );
 } );
+
+for ( const harnessTag of [ '', '@wp70-site-editor ' ] ) {
+	for ( const [ label, surface, signingAvailable, warn ] of [
+		[ 'unavailable global styles signing', 'global-styles', false, true ],
+		[ 'unavailable style book signing', 'style-book', false, true ],
+		[ 'unavailable template signing', 'template', false, true ],
+		[ 'unavailable template part signing', 'template-part', false, true ],
+		[ 'available signing', 'global-styles', true, false ],
+		[ 'post blocks approval', 'post-blocks', false, false ],
+	] ) {
+		test( `${ harnessTag }AI Activity attestation advisory keeps approvals enabled with ${ label }`, async ( {
+			page,
+		}, testInfo ) => {
+			const entry = {
+				id: 'activity-attestation-advisory',
+				type: `apply_${ surface.replaceAll( '-', '_' ) }_suggestion`,
+				surface,
+				applyLane: 'server-executed',
+				status: 'pending',
+				suggestion: 'Review this proposed change',
+				target: {
+					globalStylesId: '17',
+					templateRef: 'theme//home',
+					postId: 42,
+				},
+				document: {
+					scopeKey: 'global_styles:17',
+					postType: 'global_styles',
+					entityId: '17',
+				},
+				before: {},
+				after: {},
+				request: {},
+				apply: {
+					status: 'pending',
+					requestedBy: 7,
+					expiresAt: '2030-06-10T00:00:00Z',
+					operations: [],
+				},
+				timestamp: '2026-06-10T00:00:00Z',
+			};
+			// Configuration is a page-load fixture; no site keys or provider calls are needed.
+			await page.addInitScript( ( available ) => {
+				let boot;
+				Object.defineProperty( window, 'flavorAgentActivityLog', {
+					configurable: true,
+					get: () => boot,
+					set: ( value ) => {
+						boot = {
+							...value,
+							attestation: {
+								signingAvailable: available,
+								eligibleSurfaces: [
+									'global-styles',
+									'style-book',
+									'template',
+									'template-part',
+								],
+							},
+						};
+					},
+				} );
+			}, signingAvailable );
+			await page.route(
+				'**/wp-json/flavor-agent/v1/activity**',
+				async ( route ) => {
+					await route.fulfill( {
+						status: 200,
+						contentType: 'application/json',
+						body: JSON.stringify(
+							route.request().url().includes( '/claim' )
+								? { claim: null, entry }
+								: buildActivityResponse(
+										route.request().url(),
+										[ entry ]
+								  )
+						),
+					} );
+				}
+			);
+			await page.goto(
+				'/wp-admin/options-general.php?page=flavor-agent-activity'
+			);
+			await waitForWordPressReady( page );
+			const decision = page.locator(
+				'.flavor-agent-activity-log__decision'
+			);
+			const warning = decision.locator( '.components-notice.is-warning' );
+			const approve = decision.getByRole( 'button', {
+				name: 'Approve and apply',
+			} );
+			await expect( approve ).toBeEnabled();
+			await expect(
+				decision.getByRole( 'button', { name: 'Reject', exact: true } )
+			).toBeEnabled();
+			if ( warn ) {
+				await expect( warning ).toBeVisible();
+				await expect(
+					warning.locator( '.components-notice__content' )
+				).toHaveText(
+					'Attestation signing is unavailable. Approving this change will apply it without a signed attestation.'
+				);
+				await expect( warning.getByRole( 'button' ) ).toHaveCount( 0 );
+				expect(
+					await decision.evaluate( ( element ) => {
+						const notice = element.querySelector(
+							'.components-notice.is-warning'
+						);
+						return (
+							notice.compareDocumentPosition(
+								element.querySelector( 'textarea' )
+							) === window.Node.DOCUMENT_POSITION_FOLLOWING
+						);
+					} )
+				).toBe( true );
+				if ( surface === 'global-styles' ) {
+					await warning.scrollIntoViewIfNeeded();
+					await testInfo.attach( 'Attestation advisory', {
+						body: await page.screenshot( {
+							path: testInfo.outputPath(
+								'attestation-advisory.png'
+							),
+						} ),
+						contentType: 'image/png',
+					} );
+				}
+			} else {
+				await expect( warning ).toHaveCount( 0 );
+			}
+		} );
+	}
+}
 
 test( 'AI Activity renders the rich visual diff viewer for pending governance rows without implying the site changed', async ( {
 	page,

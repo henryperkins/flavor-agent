@@ -135,7 +135,9 @@ final class InfraAbilities {
 		self::maybe_add_ability( $abilities, 'flavor-agent/list-allowed-blocks', 'edit_posts' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/get-active-theme', 'edit_posts' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/get-theme-presets', 'edit_posts' );
-		self::maybe_add_ability( $abilities, 'flavor-agent/get-theme-styles', 'edit_posts' );
+		if ( current_user_can( 'edit_posts' ) || current_user_can( 'edit_theme_options' ) ) {
+			$abilities[] = 'flavor-agent/get-theme-styles';
+		}
 		self::maybe_add_ability( $abilities, 'flavor-agent/get-theme-tokens', 'edit_posts' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/check-status', 'edit_posts' );
 		self::maybe_add_ability( $abilities, 'flavor-agent/recommend-block', 'edit_posts', $block_recommendations_configured );

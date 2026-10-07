@@ -5,12 +5,13 @@ test( 'authenticate the WP 7.1 Site Editor harness', async ( { page } ) => {
 	const harness = getWp70HarnessConfig();
 
 	await page.goto( '/wp-login.php', {
-		// The cold WordPress login page still performs asynchronous initialization
-		// after DOMContentLoaded. Filling during that window can leave the password
-		// empty again, so wait for the full load lifecycle before entering it.
+		// Load the login page before waiting for its deferred username autofocus.
 		waitUntil: 'load',
 	} );
 
+	// WordPress schedules this focus after load; let it finish before either
+	// fill so it cannot interrupt password entry and prevent form submission.
+	await expect( page.locator( '#user_login' ) ).toBeFocused();
 	await page.locator( '#user_login' ).fill( harness.adminUser );
 	await page.locator( '#user_pass' ).fill( harness.adminPassword );
 	await page.locator( '#wp-submit' ).click();
