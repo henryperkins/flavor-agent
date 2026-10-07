@@ -127,7 +127,7 @@ The client also enforces this rule before sending the request:
 - Those rows are stored in the same activity table and can travel through the same global `GET /flavor-agent/v1/activity` admin/debug/evaluation feed when diagnostics are included, but they do not participate in the executable ordered-undo lifecycle.
 - The admin page resolves request diagnostics into `review` or `failed` buckets based on the recorded execution result and persisted undo payload. Outcome diagnostics stay `diagnostic`/`not_applicable`, while inline executable surfaces continue to care only about `available`, runtime `blocked`, `undone`, and `failed`.
 
-The current outcome catalogs reject `dismissed`. The [approved proposed explicit-dismissal v1 contract](recommendation-outcome-followups.md#proposed-explicit-dismissal-v1) is diagnostic, non-executable, nonterminal, and deduplicated; passive panel closure or noninteraction is never dismissal. It has no implemented state transition or recording action today.
+The [explicit-dismissal v1 contract](recommendation-outcome-followups.md#explicit-dismissal-v1) records `dismissed` with the fixed `user_dismissed` reason for explicitly named, fresh visible suggestion identities. It uses diagnostic visibility, `executionResult: diagnostic`, `undo.canUndo: false`, and `undo.status: not_applicable`; it creates no executable or terminal state transition. Repeated actions deduplicate by surface/set/suggestion/event/reason. Later review/apply remains possible after normal validation and freshness checks. Passive panel closure, navigation, timeout, or noninteraction never records dismissal. Full shown identities determine the suggestion denominator; a capped ranking snapshot is incomplete evidence.
 
 ## Retry and Merge Behavior
 
