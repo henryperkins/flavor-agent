@@ -8,6 +8,7 @@ use FlavorAgent\Attestation\Canonicalizer;
 use FlavorAgent\Attestation\KeyManager;
 use FlavorAgent\Attestation\Signer;
 use FlavorAgent\Attestation\StatementBuilder;
+use FlavorAgent\Attestation\StatementValidator;
 use FlavorAgent\Attestation\Verifier;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -19,6 +20,21 @@ final class AttestationVerifierTest extends TestCase {
 
 		WordPressTestState::reset();
 		$this->configure_key();
+	}
+
+	public function test_historical_statement_verifies_after_signer_removal_and_retirement(): void {
+		$envelope = $this->signed_envelope( 'att_history', str_repeat( '0', 64 ), hash( 'sha256', 'historical state' ) );
+		add_filter( 'flavor_agent_attest_private_key', static fn (): string => '', 20 );
+		$jwks = KeyManager::jwks();
+		$this->assertSame( 'verification-only', $jwks['keys'][0]['status'] );
+		foreach ( [ 'verification-only', 'retired' ] as $status ) {
+			$jwks['keys'][0]['status'] = $status;
+			$validated                 = StatementValidator::validate( $envelope, $jwks, 'att_history', 'https://example.test' );
+			$this->assertTrue( $validated['valid'] );
+			$result = Verifier::verify( $envelope, $jwks, 'historical state', 'att_history', 'https://example.test' );
+			$this->assertContains( 'signature_valid', $result['outcomes'] );
+			$this->assertSame( 'verified', $result['verificationStatus'] );
+		}
 	}
 
 	public function test_intact_change_yields_signature_valid_and_live_match(): void {

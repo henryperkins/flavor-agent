@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace FlavorAgent\Admin;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
+use FlavorAgent\Attestation\AttestationService;
+use FlavorAgent\Attestation\KeyManager;
 use FlavorAgent\Context\ServerCollector;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -217,6 +219,10 @@ final class ActivityPage {
 	private static function build_activity_log_boot_data(): array {
 		return [
 			'adminUrl'               => admin_url(),
+			'attestation'            => [
+				'signingAvailable' => KeyManager::configured(),
+				'eligibleSurfaces' => AttestationService::eligible_surfaces(),
+			],
 			'canApproveStyleApplies' => current_user_can( 'edit_theme_options' ),
 			'connectorsUrl'          => admin_url( 'options-connectors.php' ),
 			'currentUserId'          => get_current_user_id(),

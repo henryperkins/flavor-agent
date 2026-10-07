@@ -11,9 +11,23 @@ function getDataViewsMockState() {
 	return global.__flavorAgentActivityLogDataViewsState;
 }
 
-jest.mock( '@wordpress/components', () =>
-	require( '../../test-utils/wp-components' ).mockWpComponents()
-);
+jest.mock( '@wordpress/components', () => {
+	const components =
+		require( '../../test-utils/wp-components' ).mockWpComponents();
+	const { createElement } = require( '@wordpress/element' );
+	const { Notice } = jest.requireActual( '@wordpress/components' );
+	return {
+		...components,
+		Notice: ( props ) =>
+			createElement(
+				props.className ===
+					'flavor-agent-activity-log__attestation-advisory'
+					? Notice
+					: components.Notice,
+				props
+			),
+	};
+} );
 
 jest.mock( '@wordpress/dataviews/wp', () => {
 	global.__flavorAgentActivityLogDataViewsState =
@@ -2592,6 +2606,90 @@ describe( 'ActivityLogApp', () => {
 			getContainer().textContent.includes( 'Pending approval' )
 		).toBe( true );
 	} );
+
+	test( 'warns before an unattested approval and keeps the decision controls enabled', async () => {
+		await renderApp( [ createExternalApplyEntry() ], {
+			bootData: {
+				attestation: {
+					signingAvailable: false,
+					eligibleSurfaces: [
+						'global-styles',
+						'style-book',
+						'template',
+						'template-part',
+					],
+				},
+			},
+		} );
+
+		const decision = getContainer().querySelector(
+			'.flavor-agent-activity-log__decision'
+		);
+		const warning = decision.querySelector(
+			'.components-notice.is-warning'
+		);
+		expect( warning ).not.toBeNull();
+		expect( warning.textContent ).toContain(
+			'Attestation signing is unavailable. Approving this change will apply it without a signed attestation.'
+		);
+		expect( warning.querySelector( 'button' ) ).toBeNull();
+		const note = decision.querySelector( 'textarea' );
+		expect( warning.compareDocumentPosition( note ) ).toBe(
+			window.Node.DOCUMENT_POSITION_FOLLOWING
+		);
+		expect( note.disabled ).toBe( false );
+		const approve = Array.from(
+			decision.querySelectorAll( 'button' )
+		).find( ( button ) => button.textContent === 'Approve and apply' );
+		expect( approve.disabled ).toBe( false );
+		apiFetch.mockResolvedValueOnce( {
+			entry: { id: 'activity-external-apply' },
+		} );
+		await act( async () => approve.click() );
+		expect(
+			getContainer().querySelector(
+				'.flavor-agent-activity-log__decision'
+			)
+		).toBeNull();
+	} );
+
+	test.each( [
+		[
+			'signing enabled',
+			'global-styles',
+			{ signingAvailable: true, eligibleSurfaces: [ 'global-styles' ] },
+		],
+		[ 'legacy boot', 'global-styles', undefined ],
+		[
+			'post blocks',
+			'post-blocks',
+			{ signingAvailable: false, eligibleSurfaces: [ 'global-styles' ] },
+		],
+	] )(
+		'keeps approvals free of attestation warnings for %s',
+		async ( label, surface, attestation ) => {
+			await renderApp(
+				[
+					createExternalApplyEntry( {
+						surface,
+						type: `apply_${ surface.replaceAll(
+							'-',
+							'_'
+						) }_suggestion`,
+					} ),
+				],
+				{ bootData: { attestation } }
+			);
+			expect( getContainer().textContent ).not.toContain(
+				'Attestation signing is unavailable.'
+			);
+			const approve = Array.from(
+				getContainer().querySelectorAll( 'button' )
+			).find( ( button ) => button.textContent === 'Approve and apply' );
+			expect( approve ).toBeDefined();
+			expect( approve.disabled ).toBe( false );
+		}
+	);
 
 	test( 'shows approve and reject actions for pending external applies and posts the decision', async () => {
 		window.history.replaceState(

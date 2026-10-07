@@ -191,6 +191,97 @@ final class ActivityPageTest extends TestCase {
 		$this->assertSame( 42, $data['currentUserId'] );
 	}
 
+	public function test_boot_exposes_only_signing_availability_and_eligible_surfaces_when_enabled(): void {
+		$secret = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		add_filter( 'flavor_agent_attest_private_key', static fn () => $secret );
+
+		$data = $this->activity_boot_data();
+
+		$this->assertSame(
+			[
+				'signingAvailable' => true,
+				'eligibleSurfaces' => [ 'global-styles', 'style-book', 'template', 'template-part' ],
+			],
+			$data['attestation'] ?? null
+		);
+		$this->assertStringNotContainsString( $secret, (string) wp_json_encode( $data ) );
+	}
+
+	public function test_boot_reports_unavailable_signing_without_key_configuration(): void {
+		add_filter( 'flavor_agent_attest_private_key', static fn () => '' );
+
+		$data = $this->activity_boot_data();
+
+		$this->assertSame( false, $data['attestation']['signingAvailable'] ?? null );
+		$this->assertSame(
+			[ 'signingAvailable', 'eligibleSurfaces' ],
+			array_keys( $data['attestation'] ?? [] )
+		);
+	}
+
+	public function test_boot_survives_throwing_signing_configuration_without_exposing_exception_details(): void {
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () {
+				throw new \RuntimeException( 'private-key-secret request-identity-private' );
+			}
+		);
+
+		$data = $this->activity_boot_data();
+
+		$this->assertSame( false, $data['attestation']['signingAvailable'] ?? null );
+		$this->assertSame(
+			[ 'signingAvailable', 'eligibleSurfaces' ],
+			array_keys( $data['attestation'] ?? [] )
+		);
+		$this->assertStringNotContainsString( 'private-key-secret', (string) wp_json_encode( $data ) );
+		$this->assertStringNotContainsString( 'request-identity-private', (string) wp_json_encode( $data ) );
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function activity_boot_data(): array {
+		$method = new \ReflectionMethod( ActivityPage::class, 'build_activity_log_boot_data' );
+		$method->setAccessible( true );
+
+		return $method->invoke( null );
+	}
+
+	/** @dataProvider signing_owner_drift_modes */
+	public function test_boot_reports_signing_unavailable_when_key_filter_changes_owner( string $mode ): void {
+		$database = $GLOBALS['wpdb'];
+		$blog_id  = WordPressTestState::$current_blog_id;
+		$secret   = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () use ( $secret, $mode ): string {
+				if ( 'blog' === $mode ) {
+					WordPressTestState::$current_blog_id = 2;
+				} else {
+					$GLOBALS['wpdb'] = new \wpdb();
+				}
+				return $secret;
+			}
+		);
+		try {
+			$data = $this->activity_boot_data();
+			$this->assertFalse( $data['attestation']['signingAvailable'] );
+			$this->assertStringNotContainsString( $secret, (string) wp_json_encode( $data ) );
+		} finally {
+			$GLOBALS['wpdb']                     = $database;
+			WordPressTestState::$current_blog_id = $blog_id;
+		}
+	}
+
+	/** @return array<string, array{string}> */
+	public static function signing_owner_drift_modes(): array {
+		return [
+			'blog'     => [ 'blog' ],
+			'database' => [ 'database' ],
+		];
+	}
+
 	public function test_render_pending_external_apply_notice_includes_post_title_and_id_for_post_blocks(): void {
 		$this->create_pending_entry(
 			[

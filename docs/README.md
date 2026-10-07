@@ -60,6 +60,7 @@ Read these documents in this order:
    - `abilities-and-routes.md` — abilities, REST routes, permissions, and first-party callers.
    - `shared-internals.md` — cross-cutting store utilities, shared UI components, and context helpers.
    - `recommendation-ui-consistency.md` — current surface-model split, shared vocabulary, and intentional UI exceptions.
+   - `recommendation-outcome-followups.md` — approved proposed v1 dismissal/export contracts; runtime implementation remains pending, and the bounded real-site candidate retains provenance/qualification limits.
    - `cross-surface-validation-gates.md` — additive hard-stop validation rules and release evidence for multi-surface or shared-subsystem changes.
    - `governance-layer.md` — the governance-layer contract map: pillars, enforcing code paths, surface loop coverage, and external-agent parity boundaries.
    - `agents-api-integration.md` — adoption boundary and phased plan for using Agents API as an optional runtime over Flavor Agent abilities without replacing its governance state machines.
@@ -121,6 +122,7 @@ Each top-level doc has one job:
    - `developer-docs-public-corpus-runbook.md` — Who owns the built-in public Developer Docs grounding corpus? Which source scopes, refresh cadence, and validation evidence gate the current-release coverage warning?
    - `template-operations.md` — Which operation types are valid per surface? What fields and placements are required?
    - `activity-state-machine.md` — What undo states exist? Which transitions are valid? When is undo blocked?
+   - `recommendation-outcome-followups.md` — Approved proposed v1 explicit-dismissal and local fixture-export contracts, privacy review, sample coverage, and static-ranking boundary.
    - `wordpress-ai-roadmap-tracking.md` — Which upstream AI initiative collides with which Flavor Agent surface, and which board items are imminent?
    - `gutenberg-feature-tracking.md` — Which Gutenberg release stabilized an API the repo shims, and which iteration issue or forthcoming change should the repo watch?
    - `local-environment-setup.md` — Which local WordPress, Gutenberg, connector, and plugin-check setup is representative for manual testing?

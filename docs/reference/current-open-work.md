@@ -92,7 +92,7 @@ These are real roadmap items, but they should not jump ahead of the prerequisite
 
 | Item | Gate |
 | --- | --- |
-| Fixture harvest from learning signals | Needs learning reports and a reviewable export/redaction story first. |
+| Fixture harvest from learning signals | Learning reports ship; the [approved proposed export/dismissal v1 contracts](recommendation-outcome-followups.md) now define the review/redaction design. Export implementation remains pending. The [October 7 bounded real-site collection](../validation/2026-10-07-real-site-outcomes.md) retains a local candidate; deployed-SHA/config provenance and fixture qualification remain open. |
 | Bounded local ranking feedback | Needs reports, harvested fixtures, versioned signal families, and an operator disable path first. |
 | Editable site preference summaries | Needs enough local learning signal to propose preferences, plus explicit operator review before prompt guidance changes. |
 | Navigation apply | Intentional post-v1 milestone only. Do not add apply/undo without a bounded previewable executor and a dedicated plan. |
@@ -149,5 +149,5 @@ These can turn into implementation work only after the upstream contract changes
 ## Suggested Next Planning Order
 
 1. Block-surface external-apply executor — the next governed-execution extension now that style, template, and template-part server-side approval loops are shipped. It needs a separate source-grounded plan because selected-block/document scope, operation allowlists, and UI proof differ materially from the shipped template lane.
-2. Fixture-harvest export/redaction planning if the priority is the future learning loop; use the shipped Phase 8 attribution join contract and Phase 9 learning-report slice as the input contract.
+2. Fixture-harvest implementation planning if the priority is the future learning loop; use the [approved proposed dismissal/export v1 contracts](recommendation-outcome-followups.md), shipped Phase 8 attribution joins, and Phase 9 learning-report slice. A bounded real-site candidate is collected with deployed-SHA/config provenance and fixture qualification still open; static ranking must not consume outcome history without separate consent/design/evaluation evidence.
 3. Release-validation chores before any v0.1.0 release decision or upstream compatibility claim.

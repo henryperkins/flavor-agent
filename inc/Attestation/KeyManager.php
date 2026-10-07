@@ -9,15 +9,17 @@ use FlavorAgent\Activity\Repository as ActivityRepository;
 
 final class KeyManager {
 
+	public const STATUS_VERIFICATION_ONLY = 'verification-only';
+
 	private const REGISTRY_OPTION = 'flavor_agent_attestation_public_keys';
 
 	public static function private_key(): ?string {
 		$configured = \defined( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY' )
-			? (string) \constant( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY' )
+			? \constant( 'FLAVOR_AGENT_ATTEST_PRIVATE_KEY' )
 			: '';
-		$raw        = (string) \apply_filters( 'flavor_agent_attest_private_key', $configured );
+		$raw        = \apply_filters( 'flavor_agent_attest_private_key', $configured );
 
-		if ( '' === $raw ) {
+		if ( ! is_string( $raw ) || '' === $raw ) {
 			return null;
 		}
 
@@ -29,7 +31,55 @@ final class KeyManager {
 	}
 
 	public static function configured(): bool {
-		return null !== self::private_key();
+		$owner = ActivityRepository::capture_storage_context();
+
+		return $owner instanceof ActivityStorageContext
+			&& null !== self::current_public_identity( $owner );
+	}
+
+	/**
+	 * Obtain only public status evidence and wipe the local signing-key copy.
+	 *
+	 * @return array{kid: string, x: string}|null
+	 */
+	private static function current_public_identity( ?ActivityStorageContext $storage_context = null ): ?array {
+		if ( null !== $storage_context && ! $storage_context->matches_current() ) {
+			return null;
+		}
+
+		$private_key = null;
+
+		try {
+			$private_key = self::private_key();
+
+			// A private-key filter may change the ambient blog or database owner.
+			if ( null === $private_key || ( null !== $storage_context && ! $storage_context->matches_current() ) ) {
+				return null;
+			}
+
+			$public_key = self::public_key( $private_key );
+
+			// Extraction reads only the embedded public half; prove the signer is usable.
+			if ( null === $public_key || ! sodium_crypto_sign_verify_detached(
+				sodium_crypto_sign_detached( '', $private_key ),
+				'',
+				$public_key
+			) ) {
+				return null;
+			}
+
+			return [
+				'kid' => self::key_id( $public_key ),
+				'x'   => self::b64url( $public_key ),
+			];
+		} catch ( \Throwable ) {
+			// Configuration diagnostics must not expose filter exceptions or secrets.
+			return null;
+		} finally {
+			if ( null !== $private_key ) {
+				sodium_memzero( $private_key );
+			}
+		}
 	}
 
 	public static function public_key( ?string $private_key = null ): ?string {
@@ -117,10 +167,28 @@ final class KeyManager {
 			? $storage_context->read_option( self::REGISTRY_OPTION, [] )
 			: \get_option( self::REGISTRY_OPTION, [] );
 		$keys     = [];
+		$identity = null;
+
+		// Historical verification needs no private key when no entry claims active.
+		foreach ( is_array( $registry ) ? $registry : [] as $record ) {
+			if ( is_array( $record ) && 'active' === ( $record['status'] ?? '' ) ) {
+				$identity = null !== $storage_context ? self::current_public_identity( $storage_context ) : null;
+				break;
+			}
+		}
 
 		foreach ( is_array( $registry ) ? $registry : [] as $record ) {
 			if ( ! is_array( $record ) ) {
 				continue;
+			}
+
+			$status = (string) ( $record['status'] ?? '' );
+			if ( 'active' === $status && (
+				null === $identity
+				|| $identity['kid'] !== (string) $record['kid']
+				|| $identity['x'] !== (string) $record['x']
+			) ) {
+				$status = self::STATUS_VERIFICATION_ONLY;
 			}
 
 			$keys[] = [
@@ -130,7 +198,7 @@ final class KeyManager {
 				'kid'       => (string) $record['kid'],
 				'use'       => 'sig',
 				'alg'       => 'EdDSA',
-				'status'    => (string) ( $record['status'] ?? '' ),
+				'status'    => $status,
 				'createdAt' => (string) ( $record['createdAt'] ?? '' ),
 			];
 		}

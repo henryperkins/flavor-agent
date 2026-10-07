@@ -24,6 +24,17 @@ final class AttestationServiceTest extends TestCase {
 		WordPressTestState::reset();
 	}
 
+	public function test_advertised_eligible_surfaces_are_the_owned_apply_lanes(): void {
+		$this->assertSame(
+			[ 'global-styles', 'style-book', 'template', 'template-part' ],
+			AttestationService::eligible_surfaces()
+		);
+		foreach ( [ 'global-styles', 'style-book', 'template', 'template-part' ] as $surface ) {
+			$this->assertTrue( AttestationService::surface_eligible( ' ' . $surface . ' ' ) );
+		}
+		$this->assertFalse( AttestationService::surface_eligible( 'post-blocks' ) );
+	}
+
 	public function test_record_apply_persists_a_verifiable_attestation(): void {
 		$this->configure_key();
 		Repository::install();

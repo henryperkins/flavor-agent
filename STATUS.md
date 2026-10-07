@@ -1,6 +1,14 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-09-28
+> Last updated: 2026-10-07
+
+## Unreleased October follow-ups
+
+Public attestation keys now distinguish a usable current signer from verification-only historical keys. AI Activity warns before eligible approvals when signing is unavailable, while keeping approval available. The read-only `get-theme-styles` helper accepts either `edit_posts` or `edit_theme_options`; other helper permissions retain their existing boundaries. Published as [PR 86](https://github.com/henryperkins/flavor-agent/pull/86), the reviewed runtime passed all nine strict gates, including complete 34-case Playground and 46-case Docker/Gutenberg runs. The [follow-up validation](docs/validation/2026-10-07-approved-followups.md) preserves the earlier failing full runs, targeted repairs, and earlier 46-case bundled-editor pass separately. Release and production validation remain pending.
+
+The [outcome follow-up contract](docs/reference/recommendation-outcome-followups.md) defines proposed explicit-dismissal and privacy-preserving local export behavior. Those features remain unimplemented, and ranking remains static. The approved production site's last-30-days cohort is collected: 41 Activity rows yielded nine projected outcome/apply records. The [bounded collection record](docs/validation/2026-10-07-real-site-outcomes.md) preserves metrics and provenance limits; hosted implementation SHA/config remains unverified, so the local candidate is not a qualified exporter fixture.
+
+The October 7 records preserve [current-master checks](docs/validation/2026-10-07-current-master-gates.md), a [successful native Anthropic Inspector request](docs/validation/2026-10-07-live-anthropic-inspector.md), and the [scheduler's failed settlement/freshness gate](docs/validation/2026-10-07-public-corpus-scheduler.md). These records identify their tested master SHA and operational limits; they do not validate the subsequent unreleased changes.
 
 ## Unreleased adapted-preview and color-support fixes
 
@@ -91,7 +99,7 @@ All nine REST route paths under `/flavor-agent/v1/` are working. Recommendation 
 The consolidated current work queue now lives in [`docs/reference/current-open-work.md`](docs/reference/current-open-work.md). Use it to separate actionable implementation candidates from release-validation chores and upstream watch items.
 
 - [x] Added live WordPress smoke coverage for `get-theme-styles`, `list-synced-patterns`, `get-synced-pattern`, and `list-allowed-blocks` in `tests/e2e/flavor-agent-helper-abilities.spec.js`, using the WP 7.0 abilities REST endpoints directly. The current host has Docker available, and the helper smoke specs passed in the 2026-04-29 WP 7.0 rerun.
-- [x] Made an explicit permission decision for helper theme reads versus theme-editing surfaces: `get-active-theme` / `get-theme-presets` / `get-theme-styles` / `get-theme-tokens` stay at `edit_posts`, and `list-template-parts` now accepts editor or theme capability at the outer boundary while returning markup only to theme-capable callers.
+- [x] Made an explicit permission decision for helper theme reads versus theme-editing surfaces: `get-active-theme` / `get-theme-presets` / `get-theme-tokens` stay at `edit_posts`; `get-theme-styles` accepts `edit_posts` or `edit_theme_options`, and `list-template-parts` now accepts editor or theme capability at the outer boundary while returning markup only to theme-capable callers.
 - [x] Promoted synced-pattern `partial` to a first-class `syncStatus` value and filter while still preserving raw `wpPatternSyncStatus`.
 - [x] Revisited payload size and semantics for the new list helpers: `list-allowed-blocks`, `list-patterns`, and `list-synced-patterns` now support pagination and lighter payload modes, and each list now returns `total`.
 - [x] Added classic-theme, child-theme, and plugin-dense helper smoke coverage through the new WP 7.0 fixture themes/plugin and helper smoke spec. The helper smoke specs passed in the 2026-04-29 WP 7.0 rerun.

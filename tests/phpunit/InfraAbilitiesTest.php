@@ -133,6 +133,26 @@ final class InfraAbilitiesTest extends TestCase {
 		$this->assertNotContains( 'flavor-agent/get-pattern', $status['availableAbilities'] );
 	}
 
+	public function test_check_status_reports_theme_styles_for_theme_only_users(): void {
+		WordPressTestState::$capabilities = [
+			'edit_theme_options' => true,
+		];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertContains( 'flavor-agent/get-theme-styles', $status['availableAbilities'] );
+		$this->assertNotContains( 'flavor-agent/check-status', $status['availableAbilities'] );
+		$this->assertNotContains( 'flavor-agent/get-theme-tokens', $status['availableAbilities'] );
+	}
+
+	public function test_check_status_hides_theme_styles_without_either_editor_capability(): void {
+		WordPressTestState::$capabilities = [];
+
+		$status = InfraAbilities::check_status( [] );
+
+		$this->assertNotContains( 'flavor-agent/get-theme-styles', $status['availableAbilities'] );
+	}
+
 	public function test_check_status_uses_generic_wordpress_ai_client_without_selected_connector(): void {
 		WordPressTestState::$capabilities        = [
 			'edit_posts' => true,

@@ -46,6 +46,7 @@ import {
 	normalizeSelectedActivityActions,
 	normalizeStoredActivityView,
 	readPersistedActivityView,
+	shouldWarnUnattestedApproval,
 	TERMINAL_DECISION_ERROR_CODES,
 	writePersistedActivityView,
 } from './activity-log-utils';
@@ -2748,6 +2749,18 @@ function GovernanceEvidenceSection( {
 							</Button>
 						) }
 					</div>
+					{ shouldWarnUnattestedApproval( entry, bootData ) && (
+						<Notice
+							className="flavor-agent-activity-log__attestation-advisory"
+							status="warning"
+							isDismissible={ false }
+						>
+							{ __(
+								'Attestation signing is unavailable. Approving this change will apply it without a signed attestation.',
+								'flavor-agent'
+							) }
+						</Notice>
+					) }
 					<TextareaControl
 						__nextHasNoMarginBottom
 						label={ __(

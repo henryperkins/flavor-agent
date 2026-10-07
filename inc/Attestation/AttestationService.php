@@ -174,8 +174,13 @@ final class AttestationService {
 		return RecordResult::failed( $error_code );
 	}
 
+	/** @return list<string> */
+	public static function eligible_surfaces(): array {
+		return self::ELIGIBLE_SURFACES;
+	}
+
 	public static function surface_eligible( string $surface ): bool {
-		return in_array( trim( $surface ), self::ELIGIBLE_SURFACES, true );
+		return in_array( trim( $surface ), self::eligible_surfaces(), true );
 	}
 
 	public static function lane_for_surface( string $surface ): string {

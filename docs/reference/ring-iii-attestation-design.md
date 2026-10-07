@@ -269,13 +269,31 @@ and the transparency-log level (§12) addresses history-rewrite over time.
   **never auto-generated into `wp_options`** (DB-read forgery would gut the guarantee). Absence of
   a key disables attestation cleanly, the way FA's other optional backends disable.
 - **Public key:** derived from the configured private key and recorded in a **durable public-key
-  registry** (`keyId → public JWK + status active|retired + createdAt`), separate from the single
+  registry** (`keyId → public JWK + stored status active|retired + createdAt`), separate from the single
   active private key in env/constant. The keys route serves the whole registry as JWKS
   (`kty: OKP`, `crv: Ed25519`, RFC 8037). On rotation the new key is registered `active` and the
   prior marked `retired` but **kept**, so historical attestations stay verifiable; each
   attestation row's `key_id` (and the statement's `site.keyId`) resolves into this registry. If
   an operator rotates A → B → A, reconciliation reactivates A, retires B, preserves A's original
   `createdAt`, and still exports exactly one active key.
+- **Current signing readiness:** `KeyManager::configured()` safely returns false for absent,
+  malformed, or throwing private-key configuration. Status reads derive only the public signer
+  identity, wipe their local private-key copy in `finally`, and never expose filter exception
+  text or private material. JWKS exports a stored `active` record as `active` only when both its
+  `kid` and public key match the current usable signer. Otherwise that record is exported as
+  `verification-only` (`KeyManager::STATUS_VERIFICATION_ONLY`). Stored `retired` labels remain
+  retired, even if the operator configures that key again without registration. A key rotation
+  that has not been registered does not add a key or advertise the old key as active.
+- **Read-only owner binding:** JWKS reads the registry through its captured
+  `ActivityStorageContext` and checks `matches_current()` before and after the private-key filter.
+  A foreign owner or blog/database drift during the filter cannot borrow the ambient site's
+  signing identity. Reads never switch blogs, register keys, or update options. Without a safely
+  captured current owner, stored active entries are exported as verification-only. All historical
+  public keys stay published; `verification-only` and `retired` labels do not invalidate old signed
+  statements or change `StatementValidator` / `Verifier` signature and profile checks.
+- **Eligible surfaces:** `AttestationService::eligible_surfaces()` publishes the canonical ordered
+  list `global-styles`, `style-book`, `template`, `template-part`; `surface_eligible()` consumes this
+  list. Post-blocks has no eligible attestation lane.
 
 ## 8. Lifecycle & data flow
 

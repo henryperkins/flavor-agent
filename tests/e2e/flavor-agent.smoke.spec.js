@@ -5374,6 +5374,18 @@ for ( const [ colorProperty, presetSlug ] of [
 				exact: true,
 			} )
 			.click();
+		// Finish scoped history hydration before comparing activity counts.
+		const loadedActivityScope = await page.evaluate( async () => {
+			await window.wp.data
+				.dispatch( 'flavor-agent' )
+				.loadActivitySession( { retryIfScopeUnavailable: false } );
+			return window.wp.data
+				.select( 'flavor-agent' )
+				.getActivityScopeKey();
+		} );
+		expect( loadedActivityScope ).toBe(
+			`style_book:${ initialState.globalStylesId }:${ STYLE_BOOK_BLOCK_NAME }`
+		);
 		const initialActivityCount = await getSurfaceActivityCount(
 			page,
 			'style-book'
