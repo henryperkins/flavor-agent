@@ -38,8 +38,10 @@ fi
 
 if [[ -f "${output_dir}/composer.json" ]] && command -v composer >/dev/null 2>&1; then
 	rm -rf -- "${output_dir}/vendor"
+	# The distribution excludes the lockfile; use it during the production install only.
+	cp -- "${plugin_dir}/composer.lock" "${output_dir}/composer.lock"
 	COMPOSER_ROOT_VERSION="${COMPOSER_ROOT_VERSION:-dev-main}" \
-		composer --working-dir="${output_dir}" dump-autoload --no-dev --classmap-authoritative --no-interaction >/dev/null
+		composer --working-dir="${output_dir}" install --no-dev --classmap-authoritative --no-interaction --no-progress --no-scripts --no-plugins >/dev/null
 fi
 
 rm -f -- "${output_dir}/composer.lock"
