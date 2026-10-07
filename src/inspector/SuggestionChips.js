@@ -15,6 +15,7 @@ import {
 	SURFACE_TONES,
 } from '../components/surface-labels';
 import InlineActionFeedback from '../components/InlineActionFeedback';
+import RecommendationDismissal from '../components/RecommendationDismissal';
 import { STORE_NAME } from '../store';
 import {
 	collectBlockContext,
@@ -338,6 +339,17 @@ export default function SuggestionChips( {
 					);
 				} ) }
 			</div>
+			{ interactive && (
+				<RecommendationDismissal
+					surface="block"
+					suggestions={ suggestions }
+					currentRequestSignature={
+						resolvedRequestInput?.contextSignature
+					}
+					isStale={ isStale }
+					target={ { clientId } }
+				/>
+			) }
 
 			{ interactive && feedback && (
 				<InlineActionFeedback

@@ -16,7 +16,7 @@ final class RecommendationOutcome {
 	private const RANKING_SET_CAP    = 3;
 	private const PATTERN_TRAIT_CAP  = 8;
 
-	private const PATTERN_TRAITS = [
+	public const PATTERN_TRAITS = [
 		'hero-banner',
 		'multi-column',
 		'gallery',
@@ -41,8 +41,9 @@ final class RecommendationOutcome {
 		'contact',
 	];
 
-	private const EVENTS = [
+	public const EVENTS = [
 		'shown',
+		'dismissed',
 		'selected_for_review',
 		'stale_blocked',
 		'validation_blocked',
@@ -59,7 +60,7 @@ final class RecommendationOutcome {
 		'save_unverifiable',
 	];
 
-	private const SURFACES = [
+	public const SURFACES = [
 		'block',
 		'template',
 		'template-part',
@@ -73,6 +74,7 @@ final class RecommendationOutcome {
 
 	private const EVENT_LABELS = [
 		'shown'                         => 'Recommendations shown',
+		'dismissed'                     => 'Recommendation dismissed',
 		'selected_for_review'           => 'Recommendation selected for review',
 		'stale_blocked'                 => 'Recommendation blocked by stale context',
 		'validation_blocked'            => 'Recommendation blocked by validation',
@@ -137,7 +139,10 @@ final class RecommendationOutcome {
 			);
 		}
 
-		$target         = self::normalize_target( $entry['target'] ?? [] );
+		$target = self::normalize_target( $entry['target'] ?? [] );
+		if ( 'dismissed' === $event ) {
+			return self::normalize_dismissal( $entry, $surface, $outcome );
+		}
 		$suggestion_key = self::bounded_string(
 			$entry['suggestionKey'] ?? $target['suggestionKey'] ?? $outcome['suggestionKey'] ?? null
 		);
@@ -173,6 +178,11 @@ final class RecommendationOutcome {
 		}
 
 		if ( 'shown' === $event ) {
+			// Displayed identities are independent of the capped ranking snapshot.
+			$shown_keys = self::shown_suggestion_keys( $outcome['shownSuggestionKeys'] ?? [] );
+			if ( [] !== $shown_keys ) {
+				$normalized_outcome['shownSuggestionKeys'] = $shown_keys;
+			}
 			$ranking_set = self::normalize_ranking_set( $outcome['rankingSet'] ?? [] );
 			if ( [] !== $ranking_set ) {
 				$normalized_outcome['rankingSet'] = $ranking_set;
@@ -253,6 +263,79 @@ final class RecommendationOutcome {
 			],
 			'diagnostic'      => true,
 		];
+	}
+
+	/** Dismissal never guesses or coerces an identity and carries no generated content. */
+	private static function normalize_dismissal( array $entry, string $surface, array $outcome ): array|\WP_Error {
+		$set       = $outcome['recommendationSetId'] ?? null;
+		$key       = $entry['suggestionKey'] ?? null;
+		$signature = $outcome['sourceRequestSignature'] ?? null;
+		foreach ( [ $set, $key, $signature ] as $identity ) {
+			if ( ! is_string( $identity ) || '' === $identity || strlen( $identity ) > self::MAX_STRING_LENGTH || trim( $identity ) !== $identity || sanitize_text_field( $identity ) !== $identity ) {
+				return self::invalid_dismissal();
+			}
+		}
+		if ( 'user_dismissed' !== ( $outcome['reason'] ?? '' ) || ( isset( $entry['target']['recommendationSetId'] ) && $entry['target']['recommendationSetId'] !== $set ) || ( isset( $entry['target']['suggestionKey'] ) && $entry['target']['suggestionKey'] !== $key ) || ( isset( $outcome['suggestionKey'] ) && $outcome['suggestionKey'] !== $key ) ) {
+			return self::invalid_dismissal();
+		}
+		$target = [
+			'recommendationSetId' => $set,
+			'suggestionKey'       => $key,
+		];
+		// Keep only the contextual block discriminator for matching displayed rows.
+		if ( isset( $entry['target']['clientId'] ) && is_string( $entry['target']['clientId'] ) && strlen( $entry['target']['clientId'] ) <= self::MAX_STRING_LENGTH ) {
+			$target['clientId'] = $entry['target']['clientId'];
+		}
+		return [
+			...array_intersect_key( $entry, array_flip( [ 'id', 'schemaVersion', 'timestamp', 'applyLane', 'linkedApplyActivityId', 'saveOccurrenceId' ] ) ),
+			'type'            => self::TYPE,
+			'surface'         => $surface,
+			'target'          => $target,
+			'suggestion'      => self::EVENT_LABELS['dismissed'],
+			'suggestionKey'   => $key,
+			'document'        => array_intersect_key( is_array( $entry['document'] ?? null ) ? $entry['document'] : [], array_flip( [ 'scopeKey', 'postType', 'entityId' ] ) ),
+			'before'          => [],
+			'after'           => [
+				'outcome' => [
+					'event'                  => 'dismissed',
+					'reason'                 => 'user_dismissed',
+					'visibility'             => 'diagnostic',
+					'recommendationSetId'    => $set,
+					'sourceRequestSignature' => $signature,
+				],
+			],
+			'request'         => [
+				'reference'      => self::build_reference( $surface, 'dismissed', $set, $key ),
+				'recommendation' => [
+					'recommendationSetId'    => $set,
+					'suggestionKey'          => $key,
+					'sourceRequestSignature' => $signature,
+				],
+			],
+			'executionResult' => 'diagnostic',
+			'diagnostic'      => true,
+			'undo'            => [
+				'canUndo' => false,
+				'status'  => 'not_applicable',
+			],
+		];
+	}
+
+	private static function invalid_dismissal(): \WP_Error {
+		return new \WP_Error( 'flavor_agent_activity_invalid_dismissal', 'Dismissal requires explicit matching identities and the fixed reason.', [ 'status' => 400 ] );
+	}
+
+	/** @return array<int,string> Empty on missing, malformed or excessive displayed identities. */
+	public static function shown_suggestion_keys( mixed $keys ): array {
+		if ( ! is_array( $keys ) || ! array_is_list( $keys ) || count( $keys ) > 100 ) {
+			return [];
+		}
+		foreach ( $keys as $key ) {
+			if ( ! is_string( $key ) || '' === $key || strlen( $key ) > self::MAX_STRING_LENGTH || sanitize_text_field( $key ) !== $key || trim( $key ) !== $key ) {
+				return [];
+			}
+		}
+		return array_values( array_unique( $keys ) );
 	}
 
 	/**

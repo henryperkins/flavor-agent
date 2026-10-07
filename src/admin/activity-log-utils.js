@@ -82,6 +82,9 @@ const LEARNING_REPORT_RATE_FIELDS = [
 ];
 const LEARNING_REPORT_SUMMARY_COUNT_FIELDS = [
 	'shownCount',
+	'shownSuggestionCount',
+	'dismissedSuggestionCount',
+	'dismissalExcludedCount',
 	'saveAttemptedOccurrences',
 	'unverifiedCoverageCount',
 ];
@@ -313,6 +316,12 @@ export function normalizeGovernanceLearningReport( report ) {
 	for ( const field of LEARNING_REPORT_SUMMARY_RATE_FIELDS ) {
 		summary[ field ] = normalizeReportRate( report.summary[ field ] );
 	}
+	summary.dismissalRate =
+		report.summary.shownSuggestionCount > 0 &&
+		report.summary.dismissalRate !== null &&
+		report.summary.dismissalRate !== undefined
+			? normalizeReportRate( report.summary.dismissalRate )
+			: null;
 
 	const groups = {};
 	const groupSections = LEARNING_REPORT_GROUPS.map( ( group ) => {

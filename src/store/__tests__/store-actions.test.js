@@ -3595,7 +3595,12 @@ describe( 'store action thunks', () => {
 		const secondAttempt =
 			actions.recordRecommendationOutcome( outcome )( context );
 
-		await expect( secondAttempt ).resolves.toBeNull();
+		let secondSettled = false;
+		secondAttempt.then( () => {
+			secondSettled = true;
+		} );
+		await Promise.resolve();
+		expect( secondSettled ).toBe( false );
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
 
 		resolvePersistedOutcome( {
@@ -3610,12 +3615,48 @@ describe( 'store action thunks', () => {
 				} ),
 			} )
 		);
+		await expect( secondAttempt ).resolves.toMatchObject( {
+			id: 'outcome-server-1',
+			persistence: { status: 'server' },
+		} );
 
 		const persistedDuplicate =
 			await actions.recordRecommendationOutcome( outcome )( context );
 
-		expect( persistedDuplicate ).toBeNull();
+		expect( persistedDuplicate ).toMatchObject( {
+			persistence: { status: 'server', confirmation: 'already_recorded' },
+		} );
 		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+	} );
+
+	test( 'duplicate pending outcomes share failure and a later retry can persist once', async () => {
+		let fail;
+		apiFetch
+			.mockImplementationOnce(
+				() =>
+					new Promise( ( _resolve, reject ) => {
+						fail = reject;
+					} )
+			)
+			.mockResolvedValueOnce( { entry: createServerOutcomeEntry() } );
+		const context = createRecommendationOutcomeThunkContext();
+		const outcome = createShownOutcomePayload();
+		const first = actions.recordRecommendationOutcome( outcome )( context );
+		const second =
+			actions.recordRecommendationOutcome( outcome )( context );
+		await Promise.resolve();
+		fail( new Error( 'temporary activity write failure' ) );
+		const results = await Promise.all( [ first, second ] );
+		for ( const result of results ) {
+			expect( result?.persistence?.status ).not.toBe( 'server' );
+			expect( result ).not.toBeNull();
+		}
+		expect( results[ 0 ] ).toEqual( results[ 1 ] );
+		expect( apiFetch ).toHaveBeenCalledTimes( 1 );
+		const retry =
+			await actions.recordRecommendationOutcome( outcome )( context );
+		expect( retry.persistence.status ).toBe( 'server' );
+		expect( apiFetch ).toHaveBeenCalledTimes( 2 );
 	} );
 
 	test( 'applyTemplateSuggestion makes activity undoable before the server audit write returns', async () => {

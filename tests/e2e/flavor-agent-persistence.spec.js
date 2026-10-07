@@ -72,7 +72,7 @@ async function dismissWelcomeGuide( page ) {
 	await expect( welcome ).toBeHidden();
 }
 
-async function openRecommendationEditor( page, title ) {
+async function openRecommendationEditor( page, title, { apply = true } = {} ) {
 	// Same-type neighbors require the apply's unchanged attributes to identify
 	// its target; a single paragraph would hide a missing identity snapshot.
 	const created = runWpCli( harness, [
@@ -177,6 +177,10 @@ async function openRecommendationEditor( page, title ) {
 	await page
 		.getByRole( 'button', { name: 'Get Suggestions', exact: true } )
 		.click();
+	if ( ! apply ) {
+		await expect( page.getByRole( 'button', { name: SUGGESTION, exact: true } ) ).toBeVisible();
+		return { postId, clientId };
+	}
 	await page.getByRole( 'button', { name: SUGGESTION, exact: true } ).click();
 	await expect( page.locator( '.flavor-agent-toast' ).first() ).toContainText(
 		'Block updated in editor (not saved)'
@@ -213,6 +217,31 @@ async function openRecommendationEditor( page, title ) {
 	);
 	return { postId, clientId, activityId };
 }
+
+test( '@wp70-site-editor dismissal requires an explicit click and keeps later apply available', async ( { page } ) => {
+	const { postId, clientId } = await openRecommendationEditor( page, 'Explicit dismissal fixture', { apply: false } );
+	const outcomes = () => page.evaluate( async ( id ) => {
+		const response = await window.wp.apiFetch( { path: `/flavor-agent/v1/activity?scopeKey=post:${ id }&surface=block&includeDiagnostics=1&perPage=100` } );
+		return response.entries.filter( ( entry ) => entry.after?.outcome?.event === 'dismissed' );
+	}, postId );
+	const dismiss = page.getByRole( 'button', { name: /^Dismiss for now: / } ).first();
+	await expect( dismiss ).toBeVisible();
+	const panel = page.getByRole( 'button', { name: 'AI Recommendations', exact: true } );
+	await panel.click();
+	expect( await outcomes() ).toHaveLength( 0 );
+	await panel.click();
+	await expect( dismiss ).toBeVisible();
+	await dismiss.click();
+	await expect.poll( async () => ( await outcomes() ).length ).toBe( 1 );
+	const [ diagnostic ] = await outcomes();
+	expect( diagnostic ).toMatchObject( { executionResult: 'diagnostic', undo: { canUndo: false, status: 'not_applicable' }, after: { outcome: { reason: 'user_dismissed' } } } );
+	await page.evaluate( async ( entry ) => {
+		await window.wp.apiFetch( { path: '/flavor-agent/v1/activity', method: 'POST', data: { entry: { ...entry, id: 'dismissal-browser-retry' } } } );
+	}, diagnostic );
+	expect( await outcomes() ).toHaveLength( 1 );
+	await page.getByRole( 'button', { name: SUGGESTION, exact: true } ).click();
+	await expect.poll( () => page.evaluate( ( id ) => window.wp.data.select( 'core/block-editor' ).getBlockAttributes( id ).content, clientId ) ).toBe( AFTER );
+} );
 
 async function saveThroughWordPress(
 	page,

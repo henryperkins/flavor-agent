@@ -20,6 +20,7 @@ import CapabilityNotice from '../components/CapabilityNotice';
 import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import RecommendationHero from '../components/RecommendationHero';
 import RecommendationLane from '../components/RecommendationLane';
+import RecommendationDismissal from '../components/RecommendationDismissal';
 import StaleResultBanner from '../components/StaleResultBanner';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
@@ -223,9 +224,21 @@ function groupNavigationSuggestions( suggestions = [] ) {
 	}, {} );
 }
 
-function NavigationSuggestionCard( { suggestion } ) {
+function NavigationSuggestionCard( {
+	suggestion,
+	currentRequestSignature,
+	isStale,
+	clientId,
+} ) {
 	return (
 		<div className="flavor-agent-card">
+			<RecommendationDismissal
+				surface="navigation"
+				suggestions={ [ suggestion ] }
+				currentRequestSignature={ currentRequestSignature }
+				isStale={ isStale }
+				target={ { clientId } }
+			/>
 			<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
 				<div className="flavor-agent-card__lead">
 					<div className="flavor-agent-card__label">
@@ -813,6 +826,11 @@ export default function NavigationRecommendations( {
 								description={ featuredDescription }
 							>
 								<NavigationSuggestionCard
+									currentRequestSignature={
+										recommendationContextSignature
+									}
+									isStale={ isStaleResult }
+									clientId={ clientId }
 									suggestion={ featuredSuggestion }
 								/>
 							</NavigationEmbeddedSection>
@@ -836,6 +854,11 @@ export default function NavigationRecommendations( {
 								>
 									{ items.map( ( suggestion, index ) => (
 										<NavigationSuggestionCard
+											currentRequestSignature={
+												recommendationContextSignature
+											}
+											isStale={ isStaleResult }
+											clientId={ clientId }
 											key={ `${
 												suggestion?.label ||
 												'navigation'
@@ -946,6 +969,11 @@ export default function NavigationRecommendations( {
 									why={ featuredDescription }
 								>
 									<NavigationSuggestionCard
+										currentRequestSignature={
+											recommendationContextSignature
+										}
+										isStale={ isStaleResult }
+										clientId={ clientId }
 										suggestion={ featuredSuggestion }
 									/>
 								</RecommendationHero>
@@ -971,6 +999,11 @@ export default function NavigationRecommendations( {
 									>
 										{ items.map( ( suggestion, index ) => (
 											<NavigationSuggestionCard
+												currentRequestSignature={
+													recommendationContextSignature
+												}
+												isStale={ isStaleResult }
+												clientId={ clientId }
 												key={ `${
 													suggestion?.label ||
 													'navigation'

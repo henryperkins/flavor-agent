@@ -2913,6 +2913,20 @@
   animation-play-state: paused;
 }
 
+.flavor-agent-recommendation-dismissal {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--flavor-agent-space-2, 8px);
+  margin-block: var(--flavor-agent-space-2, 8px);
+}
+
+.flavor-agent-recommendation-dismissal [role="status"] {
+  flex-basis: 100%;
+  font-size: inherit;
+  overflow-wrap: anywhere;
+}
+
 @keyframes flavor-agent-toast-progress {
   from { transform: scaleX(1); }
   to   { transform: scaleX(0); }

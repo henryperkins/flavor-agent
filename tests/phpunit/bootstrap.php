@@ -1210,6 +1210,11 @@ namespace {
 				return $this->params[$key] ?? null;
 			}
 
+			public function get_params(): array
+			{
+				return $this->params;
+			}
+
 			public function has_param(string $key): bool
 			{
 				return array_key_exists($key, $this->params);
@@ -2305,6 +2310,12 @@ namespace {
 				$rows  = array_values(WordPressTestState::$db_tables[$table] ?? []);
 				$all_rows = $rows;
 				$has_entity_pairs = false;
+				foreach (['surface', 'activity_type'] as $column) {
+					if (preg_match("/\\b{$column}\\s+IN\\s*\\(([^)]+)\\)/i", $query, $list_match)) {
+						$values = array_map(static fn(string $value): string => trim(stripslashes($value), " \t\n\r\0\x0B'"), explode(',', $list_match[1]));
+						$rows = array_values(array_filter($rows, static fn(array $row): bool => in_array((string) ($row[$column] ?? ''), $values, true)));
+					}
+				}
 				if (preg_match('/\blinked_apply_activity_id\s+IS NULL/i', $query)) {
 					$rows = array_values(array_filter($rows, static fn(array $row): bool => null === ($row['linked_apply_activity_id'] ?? null)));
 				}

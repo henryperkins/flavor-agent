@@ -166,6 +166,13 @@ final class Repository {
 			);
 		}
 
+		if ( RecommendationOutcome::TYPE === ( $entry['type'] ?? null ) && 'dismissed' === ( $entry['after']['outcome']['event'] ?? null ) ) {
+			// Validate the original identities before the general serializer can coerce them.
+			$entry = RecommendationOutcome::normalize_entry( $entry );
+			if ( is_wp_error( $entry ) ) {
+				return $entry;
+			}
+		}
 		$normalized = Serializer::normalize_entry( $entry );
 
 		if ( ExternalApplyDecisionClaim::has_normalized_prefix( (string) $normalized['executionResult'] ) ) {
@@ -186,6 +193,14 @@ final class Repository {
 		$lane_types   = 'server-executed' === $normalized['applyLane'] ? array_merge( PersistenceOutcome::APPLY_TYPES, [ 'apply_post_blocks_suggestion' ] ) : PersistenceOutcome::APPLY_TYPES;
 		if ( ( null !== $normalized['applyLane'] && ! in_array( $normalized['type'], $lane_types, true ) ) || ( ! $is_lifecycle && ( null !== $normalized['linkedApplyActivityId'] || null !== $normalized['saveOccurrenceId'] ) ) ) {
 			return new \WP_Error( 'flavor_agent_activity_invalid_entry', 'Save evidence links and execution lanes require their matching activity type.', [ 'status' => 400 ] );
+		}
+
+		if ( RecommendationOutcome::TYPE === $normalized['type'] && 'dismissed' === ( $normalized['after']['outcome']['event'] ?? '' ) ) {
+			$dismissal_error = self::validate_dismissal_observation( $normalized );
+			if ( is_wp_error( $dismissal_error ) ) {
+				return $dismissal_error;
+			}
+			$normalized['id'] = 'dismissal_' . hash( 'sha256', Serializer::encode_json( [ $normalized['surface'], $normalized['after']['outcome']['recommendationSetId'], $normalized['suggestionKey'], 'dismissed', 'user_dismissed' ] ) );
 		}
 
 		$activity_id = '' !== $normalized['id']
@@ -271,6 +286,48 @@ final class Repository {
 		}
 
 		return self::hydrate_activity_row( $record );
+	}
+
+	/** Match only canonical, authorized shown identities from the latest set in this scope. */
+	private static function validate_dismissal_observation( array $entry ): ?\WP_Error {
+		if ( ! Permissions::can_access_entry( $entry ) ) {
+			return Permissions::forbidden_error();
+		}
+		$scope        = $entry['document']['scopeKey'] ?? '';
+		$client       = $entry['target']['clientId'] ?? '';
+		$outcome      = $entry['after']['outcome'];
+		$observations = array_reverse(
+			self::query(
+				[
+					'scopeKey'           => $scope,
+					'surface'            => $entry['surface'],
+					'userId'             => get_current_user_id(),
+					'includeDiagnostics' => true,
+					'limit'              => self::MAX_PER_PAGE,
+				]
+			)
+		);
+		$latest_set   = null;
+		$shown        = [];
+		foreach ( $observations as $observation ) {
+			$observed = $observation['after']['outcome'] ?? [];
+			if ( 'shown' !== ( $observed['event'] ?? '' ) || ( $observation['target']['clientId'] ?? '' ) !== $client ) {
+				continue;
+			}
+			$set = $observed['recommendationSetId'] ?? '';
+			if ( null === $latest_set && ( $set !== $outcome['recommendationSetId'] || ( $observed['sourceRequestSignature'] ?? '' ) !== $outcome['sourceRequestSignature'] ) ) {
+				break;
+			}
+			$latest_set ??= $set;
+			if ( $set !== $latest_set || $set !== $outcome['recommendationSetId'] || ( $observed['sourceRequestSignature'] ?? '' ) !== $outcome['sourceRequestSignature'] || ! Permissions::can_access_entry( $observation ) ) {
+				continue;
+			}
+			$shown = array_merge( $shown, RecommendationOutcome::shown_suggestion_keys( $observed['shownSuggestionKeys'] ?? [] ) );
+		}
+		if ( ! in_array( $entry['suggestionKey'], $shown, true ) ) {
+			return new \WP_Error( 'flavor_agent_activity_stale_dismissal', 'Dismissal requires a current explicitly shown suggestion identity.', [ 'status' => 409 ] );
+		}
+		return null;
 	}
 
 	/**
@@ -2536,6 +2593,56 @@ final class Repository {
 	 * @param array{clauses: array<int, string>, args: array<int, mixed>} $where
 	 * @return array<int, array<string, mixed>>
 	 */
+	public static function fixture_export_sample( array $selection ): array|\WP_Error {
+		global $wpdb;
+		$selection = RecommendationFixtureExport::validate_selection( $selection );
+		if ( is_wp_error( $selection ) ) {
+			return $selection;
+		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return new \WP_Error( 'flavor_agent_fixture_forbidden', 'Administrator permission is required for fixture export.', [ 'status' => 403 ] );
+		}
+		if ( ! is_object( $wpdb ) ) {
+			return new \WP_Error( 'flavor_agent_fixture_storage_unavailable', 'Activity storage is unavailable.', [ 'status' => 503 ] );
+		}
+		$types  = [ RecommendationOutcome::TYPE, ...RecommendationFixtureSchema::APPLY_TYPES ];
+		$bounds = RecommendationFixtureExport::selection_bounds( $selection );
+		$where  = [
+			'clauses' => [
+				't.created_at >= %s',
+				't.created_at <= %s',
+				't.linked_apply_activity_id IS NULL',
+				't.surface IN (' . implode( ', ', array_fill( 0, count( $selection['surfaces'] ), '%s' ) ) . ')',
+				't.activity_type IN (' . implode( ', ', array_fill( 0, count( $types ), '%s' ) ) . ')',
+			],
+			'args'    => [ $bounds['from'], $bounds['to'], ...$selection['surfaces'], ...$types ],
+		];
+		$sql    = self::append_admin_sql_where_clause( 'SELECT * FROM ' . self::table_name() . ' AS t', $where['clauses'] );
+		$sql   .= ' ORDER BY t.created_at DESC, t.id DESC LIMIT %d';
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Fixed clauses and bound values only.
+		$sql = $wpdb->prepare( $sql, [ ...$where['args'], $selection['rowLimit'] + 1 ] );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Explicit privileged bounded read of the plugin-owned table; prepared above.
+		$rows = $wpdb->get_results( $sql, ARRAY_A );
+		if ( ! is_array( $rows ) || ! empty( $wpdb->last_error ) ) {
+			return new \WP_Error( 'flavor_agent_fixture_storage_unavailable', 'The bounded activity sample could not be read.', [ 'status' => 503 ] );
+		}
+		$truncated = count( $rows ) > $selection['rowLimit'];
+		$rows      = array_slice( $rows, 0, $selection['rowLimit'] );
+		$count_sql = self::append_admin_sql_where_clause( 'SELECT COUNT(*) FROM ' . self::table_name() . ' AS t', $where['clauses'] );
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Fixed clauses and bound values only.
+		$count_sql = $wpdb->prepare( $count_sql, $where['args'] );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter -- Explicit privileged count with the identical prepared population filter.
+		$total  = $wpdb->get_var( $count_sql );
+		$result = [
+			'entries'   => PersistenceAssurance::enrich( self::hydrate_activity_rows( $rows, false ) ),
+			'truncated' => $truncated,
+		];
+		if ( empty( $wpdb->last_error ) && ( is_int( $total ) || ( is_string( $total ) && ctype_digit( $total ) ) ) && (int) $total >= count( $rows ) ) {
+			$result['eligibleRowCount'] = (int) $total;
+		}
+		return $result;
+	}
+
 	private static function query_admin_sql_report_rows( array $where, int $limit ): array {
 		global $wpdb;
 

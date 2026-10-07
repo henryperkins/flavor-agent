@@ -36,6 +36,7 @@ import { __, sprintf } from '@wordpress/i18n';
 import { store as noticesStore } from '@wordpress/notices';
 
 import CapabilityNotice from '../components/CapabilityNotice';
+import RecommendationDismissal from '../components/RecommendationDismissal';
 import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import { collectThemeTokensFromSettings } from '../context/theme-tokens';
 import { getResolvedContextSignatureFromResponse, STORE_NAME } from '../store';
@@ -598,7 +599,14 @@ function getPatternEmptyMessage(
 		: '';
 }
 
-function PatternShelf( { items, onInsert, onPreviewAdapted, diagnostics } ) {
+function PatternShelf( {
+	items,
+	onInsert,
+	onPreviewAdapted,
+	diagnostics,
+	currentRequestSignature,
+	isStale,
+} ) {
 	return (
 		<div className="flavor-agent-pattern-summary flavor-agent-pattern-shelf">
 			<div
@@ -620,6 +628,12 @@ function PatternShelf( { items, onInsert, onPreviewAdapted, diagnostics } ) {
 				</span>
 			</div>
 			<PatternFilteredCandidateNotice diagnostics={ diagnostics } />
+			<RecommendationDismissal
+				surface="pattern"
+				suggestions={ items.map( ( item ) => item.recommendation ) }
+				currentRequestSignature={ currentRequestSignature }
+				isStale={ isStale }
+			/>
 			<div className="flavor-agent-pattern-shelf__items">
 				{ items.map( ( { pattern, recommendation } ) => {
 					const patternTitle = getPatternTitle( pattern );
@@ -2153,6 +2167,15 @@ export default function PatternRecommender() {
 		} else if ( shouldShowPatternShelf ) {
 			notice = (
 				<PatternShelf
+					currentRequestSignature={ normalizeSourceRequestSignature(
+						currentPatternCacheKey
+					) }
+					isStale={
+						! currentPatternCacheKey ||
+						! patternInsertionTargetSignature ||
+						currentInsertionTargetSignature !==
+							patternInsertionTargetSignature
+					}
 					items={ recommendedPatterns }
 					onInsert={ handleInsertPattern }
 					onPreviewAdapted={ handlePreviewAdapted }

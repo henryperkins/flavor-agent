@@ -15,6 +15,22 @@ jest.mock( '../../utils/template-actions', () => ( {
 import { actions, reducer, selectors } from '../index';
 
 describe( 'navigation request state', () => {
+	test( 'fresh navigation results retain canonical identities for visible dismissal', () => {
+		const action = actions.setNavigationRecommendations(
+			'nav-1',
+			{ suggestions: [ { label: 'Review menu' } ] },
+			'prompt',
+			1,
+			'hash_fresh'
+		);
+		expect(
+			action.payload.suggestions[ 0 ].recommendationOutcome
+		).toMatchObject( {
+			suggestionKey: expect.any( String ),
+			recommendationSetId: expect.any( String ),
+			sourceRequestSignature: 'hash_fresh',
+		} );
+	} );
 	test( 'navigation results are scoped to the active block clientId', () => {
 		let state = reducer(
 			undefined,

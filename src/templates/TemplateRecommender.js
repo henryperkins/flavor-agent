@@ -34,6 +34,7 @@ import CapabilityNotice from '../components/CapabilityNotice';
 import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import LinkedEntityText from '../components/LinkedEntityText';
 import RecommendationLane from '../components/RecommendationLane';
+import RecommendationDismissal from '../components/RecommendationDismissal';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
@@ -941,6 +942,9 @@ export default function TemplateRecommender() {
 									index
 								) }` }
 								suggestion={ suggestion }
+								currentRequestSignature={
+									recommendationContextSignature
+								}
 								entityMap={ entityMap }
 								isApplied={
 									lastAppliedSuggestionKey ===
@@ -1019,6 +1023,7 @@ export default function TemplateRecommender() {
 
 function TemplateSuggestionCard( {
 	suggestion,
+	currentRequestSignature,
 	entityMap = [],
 	isApplied = false,
 	isApplying = false,
@@ -1101,6 +1106,12 @@ function TemplateSuggestionCard( {
 					/>
 				</p>
 			) }
+			<RecommendationDismissal
+				surface="template"
+				suggestions={ [ suggestion ] }
+				currentRequestSignature={ currentRequestSignature }
+				isStale={ isStale }
+			/>
 
 			{ suggestion.executionError && (
 				<p className="flavor-agent-card__description">

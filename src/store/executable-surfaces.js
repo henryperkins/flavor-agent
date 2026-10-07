@@ -471,6 +471,9 @@ export function createExecutableSurfaceStateActionCreators( runtime ) {
 						recommendationSetId: buildRecommendationSetId( {
 							surface: def.surface,
 							requestToken,
+							generationId:
+								payload?.requestMeta?.learningAttribution
+									?.generationId,
 							sourceRequestSignature,
 							resultRef: value,
 						} ),

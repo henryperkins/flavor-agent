@@ -92,13 +92,17 @@ final class GovernanceLearningReport {
 		$counts  = self::count_entries( $entries );
 
 		return [
-			'shownCount'            => (int) ( $metrics['shownCount'] ?? 0 ),
-			'reviewSelectionRate'   => (float) ( $metrics['reviewSelectionRate'] ?? 0.0 ),
-			'applyConversionRate'   => (float) ( $metrics['applyConversionRate'] ?? 0.0 ),
-			'patternInsertionRate'  => (float) ( $metrics['patternInsertionRate'] ?? 0.0 ),
-			'undoRate'              => self::rate( $counts['undoneApplyCount'], $counts['applyCount'] ),
-			'validationBlockedRate' => (float) ( $metrics['validationBlockedRate'] ?? 0.0 ),
-			'insertFailedRate'      => self::rate( $counts['insertFailedCount'], $counts['patternEngagementAttemptCount'] ),
+			'shownCount'               => (int) ( $metrics['shownCount'] ?? 0 ),
+			'reviewSelectionRate'      => (float) ( $metrics['reviewSelectionRate'] ?? 0.0 ),
+			'applyConversionRate'      => (float) ( $metrics['applyConversionRate'] ?? 0.0 ),
+			'patternInsertionRate'     => (float) ( $metrics['patternInsertionRate'] ?? 0.0 ),
+			'undoRate'                 => self::rate( $counts['undoneApplyCount'], $counts['applyCount'] ),
+			'validationBlockedRate'    => (float) ( $metrics['validationBlockedRate'] ?? 0.0 ),
+			'insertFailedRate'         => self::rate( $counts['insertFailedCount'], $counts['patternEngagementAttemptCount'] ),
+			'shownSuggestionCount'     => $metrics['shownSuggestionCount'],
+			'dismissedSuggestionCount' => $metrics['dismissedSuggestionCount'],
+			'dismissalExcludedCount'   => $metrics['dismissalExcludedCount'],
+			'dismissalRate'            => $metrics['dismissalRate'],
 			...self::persistence_metrics( $metrics ),
 		];
 	}

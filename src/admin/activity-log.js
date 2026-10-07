@@ -27,6 +27,7 @@ import './dataviews-runtime.css';
 import '../tokens.css';
 import './brand.css';
 import './activity-log.css';
+import FixtureExport from './FixtureExport';
 import {
 	areActivityViewsEqual,
 	buildActivityPermalink,
@@ -317,6 +318,38 @@ function getLearningReportSummaryMetrics( report, locale ) {
 			id: 'review-selection',
 			label: __( 'Review selection', 'flavor-agent' ),
 			value: formatLearningReportRate( summary.reviewSelectionRate ),
+		},
+		{
+			id: 'shown-suggestions',
+			label: __( 'Explicitly shown suggestions', 'flavor-agent' ),
+			value: formatLearningReportInteger(
+				summary.shownSuggestionCount,
+				locale
+			),
+		},
+		{
+			id: 'dismissed-suggestions',
+			label: __( 'Explicitly dismissed suggestions', 'flavor-agent' ),
+			value: formatLearningReportInteger(
+				summary.dismissedSuggestionCount,
+				locale
+			),
+		},
+		{
+			id: 'dismissal-excluded',
+			label: __( 'Dismissal coverage exclusions', 'flavor-agent' ),
+			value: formatLearningReportInteger(
+				summary.dismissalExcludedCount,
+				locale
+			),
+		},
+		{
+			id: 'dismissal-rate',
+			label: __( 'Suggestion dismissal rate', 'flavor-agent' ),
+			value:
+				summary.dismissalRate === null
+					? __( 'Unavailable', 'flavor-agent' )
+					: formatLearningReportRate( summary.dismissalRate ),
 		},
 		{
 			id: 'apply-conversion',
@@ -3924,6 +3957,7 @@ export function ActivityLogApp( { bootData } ) {
 						bootData={ bootData }
 						report={ responseData.learningReport }
 					/>
+					<FixtureExport bootData={ bootData } />
 					<div className="flavor-agent-activity-log__toolbar">
 						<div className="flavor-agent-activity-log__controls">
 							<div className="flavor-agent-activity-log__controls-main">
