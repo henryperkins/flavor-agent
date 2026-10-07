@@ -6,7 +6,7 @@ I built it to prove AI can be practical product infrastructure, not a chatbot pa
 
 > **Release status:** `v0.1.0` is the final initial release. Implementation hardening, current live-corpus evidence, connector-backed Anthropic behavior, minimum visual proof, clean artifact inspection, and the infrastructure-only GitHub Actions disposition are closed. GitHub-hosted jobs did not execute because of the recorded account lock; the maintainer-approved waiver retains every local, browser, Plugin Check, packaging, and exact-tag gate. The GitHub release carries the verified zip, complete local logs, waiver record, checksums, and exact-tag verification record. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
 
-The [v0.1.1 candidate](docs/releases/v0.1.1.md) adds explicit dismissal and private local fixture exports. Its [exact source and ZIP validation](docs/validation/2026-10-07-v0.1.1-release-validation.md) passed the strict aggregate and all three full browser runs. Release preparation keeps corpus settlement, production package identity and live verification as open gates; automated source deployment is disabled.
+The [v0.1.1 candidate](docs/releases/v0.1.1.md) adds explicit dismissal and private local fixture exports. Its [exact source and ZIP validation](docs/validation/2026-10-07-v0.1.1-release-validation.md) passed the strict aggregate and all three full browser runs. Release preparation keeps corpus settlement, production package identity, live verification and dependency triage open; automated source deployment is disabled.
 
 1.0 when the core Abilities/AI Client surfaces stabilize.
 
