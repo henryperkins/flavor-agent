@@ -32,7 +32,8 @@ export default function FixtureExport( { bootData } ) {
 	const [ collectionScope, setCollectionScope ] = useState( '' );
 	const [ status, setStatus ] = useState( '' );
 	const [ error, setError ] = useState( '' );
-	if ( bootData?.canExportFixtures !== true ) {
+	// wp_localize_script serializes top-level scalar capabilities as strings.
+	if ( ! [ true, 1, '1' ].includes( bootData?.canExportFixtures ) ) {
 		return null;
 	}
 	const selection = {

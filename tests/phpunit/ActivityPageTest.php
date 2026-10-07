@@ -191,6 +191,27 @@ final class ActivityPageTest extends TestCase {
 		$this->assertSame( 42, $data['currentUserId'] );
 	}
 
+	/** @dataProvider export_permission_modes */
+	public function test_export_boot_flag_requires_manage_options_independently_of_theme_editing( bool $manage_options, bool $edit_theme_options ): void {
+		WordPressTestState::$capabilities['manage_options']     = $manage_options;
+		WordPressTestState::$capabilities['edit_theme_options'] = $edit_theme_options;
+
+		$data = $this->activity_boot_data();
+
+		$this->assertSame( $manage_options, $data['canExportFixtures'] );
+		$this->assertSame( $edit_theme_options, $data['canApproveStyleApplies'] );
+	}
+
+	/** @return array<string, array{bool, bool}> */
+	public static function export_permission_modes(): array {
+		return [
+			'administrator' => [ true, true ],
+			'theme editor'  => [ false, true ],
+			'options only'  => [ true, false ],
+			'neither'       => [ false, false ],
+		];
+	}
+
 	public function test_boot_exposes_only_signing_availability_and_eligible_surfaces_when_enabled(): void {
 		$secret = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
 		add_filter( 'flavor_agent_attest_private_key', static fn () => $secret );

@@ -60,6 +60,36 @@ describe( 'FixtureExport', () => {
 			getContainer().querySelector( 'input[aria-label="Block"]' ).click()
 		);
 	}
+	test.each( [ true, 1, '1' ] )(
+		'renders export for the explicit localized administrator flag %p without fetching',
+		async ( flag ) => {
+			await render( flag );
+			expect(
+				getContainer().querySelector(
+					'.flavor-agent-activity-log__fixture-export'
+				)
+			).not.toBeNull();
+			expect( apiFetch ).not.toHaveBeenCalled();
+		}
+	);
+	test.each( [ false, 0, '0', '', 'false', 'true', 'yes', 2, null, [], {} ] )(
+		'rejects nonadministrator or arbitrary localized flags %p',
+		async ( flag ) => {
+			await render( flag );
+			expect( getContainer().querySelector( 'button' ) ).toBeNull();
+			expect( apiFetch ).not.toHaveBeenCalled();
+			expect( downloadFixtureReviewBundle ).not.toHaveBeenCalled();
+		}
+	);
+	test( 'a missing administrator flag does not render export', async () => {
+		await act( async () =>
+			getRoot().render(
+				<component.default bootData={ { nonce: 'nonce' } } />
+			)
+		);
+		expect( getContainer().querySelector( 'button' ) ).toBeNull();
+		expect( apiFetch ).not.toHaveBeenCalled();
+	} );
 	test( 'permission-gates the action and never exports on passive render or close', async () => {
 		await render( false );
 		expect( getContainer().querySelector( 'button' ) ).toBeNull();
@@ -73,7 +103,7 @@ describe( 'FixtureExport', () => {
 			candidate: { schemaVersion: 'recommendation-fixture-export-v1' },
 			rawActivity: { prompt: 'must not download' },
 		} );
-		await render();
+		await render( '1' );
 		await fill();
 		await act( async () =>
 			getContainer().querySelector( 'button' ).click()
