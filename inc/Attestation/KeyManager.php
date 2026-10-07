@@ -31,7 +31,10 @@ final class KeyManager {
 	}
 
 	public static function configured(): bool {
-		return null !== self::current_public_identity();
+		$owner = ActivityRepository::capture_storage_context();
+
+		return $owner instanceof ActivityStorageContext
+			&& null !== self::current_public_identity( $owner );
 	}
 
 	/**

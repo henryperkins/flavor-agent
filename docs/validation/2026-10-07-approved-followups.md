@@ -126,3 +126,21 @@ pending, mixed-source freshness failed after five attempts, and guarded cleanup
 deleted zero items. This is a separate failed run, not a replacement for the
 original exercise or later observation. No guard was weakened and no manual
 deletion or resync was performed to manufacture a pass.
+
+## PR 86 follow-up review
+
+The branch was published as [PR 86](https://github.com/henryperkins/flavor-agent/pull/86).
+Fresh independent review reproduced an availability-only owner-binding gap:
+`KeyManager::configured()` could report signing available after a private-key
+filter changed the active blog or database. Five new regressions first failed.
+The helper now captures the storage owner before resolving the signer and fails
+closed when that owner is unavailable or changes. The boot advisory and JWKS
+status therefore agree; status reads still do not write the key registry.
+
+The repaired focused target passed 153 tests / 1,841 assertions. The independent
+reviewer's broader target passed 227 tests / 2,194 assertions, and touched PHP
+lint plus diff checks passed with no remaining P0-P2 source/privacy findings.
+The first fresh full verifier was interrupted during JavaScript lint before
+the repair; its logs are retained under `output/verify-oct07-pr86-full/` and it
+is not completion evidence. Exact final-revision browser and aggregate results
+must be recorded separately from the earlier branch checks above.

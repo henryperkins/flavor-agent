@@ -248,6 +248,40 @@ final class ActivityPageTest extends TestCase {
 		return $method->invoke( null );
 	}
 
+	/** @dataProvider signing_owner_drift_modes */
+	public function test_boot_reports_signing_unavailable_when_key_filter_changes_owner( string $mode ): void {
+		$database = $GLOBALS['wpdb'];
+		$blog_id  = WordPressTestState::$current_blog_id;
+		$secret   = base64_encode( sodium_crypto_sign_secretkey( sodium_crypto_sign_keypair() ) );
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () use ( $secret, $mode ): string {
+				if ( 'blog' === $mode ) {
+					WordPressTestState::$current_blog_id = 2;
+				} else {
+					$GLOBALS['wpdb'] = new \wpdb();
+				}
+				return $secret;
+			}
+		);
+		try {
+			$data = $this->activity_boot_data();
+			$this->assertFalse( $data['attestation']['signingAvailable'] );
+			$this->assertStringNotContainsString( $secret, (string) wp_json_encode( $data ) );
+		} finally {
+			$GLOBALS['wpdb']                     = $database;
+			WordPressTestState::$current_blog_id = $blog_id;
+		}
+	}
+
+	/** @return array<string, array{string}> */
+	public static function signing_owner_drift_modes(): array {
+		return [
+			'blog'     => [ 'blog' ],
+			'database' => [ 'database' ],
+		];
+	}
+
 	public function test_render_pending_external_apply_notice_includes_post_title_and_id_for_post_blocks(): void {
 		$this->create_pending_entry(
 			[

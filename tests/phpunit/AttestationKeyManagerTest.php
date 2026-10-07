@@ -339,6 +339,52 @@ final class AttestationKeyManagerTest extends TestCase {
 		];
 	}
 
+	/** @dataProvider owner_drift_modes */
+	public function test_configured_fails_closed_when_signer_filter_changes_owner( string $mode ): void {
+		$database = $GLOBALS['wpdb'];
+		$blog_id  = WordPressTestState::$current_blog_id;
+		$source   = $this->seeded_key( 'a' );
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () use ( $source, $mode ): string {
+				if ( 'blog' === $mode ) {
+					WordPressTestState::$current_blog_id = 2;
+				} else {
+					$GLOBALS['wpdb'] = new \wpdb();
+				}
+				return $source;
+			}
+		);
+		$before = WordPressTestState::$options;
+		try {
+			$this->assertFalse( KeyManager::configured() );
+			$this->assertSame( $before, WordPressTestState::$options );
+		} finally {
+			$GLOBALS['wpdb']                     = $database;
+			WordPressTestState::$current_blog_id = $blog_id;
+		}
+	}
+
+	public function test_configured_fails_closed_without_a_capturable_owner(): void {
+		$database = $GLOBALS['wpdb'];
+		$calls    = 0;
+		$source   = $this->seeded_key( 'a' );
+		add_filter(
+			'flavor_agent_attest_private_key',
+			static function () use ( &$calls, $source ): string {
+				++$calls;
+				return $source;
+			}
+		);
+		$GLOBALS['wpdb'] = null;
+		try {
+			$this->assertFalse( KeyManager::configured() );
+			$this->assertSame( 0, $calls );
+		} finally {
+			$GLOBALS['wpdb'] = $database;
+		}
+	}
+
 	/**
 	 * @runInSeparateProcess
 	 * @preserveGlobalState disabled
