@@ -1057,8 +1057,9 @@ function buildItemKey( canonical, contentHash, instance ) {
 	// Cloudflare AI Search rejects item filenames over its maximum length
 	// (filename_exceeds_maximum_length); the plugin uploader caps at 128 too
 	// (PatternSearchClient::filename_for_item_id). Keep only a bounded,
-	// human-readable path slug here — uniqueness and per-content stability come
-	// from the (truncated) content hash, and the full URL stays in metadata.
+	// human-readable path slug here. The truncated hash identifies a content
+	// generation or a refetched body with renewed crawl evidence; the full URL
+	// and source-content hash stay in metadata.
 	const slugBudget = KEY_MAX_BYTES - head.length - tail.length - 2;
 	const rawSlug = url.pathname.split( '/' ).map( ( segment ) => segment.trim() ).filter( Boolean ).join( '-' );
 	const slug = boundedSlug( rawSlug, slugBudget );
@@ -1520,11 +1521,27 @@ function shouldUpload( entry, existingItem ) {
 
 	const metadata = existingItem.metadata && typeof existingItem.metadata === 'object' ? existingItem.metadata : {};
 	const remoteHash = String( metadata.content_hash || metadata.contentHash || '' );
-	if ( remoteHash && remoteHash === entry.contentHash && existingItem.status === 'completed' ) {
+	if (
+		remoteHash &&
+		remoteHash === entry.contentHash &&
+		[ 'completed', 'queued', 'running', 'outdated' ].includes(
+			String( existingItem.status || '' )
+		)
+	) {
 		return false;
 	}
 
 	return true;
+}
+
+function hasCurrentRetrievedAt( item, now = Date.now() ) {
+	const retrievedAt = itemRetrievedAtMs( item );
+	return (
+		Number.isFinite( retrievedAt ) &&
+		retrievedAt <= now &&
+		retrievedAt >=
+			now - VALIDATION_SOURCE_MAX_AGE_DAYS[ 'developer-docs' ] * DAY_MS
+	);
 }
 
 /**
@@ -2322,6 +2339,9 @@ async function processEntries( urls, roots, options, auth, existingByKey, lastmo
 	let prepared = 0;
 	let reused = 0;
 	const preparedItems = new Array( urls.length );
+	const checkedAtMs = Number.isFinite( options.now )
+		? options.now
+		: Date.now();
 
 	let index = 0;
 	async function worker() {
@@ -2334,7 +2354,10 @@ async function processEntries( urls, roots, options, auth, existingByKey, lastmo
 			// keeps the weekly run inside the job timeout and gentle on the upstream.
 			if ( ! options.fullRefetch ) {
 				const existingByUrlItem = existingByUrl.get( url );
-				if ( isFreshByLastmod( lastmods[ url ], existingByUrlItem ) ) {
+				if (
+					isFreshByLastmod( lastmods[ url ], existingByUrlItem ) &&
+					hasCurrentRetrievedAt( existingByUrlItem, checkedAtMs )
+				) {
 					const reusedKey = String( existingByUrlItem.key || '' );
 					if ( reusedKey ) {
 						const metadata = existingByUrlItem.metadata && typeof existingByUrlItem.metadata === 'object' ? existingByUrlItem.metadata : {};
@@ -2360,6 +2383,31 @@ async function processEntries( urls, roots, options, auth, existingByKey, lastmo
 				buildErrors.push( { url, message: error.message } );
 				console.warn( `Skipping ${ url }: ${ error.message }` );
 				continue;
+			}
+
+			const newestExisting = existingByUrl.get( entry.url );
+			const newestMetadata = newestExisting?.metadata || {};
+			const existing =
+				( newestMetadata.content_hash ||
+					newestMetadata.contentHash ) === entry.contentHash
+					? newestExisting
+					: existingByKey.get( entry.key );
+			const existingMetadata = existing?.metadata || {};
+			if (
+				( existingMetadata.content_hash ||
+					existingMetadata.contentHash ) === entry.contentHash
+			) {
+				// Content hashes deliberately exclude crawl time. Reuse a current stored
+				// generation, including one still indexing, or mint an immutable refreshed
+				// generation from the actual fetched body (which includes its crawl time).
+				// Never relabel the old stored body or delete it before settlement.
+				entry.key = hasCurrentRetrievedAt( existing, checkedAtMs )
+					? String( existing.key )
+					: buildItemKey(
+							entry.url,
+							sha256( entry.body ),
+							options.instance
+					  );
 			}
 
 			preparedItems[ current ] = {
@@ -2398,14 +2446,17 @@ async function processEntries( urls, roots, options, auth, existingByKey, lastmo
 		}
 
 		const entry = item.entry;
-		manifest.push( manifestEntry( entry ) );
 
 		const existing = existingByKey.get( entry.key );
 		if ( ! shouldUpload( entry, existing ) ) {
+			// A successful fetch is not a metadata write. The manifest must describe
+			// the generation actually stored in the corpus when an upload is skipped.
+			manifest.push( manifestEntryFromExisting( existing, entry.url ) );
 			skipped.push( { key: entry.key, url: entry.url, reason: 'unchanged' } );
 			continue;
 		}
 
+		manifest.push( manifestEntry( entry ) );
 		entriesToUpload.push( entry );
 	}
 
