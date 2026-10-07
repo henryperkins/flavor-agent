@@ -3,7 +3,7 @@
 /**
  * Plugin Name: Flavor Agent
  * Description: Governed AI changes for WordPress: bounded operations, review-gated structural changes, server-side attribution, and drift-safe undo.
- * Version: 0.1.0
+ * Version: 0.1.1
  * Author: Lakefront Digital
  * Text Domain: flavor-agent
  * Domain Path: /languages
@@ -25,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'FLAVOR_AGENT_VERSION', '0.1.0' );
+define( 'FLAVOR_AGENT_VERSION', '0.1.1' );
 define( 'FLAVOR_AGENT_FILE', __FILE__ );
 define( 'FLAVOR_AGENT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FLAVOR_AGENT_URL', plugin_dir_url( __FILE__ ) );
@@ -137,6 +137,7 @@ if (
 // Helper abilities and audit/sync routes are infra, not AI-feature-gated.
 add_action( 'rest_api_init', [ FlavorAgent\REST\Agent_Controller::class, 'register_routes' ] );
 add_action( 'rest_api_init', [ FlavorAgent\REST\AttestationController::class, 'register_routes' ] );
+add_action( 'rest_api_init', [ FlavorAgent\REST\FixtureExportController::class, 'register_routes' ] );
 add_action( 'admin_enqueue_scripts', [ FlavorAgent\Settings::class, 'maybe_enqueue_admin_assets' ] );
 add_action( 'admin_menu', [ FlavorAgent\Admin\ActivityPage::class, 'add_menu' ] );
 add_action( 'admin_menu', [ FlavorAgent\Settings::class, 'add_menu' ] );

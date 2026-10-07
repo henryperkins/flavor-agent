@@ -628,6 +628,26 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			} );
 		} );
 
+		it( 'separates new server generations after a request-token reset and preserves cached generation identity', () => {
+			const build = ( generationId, token = 1 ) =>
+				actions[ def.methodNames.setRecommendations ](
+					fixture.recommendationValue,
+					{
+						...fixture.payload,
+						requestMeta: { learningAttribution: { generationId } },
+					},
+					fixture.input.prompt,
+					token,
+					'same-context'
+				).payload.recommendationOutcome.recommendationSetId;
+			expect( build( 'generation-one' ) ).not.toBe(
+				build( 'generation-two' )
+			);
+			expect( build( 'generation-one' ) ).toBe(
+				build( 'generation-one', 99 )
+			);
+		} );
+
 		it( 'creates surface-specific state action shapes', () => {
 			expect(
 				actions[ def.methodNames.setStatus ](

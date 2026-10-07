@@ -286,10 +286,36 @@ describe( 'activity log utils', () => {
 		);
 		expect( report.groups.surfaces[ 0 ] ).not.toHaveProperty( 'prompt' );
 		expect(
-			Object.values( report.summary ).every( ( value ) =>
-				Number.isFinite( value )
+			Object.values( report.summary ).every(
+				( value ) => value === null || Number.isFinite( value )
 			)
 		).toBe( true );
+	} );
+
+	test( 'dismissal reporting preserves its explicit suggestion denominator and unavailable rate', () => {
+		const source = {
+			version: 'governance-learning-report-v1',
+			summary: {
+				shownSuggestionCount: 4,
+				dismissedSuggestionCount: 1,
+				dismissalExcludedCount: 2,
+				dismissalRate: 0.25,
+			},
+			groups: {},
+		};
+		expect(
+			normalizeGovernanceLearningReport( source ).summary
+		).toMatchObject( source.summary );
+		expect(
+			normalizeGovernanceLearningReport( {
+				...source,
+				summary: {
+					...source.summary,
+					shownSuggestionCount: 0,
+					dismissalRate: null,
+				},
+			} ).summary.dismissalRate
+		).toBeNull();
 	} );
 
 	test( 'normalizeActivityEntries preserves server-resolved blocked status for admin rows', () => {

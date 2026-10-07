@@ -1,4 +1,5 @@
 import { Button } from '@wordpress/components';
+import RecommendationDismissal from '../components/RecommendationDismissal';
 import { __, sprintf } from '@wordpress/i18n';
 
 import { getToneLabel, SURFACE_TONES } from '../components/surface-labels';
@@ -104,6 +105,8 @@ export function StyleOperationList( {
 
 export function StyleSuggestionCard( {
 	suggestion,
+	surface,
+	currentRequestSignature,
 	isSelected = false,
 	isStale = false,
 	onReview,
@@ -161,6 +164,12 @@ export function StyleSuggestionCard( {
 			/>
 
 			<div className="flavor-agent-style-card__footer">
+				<RecommendationDismissal
+					surface={ surface }
+					suggestions={ [ suggestion ] }
+					currentRequestSignature={ currentRequestSignature }
+					isStale={ isStale }
+				/>
 				{ showSecondaryGuidance && secondaryGuidance && (
 					<span className="flavor-agent-panel__intro-copy">
 						{ secondaryGuidance }

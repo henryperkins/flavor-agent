@@ -15,6 +15,33 @@ jest.mock( '../../utils/template-actions', () => ( {
 import { actions, reducer } from '../index';
 
 describe( 'pattern status store contract', () => {
+	test( 'fresh pattern generations get new sets while the same cached generation keeps its set', () => {
+		const patterns = [ { name: 'theme/hero', score: 0.8 } ];
+		const build = ( token, generationId ) =>
+			actions.setPatternRecommendations(
+				patterns,
+				token,
+				'same-cache-signature',
+				null,
+				'same-target',
+				null,
+				'resolved',
+				'runtime',
+				generationId ? { learningAttribution: { generationId } } : null
+			).recommendations[ 0 ].recommendationOutcome.recommendationSetId;
+		expect( build( 1 ) ).not.toBe( build( 2 ) );
+		const firstGeneration =
+			'recgen:pattern:11111111-1111-4111-8111-111111111111';
+		const nextGeneration =
+			'recgen:pattern:22222222-2222-4222-8222-222222222222';
+		expect( build( 1, firstGeneration ) ).not.toBe(
+			build( 2, nextGeneration )
+		);
+		expect( build( 1, firstGeneration ) ).toBe(
+			build( 99, firstGeneration )
+		);
+	} );
+
 	test( 'SET_PATTERN_STATUS stores status and error together', () => {
 		const state = reducer(
 			undefined,

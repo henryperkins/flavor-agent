@@ -224,6 +224,7 @@ final class ActivityPage {
 				'eligibleSurfaces' => AttestationService::eligible_surfaces(),
 			],
 			'canApproveStyleApplies' => current_user_can( 'edit_theme_options' ),
+			'canExportFixtures'      => current_user_can( 'manage_options' ),
 			'connectorsUrl'          => admin_url( 'options-connectors.php' ),
 			'currentUserId'          => get_current_user_id(),
 			'defaultPerPage'         => ActivityRepository::DEFAULT_PER_PAGE,

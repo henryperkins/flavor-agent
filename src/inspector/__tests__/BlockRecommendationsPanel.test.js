@@ -18,6 +18,7 @@ const mockGetBlockActivityUndoState = jest.fn();
 const mockRenderAIActivitySection = jest.fn();
 const mockRenderNavigationRecommendations = jest.fn();
 let mockShouldRenderNavigationRecommendations = false;
+let mockRenderActualSuggestionChips = false;
 
 jest.mock( '@wordpress/i18n', () =>
 	require( '../../test-utils/i18n-mock' ).createI18nMock()
@@ -117,6 +118,11 @@ jest.mock( '../NavigationRecommendations', () => ( props ) => {
 } );
 jest.mock( '../SuggestionChips', () => ( props ) => {
 	mockSuggestionChips( props );
+	if ( mockRenderActualSuggestionChips ) {
+		const ActualSuggestionChips =
+			jest.requireActual( '../SuggestionChips' ).default;
+		return <ActualSuggestionChips { ...props } />;
+	}
 
 	if ( ! props.selectable ) {
 		return null;
@@ -162,6 +168,7 @@ import {
 	BlockRecommendationsContent,
 	BlockRecommendationsDocumentPanel,
 } from '../BlockRecommendationsPanel';
+import { normalizeSourceRequestSignature } from '../../store/outcome-identity';
 
 const { getContainer, getRoot } = setupReactTest();
 
@@ -515,6 +522,7 @@ beforeEach( () => {
 	mockSuggestionChips.mockReset();
 	mockGetBlocks.mockImplementation( () => getState().blockEditor.blocks );
 	mockShouldRenderNavigationRecommendations = false;
+	mockRenderActualSuggestionChips = false;
 	currentState = createState();
 	window.flavorAgentData = {
 		canRecommendBlocks: true,
@@ -3028,6 +3036,89 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			} )
 		);
 	} );
+
+	test.each( [
+		'prompt-only',
+		'server',
+		'server-apply',
+		'missing-resolved-signature',
+	] )(
+		'blocks dismissal in all three chip lanes after %s freshness changes',
+		async ( staleReason ) => {
+			const context = { block: { name: 'core/group' } };
+			const recommendations = buildPanelRecommendations();
+			recommendations.block = [
+				{
+					...recommendations.settings[ 0 ],
+					label: 'Inline suggestion',
+					suggestionKey: 'block:inline:1',
+				},
+			];
+			for ( const lane of [ 'block', 'settings', 'styles' ] ) {
+				for ( const suggestion of recommendations[ lane ] ) {
+					suggestion.recommendationOutcome = {
+						...suggestion.recommendationOutcome,
+						suggestionKey: suggestion.suggestionKey,
+						sourceRequestSignature: normalizeSourceRequestSignature(
+							JSON.stringify( context )
+						),
+					};
+				}
+			}
+			const record = jest.fn( async () => ( {
+				persistence: { status: 'server' },
+			} ) );
+			const dismiss = jest.fn();
+			mockRenderActualSuggestionChips = true;
+			renderBlockRecommendationsPanel( {
+				recommendations,
+				context,
+				dispatchOverrides: {
+					recordRecommendationOutcome: record,
+					dismissRecommendationSuggestions: dismiss,
+				},
+			} );
+			await act( async () => {} );
+			expect(
+				getContainer().querySelectorAll(
+					'.flavor-agent-recommendation-dismissal'
+				)
+			).toHaveLength( 3 );
+			mockSuggestionChips.mockClear();
+			record.mockClear();
+			if ( staleReason === 'prompt-only' ) {
+				act( () =>
+					getRoot().render(
+						<BlockRecommendationsContent
+							clientId="block-1"
+							prompt="Changed prompt only"
+							onPromptChange={ jest.fn() }
+						/>
+					)
+				);
+			} else {
+				currentState.store.blockStaleReasons = {
+					'block-1': staleReason,
+				};
+				renderContent();
+			}
+			await act( async () => {} );
+			expect(
+				mockSuggestionChips.mock.calls.length
+			).toBeGreaterThanOrEqual( 2 );
+			for ( const [ props ] of mockSuggestionChips.mock.calls ) {
+				expect( props.isStale ).toBe( true );
+				expect( props.disabled ).toBe( true );
+			}
+			expect(
+				getContainer().querySelector(
+					'.flavor-agent-recommendation-dismissal'
+				)
+			).toBeNull();
+			expect( record ).not.toHaveBeenCalled();
+			expect( dismiss ).not.toHaveBeenCalled();
+		}
+	);
 
 	test( 'marks stored block results stale and keeps them visible until the user refreshes', () => {
 		currentState = createState( {

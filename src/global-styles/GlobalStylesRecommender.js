@@ -65,6 +65,7 @@ import { normalizeTemplateType } from '../utils/template-types';
 
 function GlobalStylesPanel( {
 	prompt,
+	currentRequestSignature,
 	setPrompt,
 	capabilityAvailable,
 	visibilityConstraintCount,
@@ -262,6 +263,8 @@ function GlobalStylesPanel( {
 				>
 					{ executableSuggestions.map( ( suggestion ) => (
 						<StyleSuggestionCard
+							surface="global-styles"
+							currentRequestSignature={ currentRequestSignature }
 							key={ suggestion.suggestionKey }
 							suggestion={ suggestion }
 							isSelected={
@@ -292,6 +295,8 @@ function GlobalStylesPanel( {
 				>
 					{ manualSuggestions.map( ( suggestion ) => (
 						<StyleSuggestionCard
+							surface="global-styles"
+							currentRequestSignature={ currentRequestSignature }
 							key={ suggestion.suggestionKey }
 							suggestion={ suggestion }
 							isSelected={
@@ -923,6 +928,7 @@ export default function GlobalStylesRecommender() {
 
 	const panel = (
 		<GlobalStylesPanel
+			currentRequestSignature={ recommendationContextSignature }
 			prompt={ prompt }
 			setPrompt={ setPrompt }
 			capabilityAvailable={ capabilityAvailable }

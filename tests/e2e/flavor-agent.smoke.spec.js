@@ -7226,7 +7226,10 @@ test( 'an unregistered block style is asserted as empty in the recommendation re
 	await page.evaluate( () => {
 		const { createBlock } = window.wp.blocks;
 		const { dispatch } = window.wp.data;
-		const block = createBlock( 'core/quote' );
+		// Supply the inner block so Gutenberg does not insert and select it later.
+		const block = createBlock( 'core/quote', {}, [
+			createBlock( 'core/paragraph', { content: 'Fixture quote.' } ),
+		] );
 
 		dispatch( 'core/block-editor' ).resetBlocks( [ block ] );
 		dispatch( 'core/block-editor' ).selectBlock( block.clientId );
@@ -7260,10 +7263,9 @@ test( 'an unregistered block style is asserted as empty in the recommendation re
 
 	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
 	await dismissWelcomeGuide( page );
-	await promptInput.fill( 'Improve this quote.' );
 	// Opening or focusing inspector controls can move editor selection into the
-	// quote's default inner paragraph. Reassert the intended target immediately
-	// before submitting so this request exercises the style-less quote contract.
+	// quote's inner paragraph. Reselect the quote, then reopen its inspector and
+	// fill that target's prompt before checking the submitted request.
 	await page.evaluate( () => {
 		const blockEditor = window.wp.data.select( 'core/block-editor' );
 		const quote = blockEditor.getBlocks()[ 0 ];
@@ -7274,6 +7276,8 @@ test( 'an unregistered block style is asserted as empty in the recommendation re
 				.selectBlock( quote.clientId );
 		}
 	} );
+	await ensurePanelOpen( page, 'AI Recommendations', promptInput );
+	await promptInput.fill( 'Improve this quote.' );
 	await expect
 		.poll( () =>
 			page.evaluate(

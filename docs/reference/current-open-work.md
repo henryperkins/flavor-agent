@@ -92,7 +92,7 @@ These are real roadmap items, but they should not jump ahead of the prerequisite
 
 | Item | Gate |
 | --- | --- |
-| Fixture harvest from learning signals | Learning reports ship; the [approved proposed export/dismissal v1 contracts](recommendation-outcome-followups.md) now define the review/redaction design. Export implementation remains pending. The [October 7 bounded real-site collection](../validation/2026-10-07-real-site-outcomes.md) retains a local candidate; deployed-SHA/config provenance and fixture qualification remain open. |
+| Fixture harvest from learning signals | The [dismissal/export v1 runtime](recommendation-outcome-followups.md) implements explicit diagnostic dismissal and a privileged allowlisted local candidate export. Source/privacy review, full browser/package release gates, server-owned verified package provenance, and a post-deployment cohort remain required before qualification/sharing. The [October 7 historical real-site candidate](../validation/2026-10-07-real-site-outcomes.md) retains its original provenance limits. |
 | Bounded local ranking feedback | Needs reports, harvested fixtures, versioned signal families, and an operator disable path first. |
 | Editable site preference summaries | Needs enough local learning signal to propose preferences, plus explicit operator review before prompt guidance changes. |
 | Navigation apply | Intentional post-v1 milestone only. Do not add apply/undo without a bounded previewable executor and a dedicated plan. |
@@ -149,5 +149,5 @@ These can turn into implementation work only after the upstream contract changes
 ## Suggested Next Planning Order
 
 1. Block-surface external-apply executor — the next governed-execution extension now that style, template, and template-part server-side approval loops are shipped. It needs a separate source-grounded plan because selected-block/document scope, operation allowlists, and UI proof differ materially from the shipped template lane.
-2. Fixture-harvest implementation planning if the priority is the future learning loop; use the [approved proposed dismissal/export v1 contracts](recommendation-outcome-followups.md), shipped Phase 8 attribution joins, and Phase 9 learning-report slice. A bounded real-site candidate is collected with deployed-SHA/config provenance and fixture qualification still open; static ranking must not consume outcome history without separate consent/design/evaluation evidence.
-3. Release-validation chores before any v0.1.0 release decision or upstream compatibility claim.
+2. Complete fixture-harvest release validation and production provenance using the [implemented dismissal/export contracts](recommendation-outcome-followups.md), then collect a bounded post-deployment cohort with exact cutoffs and restricted review custody. The historical candidate remains unqualified. Static ranking must not consume outcome history without separate consent/design/evaluation evidence.
+3. Validate the immutable v0.1.1 candidate and ZIP, both full Site Editor legs and Playground, then deploy the verified ZIP and verify the installed package/live behavior. Corpus settlement/default freshness have passed through the [targeted remediation](../validation/2026-10-07-public-corpus-remediation.md); a new full scheduled crawl/pruning pass is separate evidence.

@@ -1,4 +1,21 @@
+import {
+	hashOutcomeValue,
+	normalizeSourceRequestSignature,
+} from './outcome-identity';
+import {
+	normalizeShownSuggestionKeys,
+	validExplicitIdentity,
+} from './recommendation-dismissal';
+export {
+	hashOutcomeValue,
+	normalizeSourceRequestSignature,
+} from './outcome-identity';
+export {
+	buildDismissalOutcomes,
+	normalizeShownSuggestionKeys,
+} from './recommendation-dismissal';
 import { createActivityEntry } from './activity-history';
+import { getClientRequestSessionId } from './client-request-identity';
 import {
 	primaryValidationReason,
 	VALIDATION_REASONS_VERSION,
@@ -14,6 +31,7 @@ export const OUTCOME_VISIBILITY = 'diagnostic';
 
 export const OUTCOME_EVENTS = Object.freeze( [
 	'shown',
+	'dismissed',
 	'selected_for_review',
 	'stale_blocked',
 	'validation_blocked',
@@ -32,14 +50,14 @@ const RANKING_SET_CAP = 3;
 const PATTERN_TRAIT_CAP = 8;
 const MAX_STRING_LENGTH = 191;
 const MAX_LABEL_LENGTH = 96;
-const UINT32_MODULO = 4294967296;
 const recordedOutcomeKeys = new Set();
-const pendingOutcomeKeys = new Set();
+const pendingOutcomeKeys = new Map();
 
 const OUTCOME_LABELS = Object.freeze( {
 	save_attempted: __( 'Save requested', 'flavor-agent' ),
 	save_failed: __( 'Save request failed', 'flavor-agent' ),
 	shown: __( 'Recommendations shown', 'flavor-agent' ),
+	dismissed: __( 'Recommendation dismissed', 'flavor-agent' ),
 	selected_for_review: __(
 		'Recommendation selected for review',
 		'flavor-agent'
@@ -190,64 +208,21 @@ function firstPatternTraits( candidates = [] ) {
 	return [];
 }
 
-function stableStringify( value ) {
-	if ( value === null || value === undefined ) {
-		return '';
-	}
-
-	if ( Array.isArray( value ) ) {
-		return `[${ value.map( stableStringify ).join( ',' ) }]`;
-	}
-
-	if ( typeof value === 'object' ) {
-		return `{${ Object.keys( value )
-			.sort()
-			.map( ( key ) => `${ key }:${ stableStringify( value[ key ] ) }` )
-			.join( ',' ) }}`;
-	}
-
-	return String( value );
-}
-
-export function hashOutcomeValue( value ) {
-	const text = stableStringify( value );
-	let hash = 5381;
-
-	for ( let index = 0; index < text.length; index++ ) {
-		hash =
-			( Math.imul( hash, 33 ) + text.charCodeAt( index ) ) %
-			UINT32_MODULO;
-		hash = hash < 0 ? hash + UINT32_MODULO : hash;
-	}
-
-	return `hash_${ hash.toString( 36 ) }`;
-}
-
-export function normalizeSourceRequestSignature( value ) {
-	if ( value && typeof value === 'object' ) {
-		return hashOutcomeValue( value );
-	}
-
-	const normalized = cleanString( value );
-
-	if ( ! normalized ) {
-		return '';
-	}
-
-	return normalized.startsWith( 'hash_' )
-		? normalized
-		: hashOutcomeValue( normalized );
-}
-
 export function buildRecommendationSetId( {
 	surface,
 	requestToken = null,
+	generationId = '',
 	sourceRequestSignature = '',
 	resultRef = '',
 } = {} ) {
+	const identityToken = validExplicitIdentity( generationId )
+		? generationId
+		: `${ getClientRequestSessionId() }:${
+				cleanString( requestToken ?? '' ) || '0'
+		  }`;
 	return [
 		cleanCode( surface ) || 'recommendation',
-		cleanString( requestToken ?? '' ) || '0',
+		identityToken,
 		hashOutcomeValue( {
 			resultRef: cleanString( resultRef ),
 			sourceRequestSignature: normalizeSourceRequestSignature(
@@ -692,54 +667,57 @@ export function buildRecommendationOutcomeDedupeKey( {
 	suggestionKey = '',
 	reason = '',
 	patternKey = '',
+	shownSuggestionKeys = [],
 } = {} ) {
 	const safeSurface = cleanCode( surface );
 	const safeEvent = cleanCode( event );
 	const safeSetId = cleanString( recommendationSetId );
+	const visibleKeys = normalizeShownSuggestionKeys( shownSuggestionKeys );
 
 	if ( safeEvent === 'shown' ) {
-		return [ safeSurface, safeEvent, safeSetId ].join( ':' );
+		return JSON.stringify( [
+			safeSurface,
+			safeEvent,
+			safeSetId,
+			...( visibleKeys.length ? [ visibleKeys ] : [] ),
+		] );
 	}
 
-	return [
+	return JSON.stringify( [
 		safeSurface,
 		safeEvent,
 		safeSetId,
 		cleanString( suggestionKey || patternKey ),
 		cleanCode( reason ),
-	].join( ':' );
+	] );
 }
 
 export function hasRecordedRecommendationOutcome( dedupeKey ) {
-	return recordedOutcomeKeys.has( cleanString( dedupeKey ) );
+	return recordedOutcomeKeys.has( dedupeKey );
 }
 
 export function markRecommendationOutcomeRecorded( dedupeKey ) {
-	const normalized = cleanString( dedupeKey );
-
-	if ( normalized ) {
-		recordedOutcomeKeys.add( normalized );
+	if ( typeof dedupeKey === 'string' && dedupeKey ) {
+		recordedOutcomeKeys.add( dedupeKey );
 	}
 }
 
 export function hasPendingRecommendationOutcome( dedupeKey ) {
-	return pendingOutcomeKeys.has( cleanString( dedupeKey ) );
+	return pendingOutcomeKeys.has( dedupeKey );
 }
 
-export function markRecommendationOutcomePending( dedupeKey ) {
-	const normalized = cleanString( dedupeKey );
+export function getPendingRecommendationOutcome( dedupeKey ) {
+	return pendingOutcomeKeys.get( dedupeKey ) || null;
+}
 
-	if ( normalized ) {
-		pendingOutcomeKeys.add( normalized );
+export function markRecommendationOutcomePending( dedupeKey, pending = null ) {
+	if ( typeof dedupeKey === 'string' && dedupeKey ) {
+		pendingOutcomeKeys.set( dedupeKey, pending );
 	}
 }
 
 export function clearRecommendationOutcomePending( dedupeKey ) {
-	const normalized = cleanString( dedupeKey );
-
-	if ( normalized ) {
-		pendingOutcomeKeys.delete( normalized );
-	}
+	pendingOutcomeKeys.delete( dedupeKey );
 }
 
 export function resetRecommendationOutcomeDedupeForTests() {
@@ -843,10 +821,11 @@ export function buildRecommendationOutcomeEntry( {
 	rankingSet = [],
 	learningAttribution = null,
 	patternTraits = [],
+	shownSuggestionKeys = [],
 } = {} ) {
 	const safeEvent = cleanCode( event );
 	const safeSurface = cleanCode( surface );
-	const safeDocument =
+	let safeDocument =
 		document && typeof document === 'object' && document.scopeKey
 			? document
 			: null;
@@ -867,6 +846,32 @@ export function buildRecommendationOutcomeEntry( {
 			linkedApplyActivityId,
 			saveOccurrenceId,
 		} );
+	}
+	if ( safeEvent === 'dismissed' ) {
+		if (
+			! validExplicitIdentity( recommendationSetId ) ||
+			! validExplicitIdentity( suggestionKey ) ||
+			! validExplicitIdentity( sourceRequestSignature ) ||
+			reason !== 'user_dismissed'
+		) {
+			return null;
+		}
+		// A dismissal contains fixed diagnostics only; drop the suggestion payload.
+		suggestion = null;
+		rankingSet = [];
+		learningAttribution = null;
+		patternTraits = [];
+		topSuggestionKeys = [];
+		shownSuggestionKeys = [];
+		resultCount = 0;
+		patternKey = '';
+		rank = null;
+		safeDocument = Object.fromEntries(
+			[ 'scopeKey', 'postType', 'entityId' ]
+				.filter( ( key ) => Object.hasOwn( safeDocument, key ) )
+				.map( ( key ) => [ key, safeDocument[ key ] ] )
+		);
+		target = target?.clientId ? { clientId: target.clientId } : {};
 	}
 
 	const identity = buildRecommendationIdentityFromSuggestion( suggestion, {
@@ -971,6 +976,15 @@ export function buildRecommendationOutcomeEntry( {
 				resultCount: Number.isInteger( identity.resultCount )
 					? Math.max( 0, identity.resultCount )
 					: 0,
+				...( safeEvent === 'shown' &&
+				normalizeShownSuggestionKeys( shownSuggestionKeys ).length
+					? {
+							shownSuggestionKeys:
+								normalizeShownSuggestionKeys(
+									shownSuggestionKeys
+								),
+					  }
+					: {} ),
 				...outcomeRanking,
 				...( outcomePatternTraits.length
 					? { patternTraits: outcomePatternTraits }

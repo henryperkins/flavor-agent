@@ -4,6 +4,51 @@ const { getWp70HarnessConfig, runWpCli } = require( '../../scripts/wp70-e2e' );
 
 const wp70Harness = getWp70HarnessConfig();
 
+test( 'AI Activity exports an explicit local candidate with separate restricted custody', async ( { page } ) => {
+	let exportRequests = 0;
+	const candidate = {
+		schemaVersion: 'recommendation-fixture-export-v1',
+		provenance: { kind: 'synthetic_fixture', implementationSha: 'a'.repeat( 40 ), publicVersions: { plugin: '0.1.1', wordpress: '7.1.3', ranking: 'contextual-ranking-v1', validationVocabulary: 'validation-reasons-v1', report: 'governance-learning-report-v1' }, config: { surfaces: [ 'block' ], rankingMode: 'static' } },
+		sample: { rowLimit: 500, sampleSize: 0, exportedRowCount: 0, excludedRowCount: 0, truncated: false, shownSetCount: 0, shownSuggestionCount: 0, unlinkedApplyCount: 0, missingIdentityCount: 0 },
+		rows: [], coverage: { surfaces: [ 'block' ], missingShownLinks: 0, missingApplyLinks: 0, unverifiedCoverageCount: 0 },
+		metrics: [ { name: 'reviewSelectionRate', numerator: 0, denominator: 0, coverage: 'no_denominator' } ],
+	};
+	await page.route( '**/wp-json/flavor-agent/v1/activity**', async ( route ) => {
+		if ( route.request().url().includes( '/fixture-export' ) ) {
+			++exportRequests;
+			expect( route.request().method() ).toBe( 'POST' );
+			expect( route.request().postDataJSON() ).toEqual( { selection: { dateFrom: '2026-10-01', dateTo: '2026-10-07', surfaces: [ 'block' ], rowLimit: 500 } } );
+			await route.fulfill( { status: 200, contentType: 'application/json', body: JSON.stringify( { candidate, rawActivity: { prompt: 'Private raw text must never download' } } ) } );
+		} else {
+			await route.fulfill( { status: 200, contentType: 'application/json', body: JSON.stringify( buildActivityResponse( route.request().url() ) ) } );
+		}
+	} );
+	await page.goto( '/wp-admin/options-general.php?page=flavor-agent-activity', { waitUntil: 'domcontentloaded' } );
+	await waitForWordPressReady( page );
+	const disclosure = page.locator( '.flavor-agent-activity-log__fixture-export' );
+	await disclosure.locator( 'summary' ).click();
+	await disclosure.locator( 'summary' ).click();
+	expect( exportRequests ).toBe( 0 );
+	await disclosure.locator( 'summary' ).click();
+	await page.getByLabel( 'From (UTC)', { exact: true } ).fill( '2026-10-01' );
+	await page.getByLabel( 'Through (UTC)', { exact: true } ).fill( '2026-10-07' );
+	await page.getByLabel( 'Source custodian (local record)', { exact: true } ).fill( 'Fixture reviewer' );
+	await page.getByLabel( 'Source site (local record)', { exact: true } ).fill( 'private.fixture.test' );
+	await page.getByLabel( 'Collection permission and scope (local record)', { exact: true } ).fill( 'Approved local fixture sample' );
+	await page.getByLabel( 'Block', { exact: true } ).check();
+	const downloading = page.waitForEvent( 'download' );
+	await page.getByRole( 'button', { name: 'Download local review bundle', exact: true } ).click();
+	const stream = await ( await downloading ).createReadStream();
+	const chunks = [];
+	for await ( const chunk of stream ) { chunks.push( chunk ); }
+	const bundle = JSON.parse( Buffer.concat( chunks ).toString( 'utf8' ) );
+	expect( bundle.candidate ).toEqual( candidate );
+	expect( bundle.reviewRecord ).toMatchObject( { site: 'private.fixture.test', custodian: 'Fixture reviewer', reviewerDecision: 'pending' } );
+	expect( JSON.stringify( bundle.candidate ) ).not.toContain( 'private.fixture.test' );
+	expect( JSON.stringify( bundle ) ).not.toContain( 'Private raw text' );
+	expect( exportRequests ).toBe( 1 );
+} );
+
 const ACTIVITY_ENTRIES = [
 	{
 		id: 'activity-block-1',

@@ -83,6 +83,7 @@ import { executeFlavorAgentAbility } from './abilities-client';
 import { buildClientRequestIdentity } from './client-request-identity';
 import { normalizeRequestErrorDetails } from './request-error-details';
 import {
+	buildDismissalOutcomes,
 	buildRecommendationOutcomeDedupeKey,
 	buildRecommendationOutcomeEntry,
 	buildRecommendationSetId,
@@ -91,6 +92,7 @@ import {
 	getRecommendationOutcomeSummaryFromPayload,
 	hashOutcomeValue,
 	hasPendingRecommendationOutcome,
+	getPendingRecommendationOutcome,
 	hasRecordedRecommendationOutcome,
 	markRecommendationOutcomePending,
 	markRecommendationOutcomeRecorded,
@@ -1607,6 +1609,9 @@ const actions = {
 				recommendationSetId: buildRecommendationSetId( {
 					surface: 'block',
 					requestToken,
+					generationId:
+						recommendations?.requestMeta?.learningAttribution
+							?.generationId,
 					sourceRequestSignature,
 					resultRef: clientId,
 				} ),
@@ -1704,33 +1709,58 @@ const actions = {
 				suggestionKey: entry.suggestionKey,
 				reason: entry.after?.outcome?.reason,
 				patternKey: entry.target?.patternKey,
+				shownSuggestionKeys: entry.after?.outcome?.shownSuggestionKeys,
 			} );
 
 			if ( hasRecordedRecommendationOutcome( dedupeKey ) ) {
-				return null;
+				return {
+					persistence: {
+						status: 'server',
+						confirmation: 'already_recorded',
+					},
+				};
 			}
 
 			if ( hasPendingRecommendationOutcome( dedupeKey ) ) {
-				return null;
+				return getPendingRecommendationOutcome( dedupeKey );
 			}
 
-			markRecommendationOutcomePending( dedupeKey );
+			const pending = Promise.resolve()
+				.then( async () => {
+					const persistedEntry = await logStoreActivityEntry(
+						localDispatch,
+						select,
+						entry
+					);
 
-			try {
-				const persistedEntry = await logStoreActivityEntry(
-					localDispatch,
-					select,
-					entry
+					if ( persistedEntry?.persistence?.status === 'server' ) {
+						markRecommendationOutcomeRecorded( dedupeKey );
+					}
+
+					return persistedEntry;
+				} )
+				.finally( () => {
+					clearRecommendationOutcomePending( dedupeKey );
+				} );
+			markRecommendationOutcomePending( dedupeKey, pending );
+			return pending;
+		};
+	},
+
+	dismissRecommendationSuggestions( input = {} ) {
+		return async ( context ) => {
+			const outcomes = buildDismissalOutcomes( input );
+			const results = [];
+			for ( const outcome of outcomes ) {
+				results.push(
+					await actions.recordRecommendationOutcome( {
+						...outcome,
+						document: input.document,
+						target: input.target,
+					} )( context )
 				);
-
-				if ( persistedEntry?.persistence?.status === 'server' ) {
-					markRecommendationOutcomeRecorded( dedupeKey );
-				}
-
-				return persistedEntry;
-			} finally {
-				clearRecommendationOutcomePending( dedupeKey );
 			}
+			return results;
 		};
 	},
 
@@ -3224,19 +3254,22 @@ const actions = {
 	) {
 		const sourceRequestSignature =
 			requestSignature || insertionTargetSignature || '';
+		const normalizedRequestMeta = normalizeRequestMeta( requestMeta );
 		const decoratedPayload = decorateRecommendationPayload(
 			{
 				recommendations: Array.isArray( recommendations )
 					? recommendations
 					: [],
-				requestMeta: normalizeRequestMeta( requestMeta ),
+				requestMeta: normalizedRequestMeta,
 			},
 			{
 				surface: 'pattern',
 				recommendationSetId: buildRecommendationSetId( {
 					surface: 'pattern',
-					requestToken:
-						requestSignature || insertionTargetSignature || null,
+					requestToken,
+					generationId:
+						normalizedRequestMeta?.learningAttribution
+							?.generationId,
 					sourceRequestSignature,
 					resultRef: insertionTargetSignature,
 				} ),
@@ -3332,10 +3365,25 @@ const actions = {
 		contextSignature = null,
 		reviewContextSignature = null
 	) {
+		const decoratedPayload = contextSignature
+			? decorateRecommendationPayload( payload, {
+					surface: 'navigation',
+					sourceRequestSignature: contextSignature,
+					recommendationSetId: buildRecommendationSetId( {
+						surface: 'navigation',
+						requestToken,
+						generationId:
+							payload?.requestMeta?.learningAttribution
+								?.generationId,
+						sourceRequestSignature: contextSignature,
+						resultRef: blockClientId,
+					} ),
+			  } )
+			: payload;
 		return {
 			type: 'SET_NAVIGATION_RECS',
 			blockClientId,
-			payload,
+			payload: decoratedPayload,
 			prompt,
 			requestToken,
 			contextSignature,

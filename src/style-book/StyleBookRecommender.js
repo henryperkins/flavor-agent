@@ -72,6 +72,7 @@ function getBlockStyleBranch( config = {}, blockName = '' ) {
 }
 
 function StyleBookPanel( {
+	currentRequestSignature,
 	prompt,
 	setPrompt,
 	capabilityAvailable,
@@ -281,6 +282,8 @@ function StyleBookPanel( {
 				>
 					{ executableSuggestions.map( ( suggestion ) => (
 						<StyleSuggestionCard
+							surface="style-book"
+							currentRequestSignature={ currentRequestSignature }
 							key={ suggestion.suggestionKey }
 							suggestion={ suggestion }
 							isSelected={
@@ -313,6 +316,8 @@ function StyleBookPanel( {
 				>
 					{ manualSuggestions.map( ( suggestion ) => (
 						<StyleSuggestionCard
+							surface="style-book"
+							currentRequestSignature={ currentRequestSignature }
 							key={ suggestion.suggestionKey }
 							suggestion={ suggestion }
 							isSelected={
@@ -1006,6 +1011,7 @@ export default function StyleBookRecommender() {
 
 	const panel = (
 		<StyleBookPanel
+			currentRequestSignature={ recommendationContextSignature }
 			prompt={ prompt }
 			setPrompt={ setPrompt }
 			capabilityAvailable={ capabilityAvailable }

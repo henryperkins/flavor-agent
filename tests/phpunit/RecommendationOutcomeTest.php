@@ -64,7 +64,7 @@ final class RecommendationOutcomeTest extends TestCase {
 				'surface' => 'block',
 				'after'   => [
 					'outcome' => [
-						'event' => 'dismissed',
+						'event' => 'passive_dismissed',
 					],
 				],
 			]

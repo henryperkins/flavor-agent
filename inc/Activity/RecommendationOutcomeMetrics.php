@@ -18,7 +18,7 @@ final class RecommendationOutcomeMetrics {
 
 	/**
 	 * @param array<int, array<string, mixed>> $entries
-	 * @return array<string, float|int|array<string, int>>
+	 * @return array<string, float|int|null|array<string, int>>
 	 */
 	public static function evaluate( array $entries ): array {
 		$shown_sets                   = [];
@@ -31,6 +31,9 @@ final class RecommendationOutcomeMetrics {
 		$attempted_events             = [];
 		$linked_applied_sets          = [];
 		$unlinked_apply_count         = 0;
+		$shown_suggestions            = [];
+		$shown_result_counts          = [];
+		$dismissed_suggestions        = [];
 
 		foreach ( $entries as $entry ) {
 			if ( ! is_array( $entry ) ) {
@@ -47,13 +50,25 @@ final class RecommendationOutcomeMetrics {
 					continue;
 				}
 
-				$set_key   = $surface . ':' . $set_id;
+				$set_key   = self::tuple_key( $surface, $set_id );
 				$event_key = self::event_key( $entry, $outcome );
 
 				if ( 'shown' === $event ) {
-					$shown_sets[ $set_key ] = true;
+					$shown_sets[ $set_key ]          = true;
+					$shown_result_counts[ $set_key ] = max( $shown_result_counts[ $set_key ] ?? 0, (int) ( $outcome['resultCount'] ?? 0 ) );
+					foreach ( RecommendationOutcome::shown_suggestion_keys( $outcome['shownSuggestionKeys'] ?? [] ) as $key ) {
+						$shown_suggestions[ $set_key ][ $key ] = true;
+					}
 					if ( 'pattern' === $surface ) {
 						$pattern_shown_sets[ $set_key ] = true;
+					}
+					continue;
+				}
+
+				if ( 'dismissed' === $event && 'user_dismissed' === ( $outcome['reason'] ?? '' ) ) {
+					$key = (string) ( $entry['suggestionKey'] ?? $entry['target']['suggestionKey'] ?? '' );
+					if ( '' !== $key ) {
+						$dismissed_suggestions[ $set_key ][ $key ] = true;
 					}
 					continue;
 				}
@@ -108,8 +123,8 @@ final class RecommendationOutcomeMetrics {
 			}
 
 			$surface                         = (string) ( $entry['surface'] ?? '' );
-			$set_key                         = $surface . ':' . $set_id;
-			$key                             = $set_key . ':' . $suggestion_key;
+			$set_key                         = self::tuple_key( $surface, $set_id );
+			$key                             = self::tuple_key( $surface, $set_id, $suggestion_key );
 			$linked_applied_sets[ $set_key ] = true;
 			$attempted_events[ $key ]        = true;
 		}
@@ -120,6 +135,18 @@ final class RecommendationOutcomeMetrics {
 		$attempted_count        = count( $attempted_events );
 		$shown_apply_set_count  = count( array_intersect_key( $linked_applied_sets, $shown_sets ) );
 		$review_apply_set_count = count( array_intersect_key( $linked_applied_sets, $selected_sets ) );
+		$shown_suggestion_count = 0;
+		$dismissed_count        = 0;
+		$excluded_count         = 0;
+		foreach ( $shown_result_counts as $set => $result_count ) {
+			$shown                   = $shown_suggestions[ $set ] ?? [];
+			$shown_suggestion_count += count( $shown );
+			$dismissed_count        += count( array_intersect_key( $dismissed_suggestions[ $set ] ?? [], $shown ) );
+			$excluded_count         += max( 0, $result_count - count( $shown ) );
+		}
+		foreach ( $dismissed_suggestions as $set => $dismissed ) {
+			$excluded_count += count( array_diff_key( $dismissed, $shown_suggestions[ $set ] ?? [] ) );
+		}
 
 		return [
 			'shownCount'                => $shown_count,
@@ -131,6 +158,10 @@ final class RecommendationOutcomeMetrics {
 			'applyConversionRate'       => self::rate( $shown_apply_set_count, $shown_count ),
 			'reviewApplyConversionRate' => self::rate( $review_apply_set_count, $selected_count ),
 			'unlinkedApplyCount'        => $unlinked_apply_count,
+			'shownSuggestionCount'      => $shown_suggestion_count,
+			'dismissedSuggestionCount'  => $dismissed_count,
+			'dismissalExcludedCount'    => $excluded_count,
+			'dismissalRate'             => 0 === $shown_suggestion_count ? null : self::rate( $dismissed_count, $shown_suggestion_count ),
 			...PersistenceAssurance::metrics( $entries ),
 		];
 	}
@@ -159,16 +190,18 @@ final class RecommendationOutcomeMetrics {
 	 * @param array<string, mixed> $outcome
 	 */
 	private static function event_key( array $entry, array $outcome ): string {
-		return implode(
-			':',
-			[
-				(string) ( $entry['surface'] ?? '' ),
-				(string) ( $outcome['event'] ?? '' ),
-				(string) ( $outcome['recommendationSetId'] ?? $entry['target']['recommendationSetId'] ?? '' ),
-				(string) ( $entry['suggestionKey'] ?? $entry['target']['suggestionKey'] ?? '' ),
-				(string) ( $outcome['reason'] ?? '' ),
-			]
+		return self::tuple_key(
+			(string) ( $entry['surface'] ?? '' ),
+			(string) ( $outcome['event'] ?? '' ),
+			(string) ( $outcome['recommendationSetId'] ?? $entry['target']['recommendationSetId'] ?? '' ),
+			(string) ( $entry['suggestionKey'] ?? $entry['target']['suggestionKey'] ?? '' ),
+			(string) ( $outcome['reason'] ?? '' ),
 		);
+	}
+
+	/** Length-prefixed tuple parts cannot merge distinct canonical identities. */
+	private static function tuple_key( string ...$parts ): string {
+		return implode( '', array_map( static fn ( string $part ): string => strlen( $part ) . ':' . $part, $parts ) );
 	}
 
 	private static function rate( int $numerator, int $denominator ): float {

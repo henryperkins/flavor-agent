@@ -1,3 +1,9 @@
+jest.mock( '../client-request-identity', () => ( {
+	...jest.requireActual( '../client-request-identity' ),
+	getClientRequestSessionId: jest.fn( () => 'fixture-session' ),
+} ) );
+
+import { getClientRequestSessionId } from '../client-request-identity';
 import {
 	buildRankingSetFromSuggestions,
 	buildRecommendationOutcomeDedupeKey,
@@ -129,7 +135,7 @@ describe( 'recommendation outcomes', () => {
 		expect(
 			buildRecommendationOutcomeEntry( {
 				document: { scopeKey: 'post:42' },
-				event: 'dismissed',
+				event: 'passive_dismissed',
 				surface: 'block',
 			} )
 		).toBeNull();
@@ -202,9 +208,17 @@ describe( 'recommendation outcomes', () => {
 			reason: 'disallowed_block_types',
 		} );
 
-		expect( shownKey ).toBe( 'block:shown:set-1' );
+		expect( shownKey ).toBe(
+			JSON.stringify( [ 'block', 'shown', 'set-1' ] )
+		);
 		expect( blockedKey ).toBe(
-			'pattern:validation_blocked:set-1:suggestion-1:disallowed_block_types'
+			JSON.stringify( [
+				'pattern',
+				'validation_blocked',
+				'set-1',
+				'suggestion-1',
+				'disallowed_block_types',
+			] )
 		);
 		expect( hasRecordedRecommendationOutcome( shownKey ) ).toBe( false );
 
@@ -212,6 +226,81 @@ describe( 'recommendation outcomes', () => {
 
 		expect( hasRecordedRecommendationOutcome( shownKey ) ).toBe( true );
 	} );
+
+	test( 'dedupe preserves colon-bearing tuples and complete long identities', () => {
+		const base = {
+			surface: 'block',
+			event: 'dismissed',
+			reason: 'user_dismissed',
+		};
+		const first = buildRecommendationOutcomeDedupeKey( {
+			...base,
+			recommendationSetId: 'a:b',
+			suggestionKey: 'c',
+		} );
+		const second = buildRecommendationOutcomeDedupeKey( {
+			...base,
+			recommendationSetId: 'a',
+			suggestionKey: 'b:c',
+		} );
+		expect( first ).not.toBe( second );
+		const long = 'set'.repeat( 63 );
+		const longFirst = buildRecommendationOutcomeDedupeKey( {
+			...base,
+			recommendationSetId: long,
+			suggestionKey: 'first',
+		} );
+		const longSecond = buildRecommendationOutcomeDedupeKey( {
+			...base,
+			recommendationSetId: long,
+			suggestionKey: 'second',
+		} );
+		markRecommendationOutcomeRecorded( longFirst );
+		expect( hasRecordedRecommendationOutcome( longFirst ) ).toBe( true );
+		expect( hasRecordedRecommendationOutcome( longSecond ) ).toBe( false );
+	} );
+
+	test.each( [
+		'block',
+		'template',
+		'template-part',
+		'global-styles',
+		'style-book',
+		'pattern',
+		'navigation',
+	] )(
+		'%s set identities separate fresh generations and editor sessions while cached generation replays stay equal',
+		( surface ) => {
+			const base = {
+				surface,
+				requestToken: 1,
+				sourceRequestSignature: 'same-context',
+				resultRef: 'same-scope',
+			};
+			const first = buildRecommendationSetId( {
+				...base,
+				generationId: 'generation-one',
+			} );
+			const next = buildRecommendationSetId( {
+				...base,
+				generationId: 'generation-two',
+			} );
+			expect( first ).not.toBe( next );
+			expect( first ).toBe(
+				buildRecommendationSetId( {
+					...base,
+					requestToken: 99,
+					generationId: 'generation-one',
+				} )
+			);
+			getClientRequestSessionId
+				.mockReturnValueOnce( 'session-one' )
+				.mockReturnValueOnce( 'session-two' );
+			expect( buildRecommendationSetId( base ) ).not.toBe(
+				buildRecommendationSetId( base )
+			);
+		}
+	);
 
 	test( 'decorates recommendations with stable apply join identity', () => {
 		const recommendationSetId = buildRecommendationSetId( {

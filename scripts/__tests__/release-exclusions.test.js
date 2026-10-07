@@ -172,4 +172,127 @@ describe( 'production file exclusions', () => {
 			fs.existsSync( path.join( releaseRoot, '.superpowers' ) )
 		).toBe( false );
 	} );
+
+	test( 'extracted release preserves coherent production Composer metadata and every classmap file', () => {
+		const fixtureRoot = path.join( temporaryRoot, 'source' );
+		const releaseParent = path.join( temporaryRoot, 'release' );
+		const releaseRoot = path.join( releaseParent, 'flavor-agent' );
+		const extractedParent = path.join( temporaryRoot, 'extracted' );
+		fs.mkdirSync( path.join( fixtureRoot, 'scripts' ), {
+			recursive: true,
+		} );
+		for ( const sourceFile of [
+			'.distignore',
+			'composer.json',
+			'composer.lock',
+			'flavor-agent.php',
+			'scripts/prepare-release.sh',
+		] ) {
+			fs.copyFileSync(
+				path.join( rootDir, sourceFile ),
+				path.join( fixtureRoot, sourceFile )
+			);
+		}
+		fs.cpSync(
+			path.join( rootDir, 'inc' ),
+			path.join( fixtureRoot, 'inc' ),
+			{
+				recursive: true,
+			}
+		);
+		const staged = spawnSync(
+			resolveBashExecutable(),
+			[
+				path.join( fixtureRoot, 'scripts/prepare-release.sh' ),
+				releaseRoot,
+			],
+			{
+				encoding: 'utf8',
+				env: {
+					...process.env,
+					COMPOSER_DISABLE_NETWORK: '1',
+					COMPOSER_ROOT_VERSION: '0.1.1',
+				},
+			}
+		);
+		expect( staged.error ).toBeUndefined();
+		expect( staged.status ).toBe( 0 );
+		const archive = spawnSync(
+			'php',
+			[
+				'-r',
+				`$archive = new PharData($argv[2], 0, null, Phar::ZIP);
+$archive->buildFromDirectory($argv[1]);
+$archive->extractTo($argv[3]);`,
+				releaseParent,
+				path.join( temporaryRoot, 'flavor-agent.zip' ),
+				extractedParent,
+			],
+			{ encoding: 'utf8' }
+		);
+		expect( archive.error ).toBeUndefined();
+		expect( archive.stderr ).toBe( '' );
+		expect( archive.status ).toBe( 0 );
+		const extractedRoot = path.join( extractedParent, 'flavor-agent' );
+		const probe = spawnSync(
+			'php',
+			[
+				'-r',
+				`set_error_handler(static function ($severity, $message) {
+	throw new RuntimeException($message);
+});
+$plugin = $argv[1];
+$loader = require $plugin . '/vendor/autoload.php';
+if (!class_exists('Composer\\\\InstalledVersions')) {
+	throw new RuntimeException('Composer installed-package metadata cannot autoload.');
+}
+$classmap = require $plugin . '/vendor/composer/autoload_classmap.php';
+foreach ($classmap as $class => $file) {
+	if (!is_file($file)) {
+		throw new RuntimeException('Missing classmap target: ' . $class);
+	}
+}
+$runtimeClasses = array_filter(array_keys($classmap), static fn ($class) => str_starts_with($class, 'FlavorAgent\\\\'));
+$root = Composer\\InstalledVersions::getRootPackage();
+echo json_encode([
+	'authoritative' => $loader->isClassMapAuthoritative(),
+	'installedPackages' => Composer\\InstalledVersions::getInstalledPackages(),
+	'rootName' => $root['name'],
+	'rootVersion' => $root['pretty_version'],
+	'rootDev' => $root['dev'],
+	'rootPathMatches' => realpath($root['install_path']) === realpath($plugin),
+	'runtimeClassCount' => count($runtimeClasses),
+	'observerAutoloads' => class_exists('FlavorAgent\\\\Activity\\\\PersistenceSaveObserver'),
+	'exporterAutoloads' => class_exists('FlavorAgent\\\\Activity\\\\RecommendationFixtureExport'),
+], JSON_THROW_ON_ERROR);`,
+				extractedRoot,
+			],
+			{ encoding: 'utf8' }
+		);
+		expect( probe.error ).toBeUndefined();
+		expect( {
+			status: probe.status,
+			diagnostics:
+				probe.stderr || ( probe.status !== 0 ? probe.stdout : '' ),
+		} ).toEqual( { status: 0, diagnostics: '' } );
+		expect( JSON.parse( probe.stdout ) ).toEqual( {
+			authoritative: true,
+			installedPackages: [ 'flavor-agent/flavor-agent' ],
+			rootName: 'flavor-agent/flavor-agent',
+			rootVersion: '0.1.1',
+			rootDev: false,
+			rootPathMatches: true,
+			runtimeClassCount: fs
+				.readdirSync( path.join( rootDir, 'inc' ), { recursive: true } )
+				.filter( ( file ) => file.endsWith( '.php' ) ).length,
+			observerAutoloads: true,
+			exporterAutoloads: true,
+		} );
+		expect(
+			fs.existsSync( path.join( extractedRoot, 'composer.lock' ) )
+		).toBe( false );
+		expect(
+			fs.existsSync( path.join( extractedRoot, 'vendor/bin' ) )
+		).toBe( false );
+	} );
 } );

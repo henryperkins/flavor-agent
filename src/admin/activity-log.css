@@ -1795,3 +1795,44 @@ body.settings_page_flavor-agent-activity {
   font-size: 12px;
   color: var(--flavor-agent-activity-log-muted);
 }
+
+.flavor-agent-activity-log__fixture-export {
+  padding: var(--flavor-agent-space-4, 16px);
+  border: 1px solid var(--flavor-agent-activity-log-accent-line);
+  border-radius: var(--wpds-border-radius-sm, 2px);
+}
+
+.flavor-agent-activity-log__fixture-export > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.flavor-agent-activity-log__fixture-export > summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.flavor-agent-activity-log__fixture-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: var(--flavor-agent-space-3, 12px);
+  margin-block: var(--flavor-agent-space-4, 16px);
+}
+
+.flavor-agent-activity-log__fixture-fields label {
+  display: grid;
+  gap: var(--flavor-agent-space-1, 4px);
+  min-width: 0;
+}
+
+.flavor-agent-activity-log__fixture-fields input {
+  width: 100%;
+  min-width: 0;
+}
+
+.flavor-agent-activity-log__fixture-export fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--flavor-agent-space-3, 12px);
+  margin-block: var(--flavor-agent-space-4, 16px);
+}

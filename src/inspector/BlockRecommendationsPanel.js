@@ -30,6 +30,7 @@ import AIStatusNotice from '../components/AIStatusNotice';
 import CapabilityNotice from '../components/CapabilityNotice';
 import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import RecommendationLane from '../components/RecommendationLane';
+import RecommendationDismissal from '../components/RecommendationDismissal';
 import SurfaceComposer from '../components/SurfaceComposer';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
@@ -1170,6 +1171,7 @@ export function BlockRecommendationsContent( {
 						label={ __( 'AI block suggestions', 'flavor-agent' ) }
 						currentRequestSignature={ currentRequestSignature }
 						currentRequestInput={ currentRequestInput }
+						isStale={ isStaleResult }
 						disabled={
 							isStaleResult || blockApplyStatus === 'applying'
 						}
@@ -1199,6 +1201,8 @@ export function BlockRecommendationsContent( {
 				>
 					{ reviewBlockSuggestions.map( ( suggestion ) => (
 						<ReviewSuggestionCard
+							currentRequestSignature={ liveContextSignature }
+							clientId={ clientId }
 							key={ getSuggestionKey( suggestion ) }
 							suggestion={ suggestion }
 							patternTitleMap={ patternTitleMap }
@@ -1242,6 +1246,7 @@ export function BlockRecommendationsContent( {
 						) }
 						currentRequestSignature={ currentRequestSignature }
 						currentRequestInput={ currentRequestInput }
+						isStale={ isStaleResult }
 						disabled={
 							isStaleResult || blockApplyStatus === 'applying'
 						}
@@ -1274,6 +1279,7 @@ export function BlockRecommendationsContent( {
 						label={ __( 'AI style suggestions', 'flavor-agent' ) }
 						currentRequestSignature={ currentRequestSignature }
 						currentRequestInput={ currentRequestInput }
+						isStale={ isStaleResult }
 						disabled={
 							isStaleResult || blockApplyStatus === 'applying'
 						}
@@ -1356,6 +1362,9 @@ export function BlockRecommendationsContent( {
 				>
 					{ advisoryBlockSuggestions.map( ( suggestion ) => (
 						<AdvisorySuggestionCard
+							currentRequestSignature={ liveContextSignature }
+							clientId={ clientId }
+							isStale={ isStaleResult }
 							key={ getSuggestionKey( suggestion ) }
 							suggestion={ suggestion }
 						/>
@@ -1435,6 +1444,8 @@ function getReviewDetailsId( suggestion ) {
 
 function ReviewSuggestionCard( {
 	suggestion,
+	currentRequestSignature,
+	clientId,
 	patternTitleMap = {},
 	isActive,
 	isStale,
@@ -1513,6 +1524,13 @@ function ReviewSuggestionCard( {
 				</p>
 			) }
 
+			<RecommendationDismissal
+				surface="block"
+				suggestions={ [ suggestion ] }
+				currentRequestSignature={ currentRequestSignature }
+				isStale={ isStale }
+				target={ { clientId } }
+			/>
 			{ operationSummaries.length > 0 && (
 				<ul className="flavor-agent-card__list">
 					{ operationSummaries.map( ( summary ) => (
@@ -1575,7 +1593,12 @@ function ReviewSuggestionCard( {
 	);
 }
 
-function AdvisorySuggestionCard( { suggestion } ) {
+function AdvisorySuggestionCard( {
+	suggestion,
+	currentRequestSignature,
+	clientId,
+	isStale,
+} ) {
 	const typeLabel = getAdvisorySuggestionTypeLabel( suggestion );
 	const eligibility =
 		suggestion?.eligibility || suggestion?.actionability || {};
@@ -1587,6 +1610,13 @@ function AdvisorySuggestionCard( { suggestion } ) {
 
 	return (
 		<div className="flavor-agent-card">
+			<RecommendationDismissal
+				surface="block"
+				suggestions={ [ suggestion ] }
+				currentRequestSignature={ currentRequestSignature }
+				isStale={ isStale }
+				target={ { clientId } }
+			/>
 			<div className="flavor-agent-card__header flavor-agent-card__header--spaced">
 				<div className="flavor-agent-card__lead">
 					<span className="flavor-agent-card__label">
