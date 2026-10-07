@@ -144,3 +144,24 @@ The first fresh full verifier was interrupted during JavaScript lint before
 the repair; its logs are retained under `output/verify-oct07-pr86-full/` and it
 is not completion evidence. Exact final-revision browser and aggregate results
 must be recorded separately from the earlier branch checks above.
+
+The clean reviewed runtime at
+`00c0eaea6c0f56507aa057383e9ce2b8624f5792` subsequently passed the full strict
+verifier from 11:31:58 to 11:52:46 UTC: nine steps passed, zero failed, and zero
+skipped. Build, JavaScript lint, staged-package Plugin Check, PHP lint, and docs
+checks passed. Jest passed 119 suites / 2,120 tests; PHPUnit passed 2,502 tests /
+11,766 assertions. Both browser suites ran in full with retries disabled:
+Playground passed 34/34 on WordPress 7.1 / PHP 8.3, and the isolated Docker
+Site Editor suite passed 46/46 on the pinned `wordpress:7.1.0-php8.2-apache`
+image (core reports 7.1 / PHP 8.2.33) with Gutenberg 23.9.0, independently
+confirmed active after the suite. The earlier bundled-editor pass above
+predates this owner-binding fix;
+the exact release candidate still requires both Site Editor legs.
+
+The completed summary is
+`output/verify-oct07-pr86-reviewed/summary.json`, SHA-256
+`a3af769b3a286d007ea3f6846c45c4713bf388c42782c06ca5c5e0406ddaf195`.
+Complete step stdout/stderr is retained beside it. This record and the status
+summary were then updated without changing the verified runtime or test files.
+These local checks support source integration; they do not establish exact-tag,
+release-ZIP, or production behavior proof.
