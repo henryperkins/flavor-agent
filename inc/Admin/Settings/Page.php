@@ -560,31 +560,15 @@ final class Page {
 	}
 
 	private static function render_ai_activity_storage_status(): void {
-		$core_logging_available = RequestLoggingBridge::is_core_logging_class_available();
-		$core_logging_enabled   = RequestLoggingBridge::is_core_logging_enabled();
-		$tone                   = 'warning';
-		$message                = __( 'Flavor Agent records request diagnostics in its own activity log. Upgrade to WordPress AI 1.0.0+ to access core AI request observability.', 'flavor-agent' );
-		$links                  = [];
+		if ( RequestLoggingBridge::is_core_logging_enabled() ) {
+			self::render_core_request_logging_summary();
+			return;
+		}
 
-		if ( $core_logging_enabled ) {
-			$dual_logging = function_exists( '\\flavor_agent_dual_log_request_diagnostics_enabled' )
-				? \flavor_agent_dual_log_request_diagnostics_enabled()
-				: (bool) get_option( Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS, true );
-			$tone         = 'success';
-			$message      = $dual_logging
-				? __( 'AI Request Logging is enabled. Flavor Agent also records its own request diagnostics here and forwards surface, scope, and document context into each Tools > AI Request Logs row (dual logging).', 'flavor-agent' )
-				: __( 'AI Request Logging is enabled. Flavor Agent defers to core logging and forwards surface, scope, and document context into each Tools > AI Request Logs row.', 'flavor-agent' );
-			$links[]      = [
-				'url'   => admin_url( 'tools.php?page=ai-request-logs' ),
-				'label' => __( 'Open AI Request Logs', 'flavor-agent' ),
-			];
-			if ( $dual_logging ) {
-				$links[] = [
-					'url'   => admin_url( 'options-general.php?page=flavor-agent-activity' ),
-					'label' => __( 'Open AI Activity', 'flavor-agent' ),
-				];
-			}
-		} elseif ( $core_logging_available ) {
+		$message = __( 'Flavor Agent records request diagnostics in its own activity log. Upgrade to WordPress AI 1.0.0+ to access core AI request observability.', 'flavor-agent' );
+		$links   = [];
+
+		if ( RequestLoggingBridge::is_core_logging_class_available() ) {
 			$message = __( 'Flavor Agent is recording request diagnostics in its own activity log. Enable the AI Request Logging experiment in Settings > AI to also capture provider, model, token, and cost data centrally.', 'flavor-agent' );
 			$links[] = [
 				'url'   => admin_url( 'options-general.php?page=ai-wp-admin' ),
@@ -597,7 +581,7 @@ final class Page {
 			__( 'Read-only status for recommendation request observability.', 'flavor-agent' )
 		);
 		?>
-		<div class="flavor-agent-settings-status flavor-agent-settings-status--<?php echo esc_attr( $tone ); ?>">
+		<div class="flavor-agent-settings-status flavor-agent-settings-status--warning">
 			<p><?php echo esc_html( $message ); ?></p>
 			<?php foreach ( $links as $link ) : ?>
 				<p>
@@ -607,6 +591,40 @@ final class Page {
 				</p>
 			<?php endforeach; ?>
 		</div>
+		<?php
+	}
+
+	/**
+	 * Once core AI Request Logging is on there is nothing left to act on, so the
+	 * storage status shrinks to one quiet line that only points at the logs.
+	 */
+	private static function render_core_request_logging_summary(): void {
+		$dual_logging = function_exists( '\\flavor_agent_dual_log_request_diagnostics_enabled' )
+			? \flavor_agent_dual_log_request_diagnostics_enabled()
+			: (bool) get_option( Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS, true );
+		$links        = [
+			[
+				'url'   => admin_url( 'tools.php?page=ai-request-logs' ),
+				'label' => __( 'Open AI Request Logs', 'flavor-agent' ),
+			],
+		];
+
+		if ( $dual_logging ) {
+			$links[] = [
+				'url'   => admin_url( 'options-general.php?page=flavor-agent-activity' ),
+				'label' => __( 'Open AI Activity', 'flavor-agent' ),
+			];
+		}
+		?>
+		<p class="flavor-agent-settings-inline-meta">
+			<?php echo esc_html__( 'AI Request Logging is on.', 'flavor-agent' ); ?>
+			<?php foreach ( $links as $index => $link ) : ?>
+				<?php if ( 0 < $index ) : ?>
+					<span aria-hidden="true">|</span>
+				<?php endif; ?>
+				<a href="<?php echo esc_url( Utils::sanitize_url_value( $link['url'] ) ); ?>"><?php echo esc_html( $link['label'] ); ?></a>
+			<?php endforeach; ?>
+		</p>
 		<?php
 	}
 

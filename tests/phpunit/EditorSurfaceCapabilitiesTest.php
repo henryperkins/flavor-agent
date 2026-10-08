@@ -74,6 +74,28 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 		);
 	}
 
+	public function test_admin_is_not_told_to_enable_flavor_agent_after_ai_retires_its_global_toggle(): void {
+		WordPressTestState::$capabilities = [
+			'edit_theme_options' => true,
+			'manage_options'     => true,
+		];
+		WordPressTestState::$options      = [
+			'wpai_global_toggle_removed'        => '1',
+			'wpai_feature_flavor-agent_enabled' => true,
+		];
+
+		$capabilities = \flavor_agent_get_editor_surface_capabilities(
+			'https://example.test/wp-admin/options-general.php?page=flavor-agent',
+			'https://example.test/wp-admin/options-connectors.php'
+		);
+
+		$this->assertNotSame( 'ai_feature_disabled', $capabilities['block']['reason'] );
+		$this->assertSame(
+			'Configure a text-generation provider in Settings > Connectors to enable block recommendations.',
+			$capabilities['block']['message']
+		);
+	}
+
 	public function test_admin_receives_configuration_links_for_unavailable_surfaces(): void {
 		WordPressTestState::$capabilities = [
 			'edit_theme_options' => true,

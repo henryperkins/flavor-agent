@@ -64,6 +64,17 @@ final class RequestLoggingBridgeTest extends TestCase {
 		$this->assertFalse( RequestLoggingBridge::should_persist_request_diagnostic() );
 	}
 
+	public function test_core_request_logging_counts_as_enabled_once_ai_retires_its_global_toggle(): void {
+		\add_filter( 'flavor_agent_core_request_logging_class_available', '__return_true' );
+		WordPressTestState::$options = [
+			'wpai_global_toggle_removed'              => '1',
+			'wpai_feature_ai-request-logging_enabled' => true,
+		];
+
+		$this->assertTrue( RequestLoggingBridge::is_core_logging_enabled() );
+		$this->assertFalse( RequestLoggingBridge::should_persist_request_diagnostic() );
+	}
+
 	public function test_filter_can_force_request_diagnostics_when_core_logging_is_enabled(): void {
 		$this->assertTrue( \class_exists( RequestLoggingBridge::class ) );
 

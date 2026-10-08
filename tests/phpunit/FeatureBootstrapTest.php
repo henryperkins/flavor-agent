@@ -93,6 +93,74 @@ final class FeatureBootstrapTest extends TestCase {
 		$this->assertArrayNotHasKey( 'flavor-agent/recommend-block', WordPressTestState::$registered_abilities );
 	}
 
+	public function test_ai_global_toggle_still_gates_recommendations_before_ai_1_4(): void {
+		WordPressTestState::$options = [
+			'wpai_features_enabled'             => false,
+			'wpai_feature_flavor-agent_enabled' => true,
+		];
+
+		FeatureBootstrap::register_global_helper_abilities();
+
+		$this->assertArrayNotHasKey( 'flavor-agent/recommend-block', WordPressTestState::$registered_abilities );
+	}
+
+	/**
+	 * AI 1.4.0's upgrade deletes wpai_features_enabled, records
+	 * wpai_global_toggle_removed, and its loader treats the master gate as on.
+	 */
+	public function test_recommendation_abilities_register_once_ai_retires_its_global_toggle(): void {
+		WordPressTestState::$options = [
+			'wpai_global_toggle_removed'        => '1',
+			'wpai_feature_flavor-agent_enabled' => true,
+		];
+
+		FeatureBootstrap::register_global_helper_abilities();
+
+		$this->assertArrayHasKey( 'flavor-agent/recommend-block', WordPressTestState::$registered_abilities );
+	}
+
+	public function test_retired_ai_global_toggle_ignores_a_stale_disabled_value(): void {
+		WordPressTestState::$options = [
+			'wpai_global_toggle_removed'        => '1',
+			'wpai_features_enabled'             => false,
+			'wpai_feature_flavor-agent_enabled' => true,
+		];
+
+		FeatureBootstrap::register_global_helper_abilities();
+
+		$this->assertArrayHasKey( 'flavor-agent/recommend-block', WordPressTestState::$registered_abilities );
+	}
+
+	public function test_ai_master_gate_filter_still_disables_recommendations_after_toggle_retired(): void {
+		WordPressTestState::$options = [
+			'wpai_global_toggle_removed'        => '1',
+			'wpai_feature_flavor-agent_enabled' => true,
+		];
+		\add_filter( 'wpai_features_enabled', '__return_false' );
+
+		FeatureBootstrap::register_global_helper_abilities();
+
+		$this->assertArrayNotHasKey( 'flavor-agent/recommend-block', WordPressTestState::$registered_abilities );
+	}
+
+	/**
+	 * A fresh AI 1.4.0 install skips the upgrade routine, so neither the global
+	 * option nor the completion flag exists; only the plugin version tells.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_fresh_ai_1_4_install_enables_recommendations_without_upgrade_flag(): void {
+		\define( 'WPAI_VERSION', '1.4.0' );
+		WordPressTestState::$options = [
+			'wpai_feature_flavor-agent_enabled' => true,
+		];
+
+		FeatureBootstrap::register_global_helper_abilities();
+
+		$this->assertArrayHasKey( 'flavor-agent/recommend-block', WordPressTestState::$registered_abilities );
+	}
+
 	public function test_feature_filters_can_force_recommendation_ability_registration(): void {
 		\add_filter( 'wpai_features_enabled', static fn (): bool => true );
 		\add_filter(

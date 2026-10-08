@@ -1487,7 +1487,23 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
-	public function test_render_page_links_to_request_logs_and_activity_when_dual_logging_is_enabled(): void {
+	public function test_render_page_stops_asking_to_enable_request_logging_once_ai_retired_its_global_toggle(): void {
+		\add_filter( 'flavor_agent_core_request_logging_class_available', '__return_true' );
+		WordPressTestState::$options = [
+			'wpai_global_toggle_removed'              => '1',
+			'wpai_feature_ai-request-logging_enabled' => true,
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringNotContainsString( 'Enable the AI Request Logging experiment', $output );
+		$this->assertStringNotContainsString( 'options-general.php?page=ai-wp-admin', $output );
+		$this->assertStringContainsString( 'AI Request Logging is on.', $output );
+	}
+
+	public function test_render_page_reduces_enabled_request_logging_to_one_line_with_log_links(): void {
 		\add_filter( 'flavor_agent_core_request_logging_class_available', '__return_true' );
 		WordPressTestState::$options = [
 			'wpai_features_enabled'                   => true,
@@ -1498,20 +1514,17 @@ final class SettingsTest extends TestCase {
 		Settings::render_page();
 		$output = (string) ob_get_clean();
 
-		$this->assertStringContainsString( 'AI Activity Storage', $output );
-		$this->assertStringContainsString(
-			'AI Request Logging is enabled. Flavor Agent also records its own request diagnostics here and forwards surface, scope, and document context into each Tools &gt; AI Request Logs row (dual logging).',
+		$this->assertStringContainsString( 'AI Request Logging is on.', $output );
+		$this->assertMatchesRegularExpression(
+			'#href="[^"]*tools\.php\?page=ai-request-logs"\s*>\s*Open AI Request Logs#',
 			$output
 		);
-		$this->assertStringContainsString(
-			'tools.php?page=ai-request-logs',
-			$output
-		);
-		$this->assertStringContainsString( 'Open AI Activity', $output );
 		$this->assertMatchesRegularExpression(
 			'#href="[^"]*options-general\.php\?page=flavor-agent-activity"\s*>\s*Open AI Activity#',
 			$output
 		);
+		$this->assertStringNotContainsString( 'AI Activity Storage', $output );
+		$this->assertStringNotContainsString( 'forwards surface, scope, and document context', $output );
 	}
 
 	/**
@@ -1537,12 +1550,9 @@ final class SettingsTest extends TestCase {
 		Settings::render_page();
 		$output = (string) ob_get_clean();
 
-		$this->assertStringContainsString(
-			'AI Request Logging is enabled. Flavor Agent defers to core logging and forwards surface, scope, and document context into each Tools &gt; AI Request Logs row.',
-			$output
-		);
-		$this->assertStringContainsString(
-			'tools.php?page=ai-request-logs',
+		$this->assertStringContainsString( 'AI Request Logging is on.', $output );
+		$this->assertMatchesRegularExpression(
+			'#href="[^"]*tools\.php\?page=ai-request-logs"\s*>\s*Open AI Request Logs#',
 			$output
 		);
 		$this->assertStringNotContainsString( 'Open AI Activity', $output );

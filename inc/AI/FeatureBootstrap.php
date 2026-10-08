@@ -45,13 +45,7 @@ final class FeatureBootstrap {
 			return false;
 		}
 
-		$features_enabled = (bool) \apply_filters(
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- AI plugin master feature-gate filter, deliberately not plugin-prefixed.
-			'wpai_features_enabled',
-			self::enabled_option( 'wpai_features_enabled', false )
-		);
-
-		if ( ! $features_enabled ) {
+		if ( ! self::ai_features_enabled() ) {
 			return false;
 		}
 
@@ -60,6 +54,36 @@ final class FeatureBootstrap {
 			'wpai_feature_flavor-agent_enabled',
 			self::enabled_option( 'wpai_feature_flavor-agent_enabled', false )
 		);
+	}
+
+	/**
+	 * Mirrors the WordPress AI plugin's master feature gate.
+	 *
+	 * AI 1.4.0 retired the global "Enable AI" toggle: its upgrade deletes the
+	 * wpai_features_enabled option and its loader defaults the gate to true.
+	 * Older AI versions still store the toggle, so it is honored until retired.
+	 */
+	public static function ai_features_enabled(): bool {
+		$default_value = self::ai_global_toggle_retired()
+			? true
+			: self::enabled_option( 'wpai_features_enabled', false );
+
+		return (bool) \apply_filters(
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- AI plugin master feature-gate filter, deliberately not plugin-prefixed.
+			'wpai_features_enabled',
+			$default_value
+		);
+	}
+
+	private static function ai_global_toggle_retired(): bool {
+		$ai_version = \defined( 'WPAI_VERSION' ) ? (string) \constant( 'WPAI_VERSION' ) : '';
+
+		if ( '' !== $ai_version && \version_compare( $ai_version, '1.4.0', '>=' ) ) {
+			return true;
+		}
+
+		// Recorded by AI 1.4.0's upgrade routine once it has deleted the toggle.
+		return '1' === (string) \get_option( 'wpai_global_toggle_removed', '' );
 	}
 
 	private static function enabled_option( string $option_name, bool $default_value = false ): bool {

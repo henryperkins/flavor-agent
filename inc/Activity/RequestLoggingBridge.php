@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Activity;
 
+use FlavorAgent\AI\FeatureBootstrap;
 use FlavorAgent\Support\FlavorAgentRequestTag;
 use FlavorAgent\Support\RequestTrace;
 
@@ -14,7 +15,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class RequestLoggingBridge {
 
 	private const EXPERIMENT_OPTION = 'wpai_feature_ai-request-logging_enabled';
-	private const MASTER_OPTION     = 'wpai_features_enabled';
 	private const CAPTURED_LOG_CAP  = 50;
 
 	/**
@@ -48,13 +48,7 @@ final class RequestLoggingBridge {
 			return false;
 		}
 
-		$master_enabled = (bool) \apply_filters(
-			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.DynamicHooknameFound -- Consumes the AI plugin's own master feature-gate filter wpai_features_enabled, which is deliberately not plugin-prefixed.
-			self::MASTER_OPTION,
-			(bool) \get_option( self::MASTER_OPTION, false )
-		);
-
-		if ( ! $master_enabled ) {
+		if ( ! FeatureBootstrap::ai_features_enabled() ) {
 			return false;
 		}
 
