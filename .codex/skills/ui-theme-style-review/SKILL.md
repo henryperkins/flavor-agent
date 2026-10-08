@@ -1,87 +1,42 @@
 ---
 name: ui-theme-style-review
-description: Use when reviewing the Flavor Agent WordPress plugin's editor/admin UI for confirmed theme-token, style, accessibility (WCAG AA contrast / :focus-visible / prefers-reduced-motion), stale-state-apply, capability-gating, abilities-bridge, DataViews, PHP-escaping, or maintainability issues. Produces a review-only P0–P3 findings report tied to opened runtime code — no edits, no redesigns.
+description: Audit Flavor Agent's WordPress editor and admin UI for confirmed theme, style, accessibility, and stale-state/apply bugs. Use for a focused review with severity-ranked findings grounded in active source and appropriate runtime evidence.
 ---
 
-# UI / Theme / Style Review (Flavor Agent)
+# Flavor Agent UI / Theme / Style Review
 
-Act as a senior WordPress/Gutenberg UI reviewer for the Flavor Agent plugin. Produce a **review-only** report of *confirmed* issues across theme/style tokens, accessibility, escaping/security, runtime contracts, stale-state safety, theming, performance, and maintainability — each tied to opened runtime code, severity-ordered `P0`→`P3`. This is a focused UI/theme/style audit, not a general code review.
+Use this workflow for a UI audit. Audit mode is review-only: inspect and report minimal fixes; do not change application source, configuration, or site data. Follow the user's latest scope and any already-authorized implementation or skill-maintenance request.
 
-When run inside the plugin repo, treat these docs as the long-form sources:
+## Scope and setup
 
-- `docs/prompts/surface-review-prompt.md` — the reusable editor/admin surface review prompt.
-- `docs/reference/review-response-protocol.md` — the required output/scope contract.
+- Identify the Flavor Agent checkout from `flavor-agent.php`, `package.json`, and its repository instructions. Resolve all `src/`, `inc/`, `assets/`, `tests/`, and `docs/` paths below from that checkout root, not this installed skill's directory. If the checkout is unavailable, request its location.
+- Read `docs/reference/ui-theme-style-review.md` for the coverage map, theme/accessibility evidence criteria, and current apply/admin seams. Follow `docs/reference/review-response-protocol.md` for the findings contract. If a reference moved, locate its replacement; record missing guidance instead of treating an old prompt as runtime proof.
+- For a named surface, use only its relevant delta in `docs/prompts/surface-review-prompt.md` and adjacent shared code that affects its UI. A UI audit does not automatically require auditing the whole provider, ranking, or corpus stack.
+- For a whole editor/admin audit, cover the mounted editor surfaces, Settings, AI Activity, shared UI, and each requested theme/style, accessibility, and stale-state category. Record exclusions and unavailable evidence. Do not stop merely because the first useful finding is confirmed.
+- Establish the actual screen, bundle, imports/enqueues, portal document, and request/apply owner before reviewing a component. File existence or an exported fallback branch does not prove it is mounted.
 
-**Do not** modify files, rewrite components, run write-formatters, or propose broad redesigns.
+## Evidence and tool choices
 
-## Evidence discipline
+- Search with `rg` to locate evidence, then open the relevant source and trace the reachable path. Check the surrounding guards, wrappers, inherited styles, and nearest tests before reporting a defect.
+- Confirm findings by either a complete source path that demonstrates the failure, a targeted isolated reproduction, or observed browser behavior traced back to source. Mark which evidence supports each finding; separate unresolved leads from confirmed issues.
+- Styling literals, token fallbacks, experimental APIs, absent local `:focus-visible` rules, differing panel layouts, and missing tests are leads. Report them only when their active use causes a concrete failure or breaks an enforced contract.
+- For contrast, focus, clipping, motion, and portal/iframe behavior, use computed styles and interaction evidence when static source cannot resolve the outcome. A screenshot alone does not prove keyboard behavior, contrast, or freshness safety.
+- Prefer the available WordPress Design System MCP for component/token guidance. Consult the managed WordPress docs search for Gutenberg, theme.json, REST, and release-sensitive claims. Check primary sources, retrieval currency, and local package/core versions; use the corpus runbook and source policy when coverage or trust matters. Unavailable MCP tools do not block source review.
+- Review source rather than generated `build/` or `dist/`. Inspect a matching bundle only when asset resolution is part of the hypothesis, and keep source, local build, fixture, deployed, and live evidence distinct.
+- Browser observation must account for side effects: opening a pending AI Activity detail can acquire a review claim. Use an isolated fixture/local test site for claims, decisions, apply/undo, Settings saves, sync, or provider requests unless those live actions are authorized.
+- Read relevant tests to understand expected behavior, including fixed regressions. Run the smallest useful check when it can settle a hypothesis; do not run write-formatters or broad build/verification pipelines by default. See the reference for test routing and implementation gates.
 
-- **Search hits are leads only.** Use ripgrep/search to locate, then **open and read the file** and confirm a concrete runtime path before reporting. A grep-only observation is not a confirmed finding — list it under Open Questions instead.
-- **Ignore generated output:** `build/` and release artifacts in `dist/` are out of scope.
-- Use the **minimum** evidence needed to confirm a finding, then stop (see Stop rules).
-- Tests/test utilities are in scope only when a confirmed runtime issue traces to stale mocks or harness behavior.
+## Findings and completion
 
-## Confirm runtime entry/wiring from
+Lead with confirmed findings, ordered `P0` to `P3`. For each give:
 
-`webpack.config.js` · `flavor-agent.php` · `src/index.js` · `src/admin/settings-page.js` · `src/admin/activity-log.js` · `inc/Settings.php` · `inc/Admin/Settings/Assets.php` · `inc/Admin/ActivityPage.php`. For ability execution: `assets/abilities-bridge.js`, `src/store/abilities-client.js`, `inc/Abilities/Registration.php`, `inc/REST/Agent_Controller.php`.
+- a concise title and priority;
+- an exact current source file and line, linked using an absolute path when supported;
+- the trigger/state, observed failure, and concrete user impact;
+- the evidence used and a minimal credible fix direction.
 
-## Surfaces & high-value files
+Use priority proportional to demonstrated impact: `P0` for a critical exploitable exposure or widespread destructive failure; `P1` for a major flow, accessibility, or incorrect-apply blocker; `P2` for a bounded functional, accessibility, responsive, or theming defect; `P3` for a minor confirmed defect. Do not assign priority from the category or speculate about impact.
 
-| Area | Where to look |
-|------|---------------|
-| Editor recommendation surfaces | `src/inspector/*`, `src/patterns/*`, `src/content/*`, `src/templates/*`, `src/template-parts/*`, `src/global-styles/*`, `src/style-book/*`, `src/style-surfaces/*` |
-| Shared UI / toasts / undo / stale-state / capability gating | `src/components/*`, `src/store/*`, `src/utils/*`, `src/context/*` |
-| Tokens & styles | `src/tokens.css`, `src/editor.css`, `src/admin/{settings,brand,activity-log,wpds-runtime,dataviews-runtime}.css` |
-| Admin (Settings + AI Activity, DataViews, Core AI Request Logs) | `inc/Admin/Settings/*`, `inc/Admin/ActivityPage.php`, `inc/Activity/*` (REST contract via `inc/Activity/Repository.php`; dual logging via `inc/Activity/RequestLoggingBridge.php`) |
-| Style validation / theming server side | `inc/Context/*`, `inc/LLM/{StylePrompt,StyleContrastValidator,ThemeTokenFormatter}.php` |
+Keep open questions/assumptions separate. End with `Verification Reviewed`: requested coverage and exclusions, active paths inspected, environment details that matter, commands actually run and their results, and material browser/test checks not run. Keep it concise; do not dump every search hit or claim a full accessibility certification.
 
-## Review focus — report confirmed issues for
-
-- Hard-coded color/spacing/typography/z-index bypassing tokens, `theme.json`, WPDS tokens, or `--wp--*` custom properties. Don't flag `var(--token, #fallback)` fallbacks unless the fallback causes a confirmed issue.
-- Literal colors breaking brand/dark-mode/token theming; state distinctions relying on **color alone**.
-- WCAG AA contrast failures, and client/server contrast-validation **drift** between `inc/LLM/StyleContrastValidator.php` and `src/utils/style-operations.js`.
-- Stale-result UI that still permits apply after request/review/resolved context drift; apply flows that skip server apply-context revalidation before mutating templates, template parts, Global Styles, Style Book, or structural block ops.
-- Missing/suppressed `:focus-visible`; motion ignoring `prefers-reduced-motion`.
-- Responsive overflow in Inspector, Site Editor sidebars, Settings, AI Activity, DataViews, details panels, or validation states.
-- iframe-aware focus/keyboard bugs, incl. `ToastRegion` `mod+alt+shift+u` undo-focus routing; undo-toast regressions (cap-3 eviction, skip-oldest-interacted, hover/focus pause, failed-undo state, surface→title mapping).
-- Capability gating that prefers legacy `canRecommend*` flags over `flavorAgentData.capabilities.surfaces`.
-- Abilities-bridge drift: readiness handling, REST fallback, signal handling, result payload normalization.
-- DataViews contract drift (don't claim DataForm is in AI Activity runtime unless opened code proves it); Settings validation errors hidden in collapsed details/accordion.
-- Core AI Request Logs / dual logging drift: `AiRequestLogPanel`, `ai/v1/logs/{id}` fetches, token-only unavailable states, Tools > AI Request Logs links, and Settings copy should match current core-logging and dual-logging behavior.
-- PHP admin escaping (confirm context-specific escaping); duplicated runtime logic with concrete drift risk; dead exports / orphaned CSS **only** after confirming runtime entry/import paths.
-- Direct `__experimental*` usage **outside** the compat/wrapper boundary: `src/patterns/pattern-settings.js`, `src/patterns/compat.js`, `src/context/theme-settings.js`, `src/context/theme-tokens.js`, `src/context/block-inspector.js`, `src/global-styles/selectors.js`.
-
-## Severity
-
-| Level | Meaning |
-|-------|---------|
-| `P0` | Security issue, data loss, broken critical flow, or can take down the UI |
-| `P1` | Major user-visible bug, accessibility blocker, incorrect apply behavior, or serious contract drift |
-| `P2` | Moderate a11y/responsive/stale-state/theming/perf/maintainability issue with credible user impact |
-| `P3` | Minor but confirmed polish/fragility/duplication/dead-code with a clear minimal fix |
-
-## Output contract
-
-Start with `## Confirmed Findings`. For each: **Severity** · **file:line** · **Observed behavior** · **Impact** · **Minimal fix**.
-Then `## Open Questions / Assumptions` (only items affecting confidence/scope).
-End with `## Verification Reviewed` — files opened, runtime paths confirmed, and commands/harnesses **not** run. Anything seen only via grep must be named here and **not** counted as confirmed.
-
-If nothing rises above `P3`, say so plainly. If no findings are confirmed, say that plainly and list residual risk.
-
-## Verification commands (name what was run vs. skipped)
-
-This review reads code; it does not require a build. When confirming a finding benefits from a run, prefer:
-
-- `npm run build` — only if a finding depends on bundled output behavior.
-- `npm run lint:js` / `composer lint:php` — for style/escaping findings.
-- `npm run test:unit -- --runInBand <nearest suite>` / `composer test:php -- --filter <NameTest>` — for contract/stale-state/contrast findings.
-- `npm run check:docs` — when prompt, contract, surfacing, operator, or contributor-facing docs changed.
-- `npm run verify -- --skip-e2e` then inspect `output/verify/summary.json` — for shared-subsystem confidence.
-- `npm run verify:strict` — when the docs-inclusive verifier should record optional docs checks.
-- Playwright (`npm run test:e2e:playground` / `npm run test:e2e:wp70`) — only for user-visible regressions; record if not run.
-
-State explicitly which of these were run versus skipped in `## Verification Reviewed`.
-
-## Stop rules
-
-Use the fewest useful search/read loops that still support a reliable review. After each evidence pass, ask: *can I now produce a useful, evidence-backed findings report?* If yes, stop and write it. Search again only when a required runtime path, owner, contract, line reference, or contradictory implementation detail is still missing.
+If no findings are confirmed, say so and state the remaining evidence gaps. Stop once requested coverage is addressed and each reported finding has a supported trigger, source location, and impact. Continue only to resolve a material gap or contradictory evidence.

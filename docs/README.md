@@ -169,7 +169,8 @@ Do not start implementation from a deleted or historical plan without first re-g
 Retain only artifacts with an active maintenance job:
 
 1. `docs/prompts/surface-review-prompt.md` — the single reusable review prompt for editor and admin surfaces.
-2. `docs/validation/` — saved release evidence for the current tag. Keep only the files the published sign-off package still cites.
+2. `docs/reference/ui-theme-style-review.md` — the maintained UI audit coverage and evidence contract shared by the Codex, Claude, and Copilot review aids. Update it when UI/runtime ownership, token contracts, apply paths, or admin interactions change.
+3. `docs/validation/` — saved release evidence for the current tag. Keep only the files the published sign-off package still cites.
 
 If a future audit or research note becomes load-bearing for a decision, promote the surviving takeaway into `docs/reference/` or a per-surface feature doc instead of keeping the raw artifact in the tree.
 

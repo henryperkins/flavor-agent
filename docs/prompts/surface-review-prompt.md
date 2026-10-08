@@ -2,6 +2,8 @@
 
 Single generic review prompt with surface-specific inspect lists and focus area deltas. Replaces the previous one-prompt-per-surface set.
 
+For a focused UI/theme/style/accessibility/stale-state audit, use [the UI review contract](../reference/ui-theme-style-review.md) and the `ui-theme-style-review` skill. It supplies the mounted-surface coverage and evidence criteria without automatically expanding the audit into every provider or ranking subsystem below.
+
 ## Generic Prompt
 
 ```text
