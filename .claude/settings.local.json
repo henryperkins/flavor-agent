@@ -3,6 +3,12 @@
     "wordpress-docs-ai-search"
   ],
   "skillOverrides": {
-    "jam-cli": "off"
+    "jam-cli": "off",
+    "miyo-search": "off",
+    "miyo-task": "off",
+    "anthropic-skills:wp-bench": "off",
+    "anthropic-skills:wp-dev-news-digest": "off",
+    "anthropic-skills:wordpress-ai-development": "off",
+    "use-spark": "off"
   }
 }
