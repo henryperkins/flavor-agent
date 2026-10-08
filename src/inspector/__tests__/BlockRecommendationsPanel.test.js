@@ -186,6 +186,10 @@ function getState() {
 
 function createState( overrides = {} ) {
 	return {
+		core: {
+			patternCatalogResolved: true,
+			...overrides.core,
+		},
 		blockEditor: {
 			selectedBlockClientId: 'block-1',
 			blocks: [
@@ -227,6 +231,13 @@ function createState( overrides = {} ) {
 }
 
 function selectStore( storeName ) {
+	if ( storeName === 'core' ) {
+		return {
+			getBlockPatterns: () => [],
+			hasFinishedResolution: () => getState().core.patternCatalogResolved,
+		};
+	}
+
 	if ( storeName === 'core/block-editor' ) {
 		return {
 			getBlock: jest.fn(
@@ -570,6 +581,84 @@ afterEach( () => {
 } );
 
 describe( 'BlockRecommendationsDocumentPanel', () => {
+	test( 'defers structural requests until the server pattern catalog resolves', () => {
+		window.flavorAgentData.enableBlockStructuralActions = true;
+		currentState.core.patternCatalogResolved = false;
+		renderContent();
+
+		expect( findPanelButton( 'Get Suggestions' ).disabled ).toBe( true );
+		expect( getContainer().textContent ).toContain(
+			'Waiting for the pattern catalog before requesting suggestions.'
+		);
+		act( () => findPanelButton( 'Get Suggestions' ).click() );
+		expect( mockFetchBlockRecommendations ).not.toHaveBeenCalled();
+
+		const hydratedContext = {
+			block: { name: 'core/paragraph' },
+			blockOperationContext: {
+				allowedPatterns: [ { name: 'theme/hero' } ],
+			},
+		};
+		mockCollectBlockContext.mockReturnValue( hydratedContext );
+		currentState.core.patternCatalogResolved = true;
+		renderContent();
+		expect( findPanelButton( 'Get Suggestions' ).disabled ).toBe( false );
+		act( () => findPanelButton( 'Get Suggestions' ).click() );
+		expect( mockFetchBlockRecommendations ).toHaveBeenCalledWith(
+			'block-1',
+			hydratedContext,
+			''
+		);
+	} );
+
+	test( 'does not wait on the catalog when structural actions are disabled', () => {
+		currentState.core.patternCatalogResolved = false;
+		renderContent();
+		expect( findPanelButton( 'Get Suggestions' ).disabled ).toBe( false );
+	} );
+
+	test( 'permits an empty or failed but finished catalog resolution', () => {
+		window.flavorAgentData.enableBlockStructuralActions = true;
+		renderContent();
+		expect( findPanelButton( 'Get Suggestions' ).disabled ).toBe( false );
+	} );
+
+	test( 'bounds the catalog wait and explains the unchanged freshness boundary', () => {
+		window.flavorAgentData.enableBlockStructuralActions = true;
+		currentState.core.patternCatalogResolved = false;
+		renderContent();
+		act( () => jest.advanceTimersByTime( 19_999 ) );
+		expect( findPanelButton( 'Get Suggestions' ).disabled ).toBe( true );
+		act( () => jest.advanceTimersByTime( 1 ) );
+		expect( findPanelButton( 'Get Suggestions' ).disabled ).toBe( false );
+		expect( getContainer().textContent ).toContain(
+			'Later catalog changes may require Refresh.'
+		);
+	} );
+
+	test( 'also defers Refresh while the pattern catalog is unresolved', () => {
+		window.flavorAgentData.enableBlockStructuralActions = true;
+		currentState.core.patternCatalogResolved = false;
+		currentState.store.blockStatuses[ 'block-1' ] = 'ready';
+		currentState.store.blockContextSignatures[ 'block-1' ] =
+			'older-context';
+		currentState.store.blockRecommendations[ 'block-1' ] = {
+			prompt: '',
+			block: [],
+			settings: [],
+			styles: [],
+		};
+		renderContent();
+		expect( findPanelButton( 'Refresh' ).disabled ).toBe( true );
+		act( () => findPanelButton( 'Refresh' ).click() );
+		expect( mockFetchBlockRecommendations ).not.toHaveBeenCalled();
+		currentState.core.patternCatalogResolved = true;
+		renderContent();
+		expect( findPanelButton( 'Refresh' ).disabled ).toBe( false );
+		act( () => findPanelButton( 'Refresh' ).click() );
+		expect( mockFetchBlockRecommendations ).toHaveBeenCalledTimes( 1 );
+	} );
+
 	test( 'renders docs grounding warnings before block recommendations', () => {
 		const context = {
 			block: {

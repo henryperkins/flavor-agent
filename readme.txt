@@ -4,7 +4,7 @@ Tags: ai, blocks, patterns, editor
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.1.2
+Stable tag: 0.1.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -79,6 +79,13 @@ Only data needed for the requested surface is sent after setup or explicit user 
 Source code and build tooling are maintained at https://github.com/henryperkins/flavor-agent. The submitted plugin zip contains compiled editor/admin assets in `build/`; those assets are built from the repository source with `npm ci`, `composer install`, and `npm run build`.
 
 == Changelog ==
+
+= 0.1.3 =
+* Read published WordPress AI 1.4.0 Guidelines from the shared Knowledge store, including block notes, export, settings status, and version attribution.
+* Wait for the server pattern catalog before requesting structural block suggestions, with a bounded loading fallback and normal freshness checks.
+* Honor the retired AI master toggle while preserving per-feature controls and older AI compatibility.
+* Harden reviewed targets, asynchronous apply and pattern insertion, prompt drafts, settings sync polling, and per-row Activity decision permissions.
+* Regenerate the translation catalog for the current editor and admin strings.
 
 = 0.1.2 =
 * Update the colord color parser bundled in the AI Activity screen to 2.9.4, which parses color strings in linear time (GHSA-2wm5-q62r-hmrv).

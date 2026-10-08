@@ -379,8 +379,17 @@ function installCompanionPlugins( harness ) {
 }
 
 function seedFlavorAgentOptions( harness ) {
+	// AI 1.4.0 deletes the master toggle. Keep that native option-absent state
+	// instead of masking compatibility bugs by recreating it in every fixture.
+	runWpCli( harness, [
+		'eval',
+		`if ( defined( 'WPAI_VERSION' ) && version_compare( WPAI_VERSION, '1.4.0', '>=' ) ) {
+	delete_option( 'wpai_features_enabled' );
+} else {
+	update_option( 'wpai_features_enabled', '1' );
+}`,
+	] );
 	const optionValues = {
-		wpai_features_enabled: '1',
 		'wpai_feature_flavor-agent_enabled': '1',
 		flavor_agent_openai_provider: 'cloudflare_workers_ai',
 		flavor_agent_cloudflare_workers_ai_account_id: 'playground-account',

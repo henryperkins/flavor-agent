@@ -68,9 +68,10 @@ Backend-specific sync behavior and debugging checks are canonical in `docs/refer
 2. `FlavorAgent\AI\Abilities\RecommendationAbility::execute_callback()` passes those categories, plus any scoped block name, into `RecommendationAbilityExecution`.
 3. `RecommendationAbilityExecution` calls `Guidelines::format_prompt_context()` and temporarily prepends the formatted guidance to the recommendation system instruction through the `flavor_agent_recommendation_system_instruction` filter.
 4. `Guidelines` resolves the active repository through the `flavor_agent_guidelines_repository` filter, then core/Gutenberg Guidelines storage, then legacy Flavor Agent options.
-5. Core/Gutenberg storage is detected through the emerging `wp_guideline` post type and `wp_guideline_type` taxonomy model, with a read-only fallback for the older `wp_content_guideline` experiment shape.
+5. Current shared storage is detected through `wp_knowledge`. Only published `guideline-{scope}` and `guideline-block-{block_name}` rows are read from `post_content`; when `wp_knowledge_type` is registered, rows must carry its `guideline` term. The block namespace separator is encoded as `_`, preserving distinct hyphenated block names. This matches [WordPress AI 1.4.0's Guidelines service](https://github.com/WordPress/ai/blob/1.4.0/includes/Services/Guidelines.php). The older `wp_guideline` / `wp_guideline_type` singleton-meta model and `wp_content_guideline` experiment remain read-only compatibility paths when the current post type is unavailable.
 6. Legacy options are preserved even when core storage is available. The current migration status is tracked separately so a future write migration can avoid repeated imports.
 7. The settings screen keeps the legacy fields, block guideline editor, and JSON import/export available as migration/admin tooling when core Guidelines storage is detected.
+8. Settings status, export, block notes, and `guidelineVersion` attribution use the same resolved repository. If the registered shared store has no usable guidance, existing Flavor Agent options remain the fallback.
 
 ## Primary Functions And Handlers
 
@@ -93,7 +94,7 @@ Backend-specific sync behavior and debugging checks are canonical in `docs/refer
 - Flavor Agent has one embedding model choice for semantic features; Pattern Storage is a separate infrastructure choice.
 - Private pattern AI Search and public WordPress developer-docs AI Search are separate services with separate readiness/disclosure rules.
 - Cloudflare Workers AI embeddings are the only first-party admin embedding setup path
-- Guidelines are read core-first when the `wp_guideline` model is available; Flavor Agent does not require or assume a future `wp_register_guideline()` API yet
+- Guidelines are read shared-store-first when `wp_knowledge` is available, with older Guidelines models retained for compatibility; Flavor Agent does not require or assume a future `wp_register_guideline()` API
 - Legacy guideline options are not deleted during the bridge phase
 - Developer Docs grounding only accepts trusted official WordPress sources: stable handbook/reference pages from `developer.wordpress.org`, Developer Blog posts, and Make/Core release-cycle posts with freshness metadata.
 - Sync is admin-only and does not bypass pattern-index validation or locking rules

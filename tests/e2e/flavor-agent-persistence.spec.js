@@ -72,47 +72,11 @@ async function dismissWelcomeGuide( page ) {
 	await expect( welcome ).toBeHidden();
 }
 
-async function waitForPatternCatalogHydration( page ) {
-	// Structural block actions hash the allowed-pattern catalog into the request
-	// signature. On a fresh install the catalog can hydrate after the first
-	// request, which marks that result stale although neither block nor prompt
-	// changed. User and server patterns load separately, so wait until the
-	// count is non-zero and unchanged across consecutive reads.
-	let previousCount = -1;
-	await expect
-		.poll(
-			async () => {
-				const count = await page.evaluate( () => {
-					// Same coercion as isBlockStructuralActionsEnabled().
-					const flag =
-						window.flavorAgentData?.enableBlockStructuralActions;
-					if ( ! [ true, 1, '1', 'true' ].includes( flag ) ) {
-						return null;
-					}
-					const blockEditor =
-						window.wp?.data?.select( 'core/block-editor' );
-					const allowed =
-						blockEditor?.getAllowedPatterns?.( '' ) ||
-						blockEditor?.__experimentalGetAllowedPatterns?.( '' ) ||
-						[];
-
-					return allowed.filter( ( pattern ) => pattern?.name )
-						.length;
-				} );
-				// Without structural actions the catalog is not in the signature.
-				if ( count === null ) {
-					return true;
-				}
-				const settled = count > 0 && count === previousCount;
-				previousCount = count;
-				return settled;
-			},
-			{ intervals: [ 500 ], timeout: 30_000 }
-		)
-		.toBe( true );
-}
-
-async function openRecommendationEditor( page, title, { apply = true } = {} ) {
+async function openRecommendationEditor(
+	page,
+	title,
+	{ apply = true, beforeFetch, onRecommendationRequest } = {}
+) {
 	// Same-type neighbors require the apply's unchanged attributes to identify
 	// its target; a single paragraph would hide a missing identity snapshot.
 	const created = runWpCli( harness, [
@@ -151,6 +115,8 @@ async function openRecommendationEditor( page, title, { apply = true } = {} ) {
 		} );
 	} );
 	await page.route( /recommend-block(?:\/|\?|$)/, async ( route ) => {
+		const body = route.request().postDataJSON();
+		onRecommendationRequest?.( body?.input || body );
 		await route.fulfill( {
 			status: 200,
 			contentType: 'application/json',
@@ -214,12 +180,17 @@ async function openRecommendationEditor( page, title, { apply = true } = {} ) {
 			.click();
 	}
 	await expect( prompt ).toBeVisible();
-	await waitForPatternCatalogHydration( page );
+	await beforeFetch?.();
+	await expect(
+		page.getByRole( 'button', { name: 'Get Suggestions', exact: true } )
+	).toBeEnabled( { timeout: 25_000 } );
 	await page
 		.getByRole( 'button', { name: 'Get Suggestions', exact: true } )
 		.click();
 	if ( ! apply ) {
-		await expect( page.getByRole( 'button', { name: SUGGESTION, exact: true } ) ).toBeVisible();
+		await expect(
+			page.getByRole( 'button', { name: SUGGESTION, exact: true } )
+		).toBeVisible();
 		return { postId, clientId };
 	}
 	await page.getByRole( 'button', { name: SUGGESTION, exact: true } ).click();
@@ -259,15 +230,136 @@ async function openRecommendationEditor( page, title, { apply = true } = {} ) {
 	return { postId, clientId, activityId };
 }
 
-test( '@wp70-site-editor dismissal requires an explicit click and keeps later apply available', async ( { page } ) => {
-	const { postId, clientId } = await openRecommendationEditor( page, 'Explicit dismissal fixture', { apply: false } );
-	const outcomes = () => page.evaluate( async ( id ) => {
-		const response = await window.wp.apiFetch( { path: `/flavor-agent/v1/activity?scopeKey=post:${ id }&surface=block&includeDiagnostics=1&perPage=100` } );
-		return response.entries.filter( ( entry ) => entry.after?.outcome?.event === 'dismissed' );
-	}, postId );
-	const dismiss = page.getByRole( 'button', { name: /^Dismiss for now: / } ).first();
+test( '@wp70-site-editor structural block requests wait for server patterns even with local patterns already available', async ( {
+	page,
+} ) => {
+	let releaseCatalog;
+	const catalogGate = new Promise( ( resolve ) => {
+		releaseCatalog = resolve;
+	} );
+	const serverPatternName = 'flavor-agent/catalog-readiness';
+	await page.route(
+		/\/wp\/v2\/block-patterns\/patterns(?:\?|$)/,
+		async ( route ) => {
+			await catalogGate;
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( [
+					{
+						name: serverPatternName,
+						title: 'Catalog Readiness',
+						content:
+							'<!-- wp:paragraph --><p>Server catalog pattern</p><!-- /wp:paragraph -->',
+						categories: [ 'text' ],
+					},
+				] ),
+			} );
+		}
+	);
+	let generationInput;
+	try {
+		await openRecommendationEditor( page, 'Catalog readiness regression', {
+			apply: false,
+			onRecommendationRequest: ( input ) => {
+				if ( ! input.resolveSignatureOnly ) {
+					generationInput = input;
+				}
+			},
+			beforeFetch: async () => {
+				await page.evaluate( () => {
+					const editor = window.wp.data.select( 'core/block-editor' );
+					window.wp.data
+						.dispatch( 'core/block-editor' )
+						.updateSettings( {
+							...editor.getSettings(),
+							__experimentalBlockPatterns: [
+								{
+									name: 'flavor-agent/already-available',
+									title: 'Already Available',
+									content:
+										'<!-- wp:paragraph --><p>Existing local pattern</p><!-- /wp:paragraph -->',
+								},
+							],
+						} );
+				} );
+				await expect
+					.poll( () =>
+						page.evaluate( () => {
+							const editor =
+								window.wp.data.select( 'core/block-editor' );
+							const patterns =
+								editor.getAllowedPatterns?.( '' ) ||
+								editor.__experimentalGetAllowedPatterns?.(
+									''
+								) ||
+								[];
+							return patterns.some(
+								( pattern ) =>
+									pattern.name ===
+									'flavor-agent/already-available'
+							);
+						} )
+					)
+					.toBe( true );
+				await expect(
+					page.getByRole( 'button', {
+						name: 'Get Suggestions',
+						exact: true,
+					} )
+				).toBeDisabled();
+				await expect(
+					page.locator( '.flavor-agent-block-panel' )
+				).toContainText( 'Waiting for the pattern catalog' );
+				expect( generationInput ).toBeUndefined();
+				releaseCatalog();
+			},
+		} );
+		expect(
+			generationInput.editorContext.blockOperationContext.allowedPatterns
+		).toEqual(
+			expect.arrayContaining( [
+				expect.objectContaining( { name: serverPatternName } ),
+			] )
+		);
+		await expect(
+			page.locator(
+				'.flavor-agent-block-panel .flavor-agent-scope-bar--stale'
+			)
+		).toHaveCount( 0 );
+		await expect(
+			page.getByRole( 'button', { name: /^Dismiss for now: / } ).first()
+		).toBeVisible();
+	} finally {
+		releaseCatalog();
+	}
+} );
+
+test( '@wp70-site-editor dismissal requires an explicit click and keeps later apply available', async ( {
+	page,
+} ) => {
+	const { postId, clientId } = await openRecommendationEditor(
+		page,
+		'Explicit dismissal fixture',
+		{ apply: false }
+	);
+	const outcomes = () =>
+		page.evaluate( async ( id ) => {
+			const response = await window.wp.apiFetch( {
+				path: `/flavor-agent/v1/activity?scopeKey=post:${ id }&surface=block&includeDiagnostics=1&perPage=100`,
+			} );
+			return response.entries.filter(
+				( entry ) => entry.after?.outcome?.event === 'dismissed'
+			);
+		}, postId );
+	const dismiss = page
+		.getByRole( 'button', { name: /^Dismiss for now: / } )
+		.first();
 	await expect( dismiss ).toBeVisible();
-	const panel = page.getByRole( 'button', { name: 'AI Recommendations', exact: true } );
+	const panel = page.getByRole( 'button', {
+		name: 'AI Recommendations',
+		exact: true,
+	} );
 	await panel.click();
 	expect( await outcomes() ).toHaveLength( 0 );
 	await panel.click();
@@ -275,13 +367,31 @@ test( '@wp70-site-editor dismissal requires an explicit click and keeps later ap
 	await dismiss.click();
 	await expect.poll( async () => ( await outcomes() ).length ).toBe( 1 );
 	const [ diagnostic ] = await outcomes();
-	expect( diagnostic ).toMatchObject( { executionResult: 'diagnostic', undo: { canUndo: false, status: 'not_applicable' }, after: { outcome: { reason: 'user_dismissed' } } } );
+	expect( diagnostic ).toMatchObject( {
+		executionResult: 'diagnostic',
+		undo: { canUndo: false, status: 'not_applicable' },
+		after: { outcome: { reason: 'user_dismissed' } },
+	} );
 	await page.evaluate( async ( entry ) => {
-		await window.wp.apiFetch( { path: '/flavor-agent/v1/activity', method: 'POST', data: { entry: { ...entry, id: 'dismissal-browser-retry' } } } );
+		await window.wp.apiFetch( {
+			path: '/flavor-agent/v1/activity',
+			method: 'POST',
+			data: { entry: { ...entry, id: 'dismissal-browser-retry' } },
+		} );
 	}, diagnostic );
 	expect( await outcomes() ).toHaveLength( 1 );
 	await page.getByRole( 'button', { name: SUGGESTION, exact: true } ).click();
-	await expect.poll( () => page.evaluate( ( id ) => window.wp.data.select( 'core/block-editor' ).getBlockAttributes( id ).content, clientId ) ).toBe( AFTER );
+	await expect
+		.poll( () =>
+			page.evaluate(
+				( id ) =>
+					window.wp.data
+						.select( 'core/block-editor' )
+						.getBlockAttributes( id ).content,
+				clientId
+			)
+		)
+		.toBe( AFTER );
 } );
 
 async function saveThroughWordPress(

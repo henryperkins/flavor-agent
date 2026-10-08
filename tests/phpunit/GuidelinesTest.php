@@ -117,6 +117,7 @@ final class GuidelinesTest extends TestCase {
 				'_guideline_block_core_paragraph' => 'Core paragraph rule.',
 			],
 		];
+		WordPressTestState::$object_terms[101]['wp_guideline_type']     = [ 'content' ];
 
 		$this->assertSame(
 			[
@@ -158,6 +159,118 @@ final class GuidelinesTest extends TestCase {
 			],
 			Guidelines::storage_status()
 		);
+	}
+
+	private function seed_knowledge_guidelines(): void {
+		WordPressTestState::$registered_post_types['wp_knowledge'] = [ 'show_in_rest' => true ];
+		WordPressTestState::$posts                                 = [
+			201 => (object) [
+				'ID'           => 201,
+				'post_type'    => 'wp_knowledge',
+				'post_status'  => 'publish',
+				'post_name'    => 'guideline-copy',
+				'post_content' => 'Use active voice.',
+			],
+			202 => (object) [
+				'ID'           => 202,
+				'post_type'    => 'wp_knowledge',
+				'post_status'  => 'publish',
+				'post_name'    => 'guideline-block-core_paragraph',
+				'post_content' => 'Keep paragraphs concise.',
+			],
+		];
+	}
+
+	public function test_current_knowledge_guidelines_drive_status_export_and_attribution(): void {
+		$this->seed_knowledge_guidelines();
+		WordPressTestState::$options[ Guidelines::OPTION_COPY ] = 'Old local copy rule.';
+
+		$this->assertSame( 'Use active voice.', Guidelines::get_all()['copy'] );
+		$this->assertSame( [ 'core/paragraph' => 'Keep paragraphs concise.' ], Guidelines::get_block_guidelines() );
+		$this->assertTrue( Guidelines::has_any() );
+		$this->assertSame( 'core', Guidelines::storage_status()['source'] );
+		$this->assertTrue( Guidelines::storage_status()['core_available'] );
+		$this->assertSame( 'Use active voice.', Guidelines::export_payload()['guideline_categories']['copy']['guidelines'] );
+
+		$before                                       = Guidelines::version_id();
+		WordPressTestState::$posts[201]->post_content = 'Use a playful voice.';
+		$this->assertNotSame( $before, Guidelines::version_id() );
+	}
+
+	public function test_knowledge_guidelines_ignore_drafts_private_rows_and_unrelated_slugs(): void {
+		$this->seed_knowledge_guidelines();
+		WordPressTestState::$posts[201]->post_status = 'draft';
+		WordPressTestState::$posts[202]->post_status = 'private';
+		WordPressTestState::$posts[203]              = (object) [
+			'ID'           => 203,
+			'post_type'    => 'wp_knowledge',
+			'post_status'  => 'publish',
+			'post_name'    => 'note-copy',
+			'post_content' => 'Not editorial guidance.',
+		];
+
+		$this->assertSame( '', Guidelines::get_all()['copy'] );
+		$this->assertSame( [], Guidelines::get_block_guidelines() );
+		$this->assertFalse( Guidelines::has_any() );
+		$this->assertTrue( Guidelines::storage_status()['core_available'] );
+	}
+
+	public function test_knowledge_guidelines_only_read_guideline_typed_rows_when_taxonomy_exists(): void {
+		$this->seed_knowledge_guidelines();
+		WordPressTestState::$registered_taxonomies['wp_knowledge_type'] = [ 'object_type' => 'wp_knowledge' ];
+		WordPressTestState::$object_terms                               = [
+			201 => [ 'wp_knowledge_type' => [ 'note' ] ],
+			202 => [ 'wp_knowledge_type' => [ 'guideline' ] ],
+		];
+
+		$this->assertSame( '', Guidelines::get_all()['copy'] );
+		$this->assertSame( [ 'core/paragraph' => 'Keep paragraphs concise.' ], Guidelines::get_block_guidelines() );
+		$this->assertSame(
+			[
+				[
+					'taxonomy' => 'wp_knowledge_type',
+					'field'    => 'slug',
+					'terms'    => 'guideline',
+				],
+			],
+			WordPressTestState::$get_posts_calls[0]['tax_query'] ?? []
+		);
+	}
+
+	public function test_knowledge_guidelines_keep_similar_namespaced_blocks_distinct(): void {
+		$this->seed_knowledge_guidelines();
+		WordPressTestState::$posts[201]->post_name = 'guideline-block-foo_bar-baz';
+		WordPressTestState::$posts[202]->post_name = 'guideline-block-foo-bar_baz';
+
+		$this->assertSame(
+			[
+				'foo-bar/baz' => 'Keep paragraphs concise.',
+				'foo/bar-baz' => 'Use active voice.',
+			],
+			Guidelines::get_block_guidelines()
+		);
+	}
+
+	public function test_current_knowledge_storage_takes_precedence_over_retired_singleton(): void {
+		$this->seed_knowledge_guidelines();
+		WordPressTestState::$registered_post_types['wp_guideline'] = [ 'show_in_rest' => true ];
+		WordPressTestState::$posts[101]                            = (object) [
+			'ID'          => 101,
+			'post_type'   => 'wp_guideline',
+			'post_status' => 'publish',
+		];
+		WordPressTestState::$post_meta[101]                        = [ '_guideline_copy' => 'Retired singleton rule.' ];
+
+		$this->assertSame( 'Use active voice.', Guidelines::get_all()['copy'] );
+	}
+
+	public function test_empty_knowledge_storage_preserves_legacy_options_fallback(): void {
+		WordPressTestState::$registered_post_types['wp_knowledge'] = [ 'show_in_rest' => true ];
+		WordPressTestState::$options[ Guidelines::OPTION_COPY ]    = 'Use active voice.';
+
+		$this->assertSame( 'Use active voice.', Guidelines::get_all()['copy'] );
+		$this->assertSame( 'legacy_options', Guidelines::storage_status()['source'] );
+		$this->assertTrue( Guidelines::storage_status()['core_available'] );
 	}
 
 	public function test_storage_status_reports_legacy_fallback_when_core_unavailable(): void {

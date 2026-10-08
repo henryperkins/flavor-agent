@@ -2368,6 +2368,24 @@ final class SettingsTest extends TestCase {
 		$this->assertStringNotContainsString( 'data-guidelines-block-options', $output );
 	}
 
+	public function test_render_page_detects_current_knowledge_guidelines_storage(): void {
+		WordPressTestState::$registered_post_types['wp_knowledge'] = [ 'show_in_rest' => true ];
+		WordPressTestState::$posts[201]                            = (object) [
+			'ID'           => 201,
+			'post_type'    => 'wp_knowledge',
+			'post_status'  => 'publish',
+			'post_name'    => 'guideline-copy',
+			'post_content' => 'Use active voice.',
+		];
+
+		ob_start();
+		Settings::render_page();
+		$output = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'Core Guidelines connected.', $output );
+		$this->assertStringContainsString( 'Export JSON', $output );
+	}
+
 	public function test_admin_localized_data_includes_guidelines_block_options(): void {
 		register_block_type(
 			'core/paragraph',

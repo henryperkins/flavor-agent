@@ -213,8 +213,12 @@ add_action(
 add_action(
 	'init',
 	static function (): void {
+		if (defined('WPAI_VERSION') && version_compare(WPAI_VERSION, '1.4.0', '>=')) {
+			delete_option('wpai_features_enabled');
+		} else {
+			update_option('wpai_features_enabled', '1');
+		}
 		$stubbed_options = [
-			'wpai_features_enabled'                         => '1',
 			'wpai_feature_flavor-agent_enabled'             => '1',
 			'flavor_agent_openai_provider'                 => 'cloudflare_workers_ai',
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'playground-account',

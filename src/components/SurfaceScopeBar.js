@@ -34,6 +34,7 @@ export default function SurfaceScopeBar( {
 	refreshLabel = REFRESH_ACTION_LABEL,
 	onRefresh,
 	isRefreshing = false,
+	refreshDisabled = false,
 	className = '',
 } ) {
 	if ( ! hasResult && ! scopeLabel && scopeDetails.length === 0 ) {
@@ -114,7 +115,7 @@ export default function SurfaceScopeBar( {
 							size="small"
 							variant="secondary"
 							onClick={ onRefresh }
-							disabled={ isRefreshing }
+							disabled={ isRefreshing || refreshDisabled }
 							className="flavor-agent-scope-bar__refresh"
 						>
 							{ /* The ellipsis is a progress affordance appended to

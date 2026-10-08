@@ -6,10 +6,13 @@ namespace FlavorAgent\Guidelines;
 
 final class CoreGuidelinesRepository implements GuidelinesRepository {
 
-	public const POST_TYPE        = 'wp_guideline';
-	public const LEGACY_POST_TYPE = 'wp_content_guideline';
-	public const TAXONOMY         = 'wp_guideline_type';
-	private const BLOCK_PREFIX    = '_guideline_block_';
+	public const POST_TYPE               = 'wp_guideline';
+	public const LEGACY_POST_TYPE        = 'wp_content_guideline';
+	public const TAXONOMY                = 'wp_guideline_type';
+	public const KNOWLEDGE_POST_TYPE     = 'wp_knowledge';
+	public const KNOWLEDGE_TAXONOMY      = 'wp_knowledge_type';
+	private const BLOCK_PREFIX           = '_guideline_block_';
+	private const KNOWLEDGE_BLOCK_PREFIX = 'guideline-block-';
 
 	public function __construct(
 		private readonly string $post_type = self::POST_TYPE
@@ -17,7 +20,7 @@ final class CoreGuidelinesRepository implements GuidelinesRepository {
 	}
 
 	public function source(): string {
-		return self::POST_TYPE === $this->post_type ? 'core' : 'gutenberg_experiment';
+		return self::LEGACY_POST_TYPE === $this->post_type ? 'gutenberg_experiment' : 'core';
 	}
 
 	public static function available_post_type(): ?string {
@@ -25,7 +28,7 @@ final class CoreGuidelinesRepository implements GuidelinesRepository {
 			return null;
 		}
 
-		foreach ( [ self::POST_TYPE, self::LEGACY_POST_TYPE ] as $post_type ) {
+		foreach ( [ self::KNOWLEDGE_POST_TYPE, self::POST_TYPE, self::LEGACY_POST_TYPE ] as $post_type ) {
 			if ( post_type_exists( $post_type ) ) {
 				return $post_type;
 			}
@@ -42,6 +45,10 @@ final class CoreGuidelinesRepository implements GuidelinesRepository {
 	 * @return array{site: string, copy: string, images: string, additional: string, blocks: array<string, string>}
 	 */
 	public function get_all(): array {
+		if ( self::KNOWLEDGE_POST_TYPE === $this->post_type ) {
+			return $this->get_knowledge_guidelines();
+		}
+
 		$post = $this->get_guidelines_post();
 
 		if ( ! is_object( $post ) ) {
@@ -61,6 +68,64 @@ final class CoreGuidelinesRepository implements GuidelinesRepository {
 			'additional' => $this->get_standard_guideline( $post_id, 'additional' ),
 			'blocks'     => $this->get_block_guidelines( $post_id ),
 		];
+	}
+
+	/**
+	 * Read the published per-scope/per-block rows used by WordPress AI 1.4.0.
+	 *
+	 * @return array{site: string, copy: string, images: string, additional: string, blocks: array<string, string>}
+	 */
+	private function get_knowledge_guidelines(): array {
+		$guidelines = $this->empty_guidelines();
+
+		if ( ! function_exists( 'get_posts' ) ) {
+			return $guidelines;
+		}
+
+		$args = [
+			'post_type'              => self::KNOWLEDGE_POST_TYPE,
+			'post_status'            => 'publish',
+			'posts_per_page'         => -1,
+			'orderby'                => 'ID',
+			'order'                  => 'ASC',
+			'no_found_rows'          => true,
+			'update_post_meta_cache' => false,
+			'update_post_term_cache' => false,
+		];
+
+		if ( function_exists( 'taxonomy_exists' ) && taxonomy_exists( self::KNOWLEDGE_TAXONOMY ) ) {
+			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_tax_query -- Shared knowledge storage must be narrowed to guideline-typed rows.
+			$args['tax_query'] = [
+				[
+					'taxonomy' => self::KNOWLEDGE_TAXONOMY,
+					'field'    => 'slug',
+					'terms'    => 'guideline',
+				],
+			];
+		}
+
+		foreach ( get_posts( $args ) as $post ) {
+			$slug = (string) ( $post->post_name ?? '' );
+			$text = \FlavorAgent\Guidelines::sanitize_guideline_text( $post->post_content ?? '' );
+
+			if ( str_starts_with( $slug, self::KNOWLEDGE_BLOCK_PREFIX ) ) {
+				// Upstream encodes the namespace separator as `_`, keeping hyphenated names distinct.
+				$block_name                                   = preg_replace( '/_/', '/', substr( $slug, strlen( self::KNOWLEDGE_BLOCK_PREFIX ) ), 1 );
+				$guidelines['blocks'][ (string) $block_name ] = $text;
+				continue;
+			}
+
+			foreach ( [ 'site', 'copy', 'images', 'additional' ] as $scope ) {
+				if ( 'guideline-' . $scope === $slug ) {
+					$guidelines[ $scope ] = $text;
+					break;
+				}
+			}
+		}
+
+		$guidelines['blocks'] = \FlavorAgent\Guidelines::sanitize_block_guidelines( $guidelines['blocks'] );
+
+		return $guidelines;
 	}
 
 	private function get_guidelines_post(): ?object {

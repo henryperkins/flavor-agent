@@ -64,6 +64,7 @@ import {
 	isBlockReviewStateCurrent,
 } from './block-review-state';
 import useBlockRecommendationRequestData from './use-block-recommendation-request-data';
+import usePatternCatalogReadiness from './use-pattern-catalog-readiness';
 
 const EMPTY_BLOCK_SUGGESTIONS = [];
 const EMPTY_SURFACE_SUGGESTIONS = [];
@@ -441,6 +442,15 @@ export function BlockRecommendationsContent( {
 		isContentRestricted,
 		block,
 	} = useBlockRecommendationState( clientId );
+	const { isWaiting: isWaitingForCatalog, hasTimedOut: hasCatalogTimedOut } =
+		usePatternCatalogReadiness( {
+			enabled:
+				canRecommendBlocks &&
+				Boolean( clientId && block ) &&
+				! isDisabled &&
+				isBlockStructuralActionsEnabled(),
+			scope: clientId,
+		} );
 	const {
 		fetchBlockRecommendations,
 		clearBlockError,
@@ -921,7 +931,7 @@ export function BlockRecommendationsContent( {
 		: __( 'Newest valid block action can be undone here.', 'flavor-agent' );
 
 	const handleFetch = useCallback( () => {
-		if ( ! canRecommendBlocks ) {
+		if ( ! canRecommendBlocks || isWaitingForCatalog ) {
 			return;
 		}
 
@@ -933,6 +943,7 @@ export function BlockRecommendationsContent( {
 		clientId,
 		currentPrompt,
 		fetchBlockRecommendations,
+		isWaitingForCatalog,
 		liveContext,
 	] );
 	const handleUndo = useCallback(
@@ -942,7 +953,7 @@ export function BlockRecommendationsContent( {
 		[ undoActivity ]
 	);
 	const handleRefresh = useCallback( () => {
-		if ( ! canRecommendBlocks || ! liveContext ) {
+		if ( ! canRecommendBlocks || isWaitingForCatalog || ! liveContext ) {
 			return;
 		}
 
@@ -952,6 +963,7 @@ export function BlockRecommendationsContent( {
 		clientId,
 		currentPrompt,
 		fetchBlockRecommendations,
+		isWaitingForCatalog,
 		liveContext,
 	] );
 	const selectedBlockName = block?.name || '';
@@ -1020,9 +1032,20 @@ export function BlockRecommendationsContent( {
 		dismissStatusNotice = clearUndoError;
 	}
 
-	const composerHelperText = isContentRestricted
+	let composerHelperText = isContentRestricted
 		? CONTENT_ONLY_COMPOSER_HELPER_TEXT
 		: BLOCK_COMPOSER_HELPER_TEXT;
+	if ( isWaitingForCatalog ) {
+		composerHelperText = __(
+			'Waiting for the pattern catalog before requesting suggestions.',
+			'flavor-agent'
+		);
+	} else if ( hasCatalogTimedOut ) {
+		composerHelperText = __(
+			'Pattern catalog loading is taking longer than expected. You can request suggestions. Later catalog changes may require Refresh.',
+			'flavor-agent'
+		);
+	}
 	const composerStarterPrompts = isContentRestricted
 		? CONTENT_ONLY_STARTER_PROMPTS
 		: DEFAULT_BLOCK_STARTER_PROMPTS;
@@ -1082,6 +1105,7 @@ export function BlockRecommendationsContent( {
 				refreshLabel={ REFRESH_ACTION_LABEL }
 				onRefresh={ isStaleResult ? handleRefresh : undefined }
 				isRefreshing={ isLoading }
+				refreshDisabled={ isWaitingForCatalog || ! canRecommendBlocks }
 			/>
 
 			{ shouldShowScopeNote && (
@@ -1122,7 +1146,7 @@ export function BlockRecommendationsContent( {
 				starterPrompts={ composerStarterPrompts }
 				fetchIcon={ icon }
 				isLoading={ isLoading }
-				disabled={ ! canRecommendBlocks }
+				disabled={ ! canRecommendBlocks || isWaitingForCatalog }
 			/>
 
 			<AIStatusNotice

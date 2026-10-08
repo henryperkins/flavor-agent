@@ -3,7 +3,7 @@
 /**
  * Plugin Name: Flavor Agent
  * Description: Governed AI changes for WordPress: bounded operations, review-gated structural changes, server-side attribution, and drift-safe undo.
- * Version: 0.1.2
+ * Version: 0.1.3
  * Author: Lakefront Digital
  * Text Domain: flavor-agent
  * Domain Path: /languages
@@ -25,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'FLAVOR_AGENT_VERSION', '0.1.2' );
+define( 'FLAVOR_AGENT_VERSION', '0.1.3' );
 define( 'FLAVOR_AGENT_FILE', __FILE__ );
 define( 'FLAVOR_AGENT_DIR', plugin_dir_path( __FILE__ ) );
 define( 'FLAVOR_AGENT_URL', plugin_dir_url( __FILE__ ) );

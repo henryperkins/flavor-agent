@@ -4230,6 +4230,26 @@ namespace {
 				);
 			}
 
+			if (! empty($args['tax_query'])) {
+				$tax_query = $args['tax_query'];
+				$posts = array_values(array_filter($posts, static function (object $post) use ($tax_query): bool {
+					$matches = [];
+					foreach ($tax_query as $clause) {
+						if (! is_array($clause) || empty($clause['taxonomy'])) {
+							continue;
+						}
+						$assigned = WordPressTestState::$object_terms[(int) ($post->ID ?? 0)][$clause['taxonomy']] ?? [];
+						$terms = (array) ($clause['terms'] ?? []);
+						$has_match = [] !== array_intersect($terms, $assigned);
+						$matches[] = 'NOT IN' === ($clause['operator'] ?? 'IN') ? ! $has_match : $has_match;
+					}
+
+					return 'OR' === ($tax_query['relation'] ?? 'AND')
+						? in_array(true, $matches, true)
+						: ! in_array(false, $matches, true);
+				}));
+			}
+
 			if (! empty($args['post__not_in']) && is_array($args['post__not_in'])) {
 				$excluded = array_map('intval', $args['post__not_in']);
 				$posts    = array_values(

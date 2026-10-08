@@ -2,13 +2,21 @@
 
 > Last updated: 2026-10-08
 
+## v0.1.3 compatibility candidate
+
+The [v0.1.3 working-tree candidate](docs/releases/v0.1.3.md) includes the merged UI/apply hardening and AI 1.4.0 master-gate fix, plus current Knowledge-based Guidelines reads and a product-side pattern-catalog readiness gate for structural block requests. Settings status, guideline export, block notes, and version attribution now follow published `wp_knowledge` guidance. Block fetch/Refresh waits for core's catalog completion, with a bounded 20-second fallback and the existing freshness checks.
+
+The focused compatibility checks pass: 187 PHPUnit tests / 712 assertions and 141 Jest tests across six suites. The bounded release cycle is complete but **blocked for release**: strict verification passed 8 of 9 gates (125 Jest suites / 2,300 tests, 2,560 PHP tests / 12,001 assertions, Playground 40/40), with default Site Editor 60/61. The bundled target retains two failures across 61 unique cases; its interrupted invocation and passing unfinished-case continuation are recorded separately. The production-matched local target passed 61/61 on WordPress 7.1.3, PHP 8.4.26, Gutenberg 24.1.0, and AI 1.4.0. Full PHP 8.4.26 PHPUnit also passed. All browser runs used zero retries.
+
+The 223-file v0.1.3 ZIP passed inventory, metadata, Composer/native Guidelines probes, all 204 packaged PHP lints, and extracted-package Plugin Check. The [validation record](docs/validation/2026-10-08-v0.1.3-release-validation.md) records SHA-256 `2c0339b106ca0b272eb266080f0ab6f1cbd5fa136df4358cfa4eb00b93ba681f`, the Style Book toast/Undo and bundled template-part navigation blockers, and the dirty-tree evidence boundary. The earlier v0.1.2 ZIP is historical evidence. Browser disposition, corpus settlement and the unchanged default freshness check, immutable/tag proof, publication, and production replacement remain gates; automated deployment remains off.
+
 ## v0.1.2 dependency candidate
 
 The [v0.1.2 candidate](docs/releases/v0.1.2.md) patches locked dependencies. The AI Activity bundle now ships colord 2.9.4, the fix for GHSA-2wm5-q62r-hmrv, and other locked packages move to patched releases within their declared ranges. No PHP logic, editor or admin source changed. Only `build/activity-log.js` and its asset version hash differ among the built assets. Against the October 7 Dependabot snapshot, 64 of 78 alerts are projected resolved, including all critical and all runtime alerts. Fourteen development-only alerts remain.
 
 The [validation record](docs/validation/2026-10-08-v0.1.2-release-validation.md) keeps these runs separate:
 
-- Strict run 1 at `c50e0e4`: its Site Editor failure came from a pre-existing pattern-catalog hydration race, which was reproduced on fresh installs. The product race stays open in [current open work](docs/reference/current-open-work.md).
+- Strict run 1 at `c50e0e4`: its Site Editor failure came from a pre-existing pattern-catalog hydration race, which was reproduced on fresh installs. The v0.1.3 product-side readiness gate above now addresses that race.
 - The test-only hardening at `ec2b9f9`, and the settled-catalog wait at `3bb701a` adopted from PR review.
 - Strict runs 2 (`ec2b9f9`) and 3 (`3bb701a`), each 9 of 9: 123 suites / 2,207 Jest tests, 2,536 PHPUnit tests, Playground 35/35 and Site Editor 47/47.
 - Bundled-editor legs at both revisions, 47/47 each.
@@ -103,6 +111,7 @@ All nine REST route paths under `/flavor-agent/v1/` are working. Recommendation 
 
 ## Known Issues
 
+- The v0.1.3 bounded release cycle retains browser blockers: a success toast intercepts Style Book activity Undo in the default/bundled editors, and the bundled template-part advisory case fails its `Header` navigation precondition. The production-matched target passes both; it does not clear the recorded failures. See the [candidate validation record](docs/validation/2026-10-08-v0.1.3-release-validation.md#recorded-browser-blockers) before release sign-off.
 - `composer lint:php` is now green across `flavor-agent.php`, `inc/`, `tests/phpunit`, and `uninstall.php`, but `tests/phpunit/bootstrap.php` remains intentionally excluded because the multi-namespace stub harness is not a realistic WPCS target without a dedicated refactor.
 - JS tooling now defaults to Node `24.x` with npm `11.x` via `.nvmrc`, and the repo's `engine-strict` gate now accepts both the latest-LTS Node `24.x` / npm `11.x` toolchain and the previously verified Node `20.x` / npm `10.x` toolchain.
 - Browser coverage is intentionally split by harness capability while preserving the public WordPress `7.0+` support contract. On WordPress `7.1`, `npm run test:e2e:playground` installs exact Gutenberg `23.9.0` through its blueprint for quick post-editor coverage, and the Docker-backed Site Editor CI gate runs two required editor legs: the editor bundled with WordPress `7.1` and exact Gutenberg `23.9.0`. The Docker harness owns refresh/drift-sensitive flows plus the repo-local block theme fixture. The default `npm run test:e2e` command runs Playground and the latest-Gutenberg Docker target; the bundled Docker target remains an explicit required CI leg and can be selected locally. Older Gutenberg plugin releases are diagnostic only. Docker on PATH remains the operational prerequisite for the Site Editor half.
