@@ -76,11 +76,19 @@ async function waitForPatternCatalogHydration( page ) {
 	// Structural block actions hash the allowed-pattern catalog into the request
 	// signature. On a fresh install the catalog can hydrate after the first
 	// request, which marks that result stale although neither block nor prompt
-	// changed. Mirrors the smoke spec's helper of the same name.
+	// changed. User and server patterns load separately, so wait until the
+	// count is non-zero and unchanged across consecutive reads.
+	let previousCount = -1;
 	await expect
 		.poll(
-			() =>
-				page.evaluate( () => {
+			async () => {
+				const count = await page.evaluate( () => {
+					// Same coercion as isBlockStructuralActionsEnabled().
+					const flag =
+						window.flavorAgentData?.enableBlockStructuralActions;
+					if ( ! [ true, 1, '1', 'true' ].includes( flag ) ) {
+						return null;
+					}
 					const blockEditor =
 						window.wp?.data?.select( 'core/block-editor' );
 					const allowed =
@@ -90,10 +98,18 @@ async function waitForPatternCatalogHydration( page ) {
 
 					return allowed.filter( ( pattern ) => pattern?.name )
 						.length;
-				} ),
-			{ timeout: 30_000 }
+				} );
+				// Without structural actions the catalog is not in the signature.
+				if ( count === null ) {
+					return true;
+				}
+				const settled = count > 0 && count === previousCount;
+				previousCount = count;
+				return settled;
+			},
+			{ intervals: [ 500 ], timeout: 30_000 }
 		)
-		.toBeGreaterThan( 0 );
+		.toBe( true );
 }
 
 async function openRecommendationEditor( page, title, { apply = true } = {} ) {
