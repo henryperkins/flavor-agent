@@ -753,6 +753,32 @@ describe( 'settings page controller', () => {
 		expect( button.hasAttribute( 'aria-describedby' ) ).toBe( false );
 	} );
 
+	test( 'resumes an existing sync on page load and unlocks the completed catalog', async () => {
+		const root = renderSettingsPage( { syncStatus: 'indexing' } );
+		const fetchImpl = jest.fn().mockResolvedValue( {
+			ok: true,
+			text: async () =>
+				JSON.stringify( {
+					runtimeState: { status: 'ready', indexed_count: 12 },
+				} ),
+		} );
+
+		initializeSettingsPage( { root, fetchImpl, storage: createStorage() } );
+		await flushPromises();
+
+		expect(
+			root.querySelector( '.flavor-agent-sync-panel' ).dataset
+				.patternSyncStatus
+		).toBe( 'ready' );
+		expect(
+			root.querySelector( '#flavor-agent-sync-button' ).disabled
+		).toBe( false );
+		expect( fetchImpl ).toHaveBeenCalledWith(
+			'https://example.test/wp-json/flavor-agent/v1/sync-patterns',
+			expect.objectContaining( { method: 'GET' } )
+		);
+	} );
+
 	test( 'sync button remains disabled when the initial runtime status is indexing', () => {
 		const root = renderSettingsPage( {
 			prerequisitesReady: '1',
@@ -762,7 +788,7 @@ describe( 'settings page controller', () => {
 
 		initializeSettingsPage( {
 			root,
-			fetchImpl: jest.fn(),
+			fetchImpl: jest.fn( () => new Promise( () => {} ) ),
 			storage: createStorage(),
 		} );
 

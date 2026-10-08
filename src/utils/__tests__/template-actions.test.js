@@ -33,6 +33,9 @@ jest.mock( '@wordpress/rich-text', () => ( {
 		if ( typeof value === 'string' ) {
 			return value;
 		}
+		if ( value?.text === '' && Array.isArray( value.formats ) ) {
+			return '';
+		}
 
 		throw new Error( 'Unsupported rich text test value.' );
 	},
@@ -51,6 +54,8 @@ import {
 	undoTemplatePartSuggestionOperations,
 	undoTemplateSuggestionOperations,
 } from '../template-actions';
+import { buildEditorTemplatePartStructureSnapshot } from '../../template-parts/template-part-recommender-helpers';
+import { buildEditorTemplateTopLevelStructureSnapshot } from '../../templates/template-recommender-helpers';
 
 function cloneValue( value ) {
 	return JSON.parse( JSON.stringify( value ) );
@@ -262,6 +267,190 @@ describe( 'template-actions', () => {
 				'header-large': 'header',
 			},
 		};
+	} );
+
+	test.each( [ 'remove_block', 'replace_block_with_pattern' ] )(
+		'refuses %s when an indistinguishable sibling moves into the reviewed path',
+		( type ) => {
+			const original = createParagraphBlock(
+				'original',
+				'Obsolete note'
+			);
+			const sibling = createParagraphBlock( 'sibling', 'Legal notice' );
+			const { state, blockEditorDispatch } = setupBlockEditor( {
+				blocks: [ original, sibling ],
+				patterns: [
+					{ name: 'theme/hero', content: '<!-- wp:paragraph /-->' },
+				],
+			} );
+			const reviewed = buildEditorTemplatePartStructureSnapshot(
+				state.blocks
+			);
+			const suggestion = {
+				operations: [
+					{
+						type,
+						targetPath: [ 0 ],
+						expectedBlockName: 'core/paragraph',
+						patternName: 'theme/hero',
+						expectedTarget:
+							reviewed.operationTargets[ 0 ].expectedTarget,
+					},
+				],
+			};
+			state.blocks.reverse();
+			mockRawHandler.mockReturnValue( [
+				createParagraphBlock( 'pattern', 'Hero' ),
+			] );
+
+			const result = applyTemplatePartSuggestionOperations( suggestion );
+
+			expect( result.ok ).toBe( false );
+			expect( state.blocks.map( ( block ) => block.clientId ) ).toEqual( [
+				'sibling',
+				'original',
+			] );
+			expect( blockEditorDispatch.removeBlocks ).not.toHaveBeenCalled();
+			expect( blockEditorDispatch.insertBlocks ).not.toHaveBeenCalled();
+		}
+	);
+
+	test( 'refuses removal after descendant content changes without changing the child count', () => {
+		const { state } = setupBlockEditor( {
+			blocks: [
+				{
+					clientId: 'wrapper',
+					name: 'core/group',
+					attributes: {},
+					innerBlocks: [
+						createParagraphBlock( 'child', 'Reviewed content' ),
+					],
+				},
+			],
+		} );
+		const reviewed = buildEditorTemplatePartStructureSnapshot(
+			state.blocks
+		);
+		state.blocks[ 0 ].innerBlocks[ 0 ].attributes.content =
+			'New legal notice';
+
+		const result = applyTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'remove_block',
+					targetPath: [ 0 ],
+					expectedBlockName: 'core/group',
+					expectedTarget:
+						reviewed.operationTargets[ 0 ].expectedTarget,
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( false );
+		expect( state.blocks[ 0 ].innerBlocks[ 0 ].attributes.content ).toBe(
+			'New legal notice'
+		);
+	} );
+
+	test( 'refuses a template insertion when a different same-shaped block occupies its anchor', () => {
+		const { state } = setupBlockEditor( {
+			blocks: [
+				createParagraphBlock( 'original', 'A' ),
+				createParagraphBlock( 'sibling', 'B' ),
+			],
+			patterns: [
+				{ name: 'theme/hero', content: '<!-- wp:paragraph /-->' },
+			],
+		} );
+		const reviewed = buildEditorTemplateTopLevelStructureSnapshot(
+			state.blocks
+		);
+		state.blocks.reverse();
+		mockRawHandler.mockReturnValue( [
+			createParagraphBlock( 'pattern', 'Hero' ),
+		] );
+
+		const result = applyTemplateSuggestionOperations( {
+			operations: [
+				{
+					type: 'insert_pattern',
+					patternName: 'theme/hero',
+					placement: 'before_block_path',
+					targetPath: [ 0 ],
+					expectedTarget: reviewed.topLevelBlockTree[ 0 ],
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( false );
+		expect( state.blocks.map( ( block ) => block.clientId ) ).toEqual( [
+			'sibling',
+			'original',
+		] );
+	} );
+
+	test( 'applies removal to the unchanged reviewed identity and rejects malformed proof', () => {
+		const { state, blockEditorDispatch } = setupBlockEditor( {
+			blocks: [ createParagraphBlock( 'original', 'Obsolete note' ) ],
+		} );
+		const reviewed = buildEditorTemplatePartStructureSnapshot(
+			state.blocks
+		);
+		const operation = {
+			type: 'remove_block',
+			targetPath: [ 0 ],
+			expectedBlockName: 'core/paragraph',
+			expectedTarget: reviewed.operationTargets[ 0 ].expectedTarget,
+		};
+
+		expect(
+			applyTemplatePartSuggestionOperations( {
+				operations: [
+					{
+						...operation,
+						expectedTarget: {
+							...operation.expectedTarget,
+							editorIdentity: null,
+						},
+					},
+				],
+			} ).ok
+		).toBe( false );
+		expect( blockEditorDispatch.removeBlocks ).not.toHaveBeenCalled();
+		expect(
+			applyTemplatePartSuggestionOperations( {
+				operations: [ operation ],
+			} ).ok
+		).toBe( true );
+		expect( state.blocks ).toEqual( [] );
+	} );
+
+	test( 'preserves plain empty-text attributes while preparing an unchanged reviewed target', () => {
+		const block = createParagraphBlock( 'original', 'Obsolete note' );
+		block.attributes.custom = {
+			nested: [ { text: '', formats: [], label: 'Keep this object' } ],
+		};
+		const { state } = setupBlockEditor( { blocks: [ block ] } );
+		const reviewed = buildEditorTemplatePartStructureSnapshot(
+			state.blocks
+		);
+
+		const result = applyTemplatePartSuggestionOperations( {
+			operations: [
+				{
+					type: 'remove_block',
+					targetPath: [ 0 ],
+					expectedBlockName: 'core/paragraph',
+					expectedTarget:
+						reviewed.operationTargets[ 0 ].expectedTarget,
+				},
+			],
+		} );
+
+		expect( result.ok ).toBe( true );
+		expect(
+			result.operations[ 0 ].removedBlocksSnapshot[ 0 ].attributes.custom
+		).toEqual( block.attributes.custom );
 	} );
 
 	test( 'prepareTemplateSuggestionOperations validates template-part and pattern operations before apply', () => {

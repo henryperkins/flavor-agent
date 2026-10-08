@@ -1087,6 +1087,53 @@ final class TemplatePromptTest extends TestCase {
 		);
 	}
 
+	public function test_parse_response_preserves_editor_identity_for_template_insertion_anchors(): void {
+		$identity = [
+			'clientId'         => 'reviewed-anchor',
+			'subtreeSignature' => '{"content":"Reviewed content"}',
+		];
+		$context  = [
+			'patterns'                 => [ [ 'name' => 'theme/hero' ] ],
+			'topLevelBlockTree'        => [
+				[
+					'path'           => [ 0 ],
+					'name'           => 'core/paragraph',
+					'childCount'     => 0,
+					'editorIdentity' => $identity,
+				],
+			],
+			'topLevelInsertionAnchors' => [
+				[
+					'placement'  => 'before_block_path',
+					'targetPath' => [ 0 ],
+				],
+			],
+		];
+		$raw      = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'      => 'Insert hero before reviewed anchor',
+						'operations' => [
+							[
+								'type'           => 'insert_pattern',
+								'patternName'    => 'theme/hero',
+								'placement'      => 'before_block_path',
+								'targetPath'     => [ 0 ],
+								'expectedTarget' => [ 'editorIdentity' => [ 'clientId' => 'model-selected-other-block' ] ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( $identity, $result['suggestions'][0]['operations'][0]['expectedTarget']['editorIdentity'] );
+	}
+
 	public function test_parse_response_accepts_anchored_pattern_insertions_against_top_level_template_paths_and_records_expected_targets(): void {
 		$context = [
 			'assignedParts'            => [],

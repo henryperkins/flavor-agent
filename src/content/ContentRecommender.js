@@ -17,6 +17,7 @@ import CapabilityNotice from '../components/CapabilityNotice';
 import RecommendationHero from '../components/RecommendationHero';
 import StaleResultBanner from '../components/StaleResultBanner';
 import SurfaceComposer from '../components/SurfaceComposer';
+import useRecommendationDraft from '../components/use-recommendation-draft';
 import { useContentDerivedContext } from './use-content-derived-context';
 import { STORE_NAME } from '../store';
 import {
@@ -291,7 +292,7 @@ export default function ContentRecommender() {
 	const initialHasOutput =
 		contentStatus === 'ready' &&
 		hasRecommendationOutput( contentRecommendation );
-	const [ prompt, setPrompt ] = useState( '' );
+	const { prompt, setPrompt, hydratePrompt } = useRecommendationDraft();
 	const [ copiedContent, setCopiedContent ] = useState( '' );
 	const [ isComposerOpen, setIsComposerOpen ] = useState(
 		() => ! initialHasOutput
@@ -314,8 +315,9 @@ export default function ContentRecommender() {
 		}
 
 		hydratedSignatureRef.current = contentRecommendationRequestSignature;
-		setPrompt( contentRequestPrompt || '' );
+		hydratePrompt( contentRequestPrompt );
 	}, [
+		hydratePrompt,
 		contentRecommendationRequestSignature,
 		contentRequestPrompt,
 		contentStatus,

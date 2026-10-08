@@ -722,14 +722,16 @@ export function createExecutableSurfaceRuntimeActionCreators(
 			function applySuggestion(
 				suggestion,
 				currentRequestSignature = null,
-				liveRequestInput = null
+				liveRequestInput = null,
+				getLiveRequestState = null
 			) {
 				return buildExecutableSurfaceApplyThunk(
 					createApplyConfig( def, actions ),
 					suggestion,
 					currentRequestSignature,
 					liveRequestInput,
-					applyDeps
+					applyDeps,
+					getLiveRequestState
 				);
 			};
 

@@ -58,7 +58,7 @@ The preview reads a client-only `adaptationContext` from the live editor at prev
 
 `Insert adapted` rechecks that local adaptation signature immediately before insertion. If the insertion point or nearby adaptation context has drifted, Flavor Agent records `stale_blocked` with reason `adapted_preview_stale`, marks the panel stale, and refreshes recommendations instead of dispatching stale adapted blocks. If the deterministic rules cannot build a safe adapted clone, Flavor Agent records `adaptation_blocked` and leaves `Insert original` available when the original remains safe.
 
-The adapted and original paths share the same apply-time safety gates: target-signature check, `resolveSignatureOnly` server revalidation, live allowed-block checks, awaited `insertBlocks()`, post-dispatch target verification, and wrong-target rollback. Original insertion is unchanged; synced/user `core/block` references are not adapted or detached in v1.
+The adapted and original paths share the same apply-time safety gates: target-signature check, `resolveSignatureOnly` server revalidation, a second live insertion-context check after revalidation, live allowed-block checks, awaited `insertBlocks()`, post-dispatch target verification, and wrong-target rollback. Both paths hold one synchronous insertion lock through preflight, insertion, and verification, disabling competing insertion controls until completion or failure. Synced/user `core/block` references are not adapted or detached in v1.
 
 Recommendation outcome events added for this path are `adapted_preview_shown`, `adapted_inserted_from_preview`, `adaptation_blocked`, and `adapted_insert_failed`.
 

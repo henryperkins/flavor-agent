@@ -613,6 +613,31 @@ describe( 'StyleBookRecommender', () => {
 		expect( sidebar.textContent ).toContain( DOCS_WARNING_TEXT );
 	} );
 
+	test( 'preserves the next draft typed while a style-book request is loading', () => {
+		currentStoreState.status = 'loading';
+		act( () => getRoot().render( <StyleBookRecommender /> ) );
+		const textarea = sidebar.querySelector( 'textarea' );
+		act( () => {
+			Object.getOwnPropertyDescriptor(
+				window.HTMLTextAreaElement.prototype,
+				'value'
+			).set.call( textarea, 'Next draft typed while waiting' );
+			textarea.dispatchEvent(
+				new window.Event( 'input', { bubbles: true } )
+			);
+		} );
+		Object.assign( currentStoreState, {
+			status: 'ready',
+			requestPrompt: 'Completed request',
+			resultRef: 'style_book:17:core/paragraph',
+			contextSignature: buildContextSignature(),
+		} );
+		act( () => getRoot().render( <StyleBookRecommender /> ) );
+		expect( sidebar.querySelector( 'textarea' ).value ).toBe(
+			'Next draft typed while waiting'
+		);
+	} );
+
 	test( 'submits a block-scoped style recommendation request from the Style Book sidebar', () => {
 		act( () => {
 			getRoot().render( <StyleBookRecommender /> );
@@ -1030,6 +1055,35 @@ describe( 'StyleBookRecommender', () => {
 		);
 		expect( sidebar.textContent ).not.toContain(
 			'Raw CSS and custom CSS are out of scope.'
+		);
+		act( () =>
+			mockRenderAIReviewSection.mock.calls.at( -1 )[ 0 ].onConfirm()
+		);
+		const [ , requestSignature, requestInput, getLiveRequestState ] =
+			mockApplyStyleBookSuggestion.mock.calls[ 0 ];
+		expect( getLiveRequestState ).toEqual( expect.any( Function ) );
+		expect( getLiveRequestState() ).toEqual( {
+			requestSignature,
+			requestInput,
+		} );
+		const textarea = sidebar.querySelector( 'textarea' );
+		act( () => {
+			Object.getOwnPropertyDescriptor(
+				window.HTMLTextAreaElement.prototype,
+				'value'
+			).set.call( textarea, 'Next review request' );
+			textarea.dispatchEvent(
+				new window.Event( 'input', { bubbles: true } )
+			);
+			expect( getLiveRequestState().requestInput.prompt ).toBe(
+				'Next review request'
+			);
+		} );
+		expect( getLiveRequestState().requestInput.prompt ).toBe(
+			'Next review request'
+		);
+		expect( getLiveRequestState().requestSignature ).not.toBe(
+			requestSignature
 		);
 		expect( sidebar.textContent ).not.toContain(
 			'Preview the exact operations before applying them to Paragraph.'

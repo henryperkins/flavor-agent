@@ -292,6 +292,7 @@ function createExternalApplyEntry( overrides = {} ) {
 		id: 'activity-external-apply',
 		type: 'apply_global_styles_suggestion',
 		applyLane: 'server-executed',
+		canDecide: true,
 		suggestion: 'External: use the accent text preset',
 		status: 'pending',
 		statusLabel: 'Pending approval',
@@ -4321,7 +4322,49 @@ describe( 'ActivityLogApp', () => {
 		expect( approvalsFeedCall ).toBeDefined();
 	} );
 
-	test( 'hides decision actions when the user cannot approve style applies', async () => {
+	test( 'shows authorized post-block decisions without the theme-editing boot flag', async () => {
+		await renderApp(
+			[
+				createExternalApplyEntry( {
+					surface: 'post-blocks',
+					type: 'apply_post_blocks_suggestion',
+					canDecide: true,
+					target: { postId: 42, postType: 'post' },
+					document: {
+						scopeKey: 'post:42',
+						postType: 'post',
+						entityId: '42',
+					},
+				} ),
+			],
+			{ bootData: { canApproveStyleApplies: false } }
+		);
+
+		expect(
+			getContainer().querySelector(
+				'.flavor-agent-activity-log__decision'
+			)
+		).not.toBeNull();
+	} );
+
+	test.each( [ false, undefined, 'true', 1 ] )(
+		'hides decisions and claims without a boolean row authorization (%s)',
+		async ( canDecide ) => {
+			await renderApp( [ createExternalApplyEntry( { canDecide } ) ] );
+			expect(
+				getContainer().querySelector(
+					'.flavor-agent-activity-log__decision'
+				)
+			).toBeNull();
+			expect(
+				apiFetch.mock.calls.some( ( [ request ] ) =>
+					request?.url?.includes( '/claim' )
+				)
+			).toBe( false );
+		}
+	);
+
+	test( 'hides decision actions when the row denies approval', async () => {
 		window.history.replaceState(
 			null,
 			'',
@@ -4332,6 +4375,7 @@ describe( 'ActivityLogApp', () => {
 			[
 				createExternalApplyEntry( {
 					id: 'activity-9',
+					canDecide: false,
 				} ),
 			],
 			{ bootData: { canApproveStyleApplies: false } }

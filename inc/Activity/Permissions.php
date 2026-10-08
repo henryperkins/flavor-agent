@@ -128,7 +128,12 @@ final class Permissions {
 		$entry = Repository::find( $activity_id );
 
 		// Missing rows pass the capability gate so the handler returns its 404.
-		return ! is_array( $entry ) || self::can_access_entry( $entry );
+		return ! is_array( $entry ) || self::can_decide_entry( $entry );
+	}
+
+	/** Row-level decision authorization shared by the route and its UI payload. */
+	public static function can_decide_entry( array $entry ): bool {
+		return current_user_can( 'manage_options' ) && self::can_access_entry( $entry );
 	}
 
 	/**

@@ -2,6 +2,91 @@ import { executeFlavorAgentAbility } from './abilities-client';
 import { buildClientRequestIdentity } from './client-request-identity';
 import { deriveDocsGroundingWarning } from '../utils/docs-grounding-warning';
 import { normalizeRequestErrorDetails } from './request-error-details';
+import { buildContextSignature } from '../utils/context-signature';
+import { getEditorBlockIdentity } from '../utils/editor-block-identity';
+import {
+	getCurrentGlobalStylesId,
+	getCurrentThemeBaseGlobalStyles,
+	getCurrentThemeGlobalStylesVariations,
+} from '../global-styles/selectors';
+
+// Read the registry synchronously at both sides of the server preflight. A
+// render-time request snapshot alone can miss edits awaiting a React render.
+function captureLiveApplyContext( registry, surface, scope ) {
+	try {
+		const blockEditor = registry?.select?.( 'core/block-editor' ) || {};
+		const settings = blockEditor.getSettings?.() || {};
+		const context = {
+			scope,
+			blocks: ( blockEditor.getBlocks?.() || [] ).map(
+				getEditorBlockIdentity
+			),
+			settings: {
+				allowedBlockTypes: settings.allowedBlockTypes,
+				templateLock: settings.templateLock,
+				canLockBlocks: settings.canLockBlocks,
+				supportsLayout: settings.supportsLayout,
+				features: settings.__experimentalFeatures,
+				resolvedFeatures: settings.features,
+				layout: settings.layout,
+				colors: settings.colors,
+				gradients: settings.gradients,
+				fontSizes: settings.fontSizes,
+			},
+		};
+
+		if ( surface === 'global-styles' || surface === 'style-book' ) {
+			const core = registry?.select?.( 'core' ) || {};
+			const globalStylesId = getCurrentGlobalStylesId( core );
+			const record = globalStylesId
+				? core.getEditedEntityRecord?.(
+						'root',
+						'globalStyles',
+						globalStylesId
+				  ) ||
+				  core.getEntityRecord?.(
+						'root',
+						'globalStyles',
+						globalStylesId
+				  )
+				: null;
+			context.globalStyles = {
+				globalStylesId,
+				settings: record?.settings,
+				styles: record?.styles,
+				base: getCurrentThemeBaseGlobalStyles( core ),
+				variations: getCurrentThemeGlobalStylesVariations( core ),
+			};
+		}
+
+		return buildContextSignature( context );
+	} catch {
+		return null;
+	}
+}
+
+function hasCurrentLiveRequest(
+	getLiveRequestState,
+	requestSignature,
+	requestInputSignature
+) {
+	if ( typeof getLiveRequestState !== 'function' ) {
+		return true;
+	}
+
+	try {
+		const live = getLiveRequestState();
+		return Boolean(
+			live &&
+				live.requestSignature === requestSignature &&
+				live.requestInput &&
+				buildContextSignature( live.requestInput ) ===
+					requestInputSignature
+		);
+	} catch {
+		return false;
+	}
+}
 
 function normalizeRequestInput( requestInput ) {
 	return requestInput && typeof requestInput === 'object' ? requestInput : {};
@@ -400,7 +485,8 @@ function createExecutableSurfaceApplyAction( {
 	return function applyExecutableSurfaceSuggestion(
 		suggestion,
 		currentRequestSignature = null,
-		liveRequestInput = null
+		liveRequestInput = null,
+		getLiveRequestState = null
 	) {
 		return async ( { dispatch: localDispatch, registry, select } ) => {
 			const scope = getCurrentActivityScope( registry );
@@ -438,6 +524,18 @@ function createExecutableSurfaceApplyAction( {
 				return staleApplyResult;
 			}
 
+			// Capture before awaiting preflight, even when preflight later fails.
+			// eslint-disable-next-line @wordpress/no-unused-vars-before-return
+			const liveContextSignature = captureLiveApplyContext(
+				registry,
+				surface,
+				scope
+			);
+			// eslint-disable-next-line @wordpress/no-unused-vars-before-return
+			const requestInputSignature = buildContextSignature(
+				normalizeRequestInput( liveRequestInput )
+			);
+
 			localDispatch( setApplyState( 'applying' ) );
 
 			const storedResolvedContextSignature =
@@ -450,6 +548,27 @@ function createExecutableSurfaceApplyAction( {
 				typeof getStoredResultToken === 'function'
 					? getStoredResultToken( select )
 					: null;
+			const isCurrentResult = ( storedSignature ) => {
+				const currentResolvedContextSignature = normalizeStringMessage(
+					getStoredResolvedContextSignature( select )
+				);
+				const currentRequestToken =
+					typeof getStoredRequestToken === 'function'
+						? getStoredRequestToken( select )
+						: null;
+				const currentResultToken =
+					typeof getStoredResultToken === 'function'
+						? getStoredResultToken( select )
+						: null;
+
+				return (
+					currentResolvedContextSignature === storedSignature &&
+					( storedRequestToken === null ||
+						currentRequestToken === storedRequestToken ) &&
+					( storedResultToken === null ||
+						currentResultToken === storedResultToken )
+				);
+			};
 			const resolvedFreshness = await guardSurfaceApplyResolvedFreshness(
 				{
 					surface,
@@ -457,29 +576,7 @@ function createExecutableSurfaceApplyAction( {
 					liveRequestInput,
 					storedResolvedContextSignature,
 					abortId: surface,
-					isCurrent: ( storedSignature ) => {
-						const currentResolvedContextSignature =
-							normalizeStringMessage(
-								getStoredResolvedContextSignature( select )
-							);
-						const currentRequestToken =
-							typeof getStoredRequestToken === 'function'
-								? getStoredRequestToken( select )
-								: null;
-						const currentResultToken =
-							typeof getStoredResultToken === 'function'
-								? getStoredResultToken( select )
-								: null;
-
-						return (
-							currentResolvedContextSignature ===
-								storedSignature &&
-							( storedRequestToken === null ||
-								currentRequestToken === storedRequestToken ) &&
-							( storedResultToken === null ||
-								currentResultToken === storedResultToken )
-						);
-					},
+					isCurrent: isCurrentResult,
 					localDispatch,
 					setApplyState: buildErrorApplyStateAction,
 				}
@@ -493,6 +590,36 @@ function createExecutableSurfaceApplyAction( {
 					);
 				}
 				return resolvedFreshness;
+			}
+
+			if (
+				! isCurrentResult(
+					normalizeStringMessage( storedResolvedContextSignature )
+				)
+			) {
+				return { ok: false, skipped: true, surface };
+			}
+
+			if (
+				liveContextSignature === null ||
+				captureLiveApplyContext(
+					registry,
+					surface,
+					getCurrentActivityScope( registry )
+				) !== liveContextSignature ||
+				! hasCurrentLiveRequest(
+					getLiveRequestState,
+					currentRequestSignature,
+					requestInputSignature
+				)
+			) {
+				const error =
+					'This editor context changed while the suggestion was being checked. Refresh the recommendations before applying.';
+				localDispatch(
+					buildErrorApplyStateAction( 'error', error, 'client' )
+				);
+				recordBlockedOutcome( 'stale_blocked', 'client' );
+				return { ok: false, error, staleReason: 'client', surface };
 			}
 
 			let result;
@@ -583,7 +710,8 @@ export function buildExecutableSurfaceApplyThunk(
 		guardSurfaceApplyResolvedFreshness,
 		recordActivityEntry,
 		syncActivitySession,
-	}
+	},
+	getLiveRequestState = null
 ) {
 	return createExecutableSurfaceApplyAction( {
 		...config,
@@ -593,5 +721,10 @@ export function buildExecutableSurfaceApplyThunk(
 		guardSurfaceApplyResolvedFreshness,
 		recordActivityEntry,
 		syncActivitySession,
-	} )( suggestion, currentRequestSignature, liveRequestInput );
+	} )(
+		suggestion,
+		currentRequestSignature,
+		liveRequestInput,
+		getLiveRequestState
+	);
 }

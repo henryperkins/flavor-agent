@@ -797,6 +797,53 @@ final class TemplatePartPromptTest extends TestCase {
 		$this->assertSame( 'theme/header-utility', $result['suggestions'][0]['operations'][0]['patternName'] );
 	}
 
+	public function test_parse_response_preserves_editor_identity_from_context_for_local_targets(): void {
+		$identity = [
+			'clientId'         => 'reviewed-paragraph',
+			'subtreeSignature' => '{"content":"Reviewed content"}',
+		];
+		$context  = [
+			'blockTree'        => [
+				[
+					'path'           => [ 0 ],
+					'name'           => 'core/paragraph',
+					'childCount'     => 0,
+					'editorIdentity' => $identity,
+				],
+			],
+			'operationTargets' => [
+				[
+					'path'              => [ 0 ],
+					'name'              => 'core/paragraph',
+					'allowedOperations' => [ 'remove_block' ],
+				],
+			],
+		];
+		$raw      = wp_json_encode(
+			[
+				'suggestions' => [
+					[
+						'label'       => 'Remove obsolete note',
+						'description' => 'Remove the reviewed obsolete paragraph.',
+						'operations'  => [
+							[
+								'type'              => 'remove_block',
+								'expectedBlockName' => 'core/paragraph',
+								'targetPath'        => [ 0 ],
+								'expectedTarget'    => [ 'editorIdentity' => [ 'clientId' => 'model-selected-other-block' ] ],
+							],
+						],
+					],
+				],
+			]
+		);
+
+		$result = TemplatePartPrompt::parse_response( $raw, $context );
+
+		$this->assertIsArray( $result );
+		$this->assertSame( $identity, $result['suggestions'][0]['operations'][0]['expectedTarget']['editorIdentity'] );
+	}
+
 	public function test_parse_response_accepts_replace_and_remove_operations_when_paths_match(): void {
 		$context = [
 			'blockTree'             => [

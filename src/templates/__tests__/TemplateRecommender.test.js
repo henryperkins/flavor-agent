@@ -555,6 +555,44 @@ afterEach( async () => {
 } );
 
 describe( 'TemplateRecommender', () => {
+	test( 'preserves the next draft typed while a template request is loading', async () => {
+		currentState.store.templateStatus = 'loading';
+		await renderPanel();
+		const textarea = getContainer().querySelector( 'textarea' );
+		act( () => {
+			textarea.value = 'Next draft typed while waiting';
+			textarea.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		} );
+		Object.assign( currentState.store, {
+			templateStatus: 'ready',
+			templateRequestPrompt: 'Completed request',
+			templateResultToken: 2,
+		} );
+		await renderPanel();
+		expect( getContainer().querySelector( 'textarea' ).value ).toBe(
+			'Next draft typed while waiting'
+		);
+	} );
+
+	test( 'forwards a live request callback that follows subsequent prompt edits', async () => {
+		await renderPanel();
+		await act( async () => getButton( 'Confirm Apply' ).click() );
+		const [ , requestSignature, requestInput, getLiveRequestState ] =
+			dispatchers.applyTemplateSuggestion.mock.calls[ 0 ];
+		expect( getLiveRequestState ).toEqual( expect.any( Function ) );
+		expect( getLiveRequestState() ).toEqual( {
+			requestSignature,
+			requestInput,
+		} );
+		await setPromptValue( 'Next review request' );
+		expect( getLiveRequestState().requestInput.prompt ).toBe(
+			'Next review request'
+		);
+		expect( getLiveRequestState().requestSignature ).not.toBe(
+			requestSignature
+		);
+	} );
+
 	test( 'renders docs grounding warnings before template suggestion lanes', async () => {
 		currentState = createState( {
 			store: {

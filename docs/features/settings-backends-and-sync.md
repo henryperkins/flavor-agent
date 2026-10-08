@@ -57,7 +57,7 @@ Recommendation-time Developer Docs grounding is best-effort: each recommendation
 2. `src/admin/settings-page-controller.js` posts to `POST /flavor-agent/v1/sync-patterns`
 3. `FlavorAgent\REST\Agent_Controller::handle_sync_patterns()` calls `FlavorAgent\Patterns\PatternIndex::enqueue_sync()` to schedule the catalog event and return immediately
 4. `FlavorAgent\Patterns\PatternIndex::sync()` owns the selected backend rebuild through the `flavor_agent_reindex_patterns` WP-Cron hook
-5. The settings-page controller updates the sync badge, summary, metrics, and inline notice from the returned queue state, then polls `GET /flavor-agent/v1/sync-patterns` while the runtime state remains `indexing`
+5. The settings-page controller updates the sync badge, summary, metrics, and inline notice from the returned queue state, then polls `GET /flavor-agent/v1/sync-patterns` while the runtime state remains `indexing`. Opening or reloading the page during an existing sync also resumes polling and re-enables the button when the sync finishes
 6. Polling calls opportunistically run due `flavor_agent_reindex_patterns` events before returning state, so a local environment with disabled or delayed WP-Cron cannot strand a manual sync in `indexing`
 
 Backend-specific sync behavior and debugging checks are canonical in `docs/reference/pattern-recommendation-debugging.md`; external-service disclosure details live in `docs/reference/external-service-disclosure.md`.

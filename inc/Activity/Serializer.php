@@ -280,6 +280,10 @@ final class Serializer {
 			$hydrated['apply'] = $request_apply;
 		}
 
+		$hydrated['canDecide'] = Repository::is_server_executed_apply( $hydrated )
+			&& 'pending' === ( $request_apply['status'] ?? '' )
+			&& Permissions::can_decide_entry( $hydrated );
+
 		if (
 			'recommendation_outcome' === $hydrated['type']
 			|| (

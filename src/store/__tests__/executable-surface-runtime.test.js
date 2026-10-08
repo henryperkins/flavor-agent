@@ -145,6 +145,177 @@ describe( 'executable-surface runtime review freshness thunk', () => {
 } );
 
 describe( 'executable-surface runtime apply thunk', () => {
+	test.each(
+		[ 'template', 'template-part', 'global-styles', 'style-book' ].flatMap(
+			( surface ) =>
+				[
+					'blocks',
+					'scope',
+					'settings',
+					'theme features',
+					'request',
+					'draft',
+					'unavailable request',
+					'none',
+					'replaced result',
+					...( surface === 'global-styles' || surface === 'style-book'
+						? [ 'style config' ]
+						: [] ),
+				].map( ( drift ) => [ surface, drift ] )
+		)
+	)(
+		'rechecks %s apply when %s changes during preflight',
+		async ( surface, drift ) => {
+			let resolveFreshness;
+			const state = {
+				scope: {
+					key: 'wp_template:theme//home',
+					entityId: 'theme//home',
+				},
+				blocks: [
+					{
+						clientId: 'paragraph-a',
+						name: 'core/paragraph',
+						attributes: { content: 'Original' },
+						innerBlocks: [],
+					},
+				],
+				settings: { allowedBlockTypes: true },
+				resultToken: 1,
+				styleConfig: {
+					settings: {},
+					styles: { color: { text: '#123456' } },
+				},
+			};
+			let liveRequestState = {
+				requestSignature: 'request',
+				requestInput: { prompt: 'Refine this surface.' },
+			};
+			const executeSuggestion = jest.fn( () => ( {
+				ok: true,
+				operations: [],
+			} ) );
+			const dispatched = [];
+			const registry = {
+				select: ( name ) => {
+					if ( name === 'core/block-editor' ) {
+						return {
+							getBlocks: () => state.blocks,
+							getSettings: () => state.settings,
+						};
+					}
+					if ( name === 'core' ) {
+						return {
+							getCurrentGlobalStylesId: () => 17,
+							getEditedEntityRecord: () => state.styleConfig,
+						};
+					}
+					return {};
+				},
+			};
+			const thunk = buildExecutableSurfaceApplyThunk(
+				{
+					applyFailureMessage: 'Apply failed.',
+					abilityName: 'test/apply',
+					buildActivityEntry: null,
+					executeSuggestion,
+					getStoredRequestSignature: () => 'request',
+					getStoredResolvedContextSignature: () => 'resolved',
+					getStoredRequestToken: () => 1,
+					getStoredResultToken: () => state.resultToken,
+					setApplyState: ( status, payload ) => ( {
+						type: 'APPLY_STATE',
+						status,
+						payload,
+					} ),
+					surface,
+					unexpectedErrorMessage: 'Unexpected failure.',
+				},
+				{ suggestionKey: 'suggestion-1' },
+				'request',
+				liveRequestState.requestInput,
+				{
+					getCurrentActivityScope: () => state.scope,
+					guardSurfaceApplyFreshness: () => null,
+					guardSurfaceApplyResolvedFreshness: () =>
+						new Promise( ( resolve ) => {
+							resolveFreshness = resolve;
+						} ),
+					recordActivityEntry: jest.fn(),
+					syncActivitySession: jest.fn(),
+				},
+				() => liveRequestState
+			);
+			const pending = thunk( {
+				dispatch: ( action ) => {
+					dispatched.push( action );
+					return action;
+				},
+				registry,
+				select: {},
+			} );
+			if ( drift === 'blocks' ) {
+				state.blocks = [
+					{
+						...state.blocks[ 0 ],
+						attributes: { content: 'Manual edit' },
+					},
+				];
+			} else if ( drift === 'scope' ) {
+				state.scope = {
+					key: 'wp_template:theme//other',
+					entityId: 'theme//other',
+				};
+			} else if ( drift === 'settings' ) {
+				state.settings = { allowedBlockTypes: [ 'core/heading' ] };
+			} else if ( drift === 'theme features' ) {
+				state.settings = {
+					allowedBlockTypes: true,
+					features: { color: { custom: false } },
+				};
+			} else if ( drift === 'request' ) {
+				liveRequestState = {
+					requestSignature: 'new-request',
+					requestInput: { prompt: 'New draft' },
+				};
+			} else if ( drift === 'draft' ) {
+				liveRequestState = {
+					requestSignature: 'request',
+					requestInput: { prompt: 'New draft' },
+				};
+			} else if ( drift === 'unavailable request' ) {
+				liveRequestState = null;
+			} else if ( drift === 'style config' ) {
+				state.styleConfig = {
+					settings: {},
+					styles: { color: { text: '#abcdef' } },
+				};
+			} else if ( drift === 'replaced result' ) {
+				state.resultToken = 2;
+			}
+			resolveFreshness( { ok: true } );
+			const result = await pending;
+			expect( result ).toEqual(
+				expect.objectContaining(
+					drift === 'none'
+						? { ok: true }
+						: {
+								ok: false,
+								...( drift === 'replaced result'
+									? { skipped: true }
+									: { staleReason: 'client' } ),
+						  }
+				)
+			);
+			expect( executeSuggestion ).toHaveBeenCalledTimes(
+				drift === 'none' ? 1 : 0
+			);
+			expect(
+				dispatched.filter( ( action ) => action.status === 'success' )
+			).toHaveLength( drift === 'none' ? 1 : 0 );
+		}
+	);
+
 	test( 'marks apply in flight before awaiting resolved freshness validation', async () => {
 		let resolveFreshness;
 		const dispatched = [];

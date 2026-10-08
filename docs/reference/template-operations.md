@@ -65,7 +65,7 @@ When `placement` is `before_block_path` or `after_block_path`, the server:
 }
 ```
 
-The client uses `expectedTarget` to verify the anchor still matches before applying.
+The client uses `expectedTarget` to verify the anchor still matches before applying. Live editor targets also carry `editorIdentity: { clientId, subtreeSignature }`. The opaque subtree signature contains normalized complete attributes and descendant identities/content. The server retains this proof in the resolved context and validated `expectedTarget`; the editor executor compares it exactly before anchored insertion, replacement, or removal. Reordering equal-looking siblings or changing a descendant invalidates the reviewed target. Saved server-only targets have no editor identity.
 
 ## Template-Part Operations
 

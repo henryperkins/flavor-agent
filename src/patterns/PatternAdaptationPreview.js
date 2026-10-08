@@ -290,6 +290,7 @@ export default function PatternAdaptationPreview( {
 	originalBlocks = [],
 	adaptedBlocks = [],
 	isStale = false,
+	isInserting = false,
 	onInsertAdapted,
 	onInsertOriginal,
 	onClose,
@@ -444,7 +445,7 @@ export default function PatternAdaptationPreview( {
 					<Button
 						variant="primary"
 						size="small"
-						disabled={ ! isReady }
+						disabled={ ! isReady || isInserting }
 						onClick={ onInsertAdapted }
 						aria-label={ sprintf(
 							/* translators: %s: pattern title. */
@@ -457,6 +458,7 @@ export default function PatternAdaptationPreview( {
 				) }
 				<Button
 					variant={ isUnchanged ? 'primary' : 'secondary' }
+					disabled={ isInserting }
 					size="small"
 					onClick={ onInsertOriginal }
 				>

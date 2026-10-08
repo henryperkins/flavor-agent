@@ -382,7 +382,7 @@ final class ActivityPermissionsTest extends TestCase {
 					'args'       => [ 100 ],
 				],
 			],
-			WordPressTestState::$capability_checks
+			array_values( array_unique( WordPressTestState::$capability_checks, SORT_REGULAR ) )
 		);
 	}
 

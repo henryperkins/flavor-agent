@@ -74,6 +74,10 @@ import {
 } from './pattern-insertability';
 import { buildPatternAdaptationPreview } from './pattern-adaptation';
 import { buildPatternAdaptationContext } from './pattern-adaptation-context';
+import {
+	getPatternInsertionSnapshot,
+	getPatternSourceSignature,
+} from './pattern-insertion-snapshot';
 import PatternAdaptationPreview from './PatternAdaptationPreview';
 import {
 	buildRecommendedPatterns,
@@ -605,6 +609,7 @@ function PatternShelf( {
 	onPreviewAdapted,
 	diagnostics,
 	currentRequestSignature,
+	isInserting = false,
 	isStale,
 } ) {
 	return (
@@ -686,6 +691,7 @@ function PatternShelf( {
 									<Button
 										variant="secondary"
 										size="small"
+										disabled={ isInserting }
 										onClick={ () =>
 											onPreviewAdapted(
 												pattern,
@@ -705,6 +711,7 @@ function PatternShelf( {
 										synced ? 'secondary' : 'tertiary'
 									}
 									size="small"
+									disabled={ isInserting }
 									onClick={ () =>
 										onInsert( pattern, recommendation )
 									}
@@ -988,6 +995,21 @@ export default function PatternRecommender() {
 	const shownRecommendationSetRef = useRef( '' );
 	const droppedRecommendationOutcomeRef = useRef( new Set() );
 	const [ adaptedPreview, setAdaptedPreview ] = useState( null );
+	const [ isInserting, setIsInserting ] = useState( false );
+	const insertionTransactionRef = useRef( null );
+	const mountedRef = useRef( true );
+	const liveInsertionRef = useRef( null );
+
+	useEffect( () => {
+		mountedRef.current = true;
+		return () => {
+			mountedRef.current = false;
+			if ( insertionTransactionRef.current ) {
+				insertionTransactionRef.current.active = false;
+				insertionTransactionRef.current = null;
+			}
+		};
+	}, [] );
 
 	// The adapted preview is scoped to one open-inserter session and insertion
 	// point. Clear it when the inserter closes so reopening never resurfaces a
@@ -1105,6 +1127,111 @@ export default function PatternRecommender() {
 				  } )
 				: '',
 		[ buildBaseInput, currentPatternRuntimeSignature ]
+	);
+	liveInsertionRef.current = {
+		canRecommend,
+		isInserterOpen,
+		targetSignature: currentInsertionTargetSignature,
+	};
+	useEffect( () => {
+		const transaction = insertionTransactionRef.current;
+		if ( transaction ) {
+			transaction.active = false;
+			if ( transaction.phase !== 'mutating' ) {
+				insertionTransactionRef.current = null;
+				setIsInserting( false );
+			}
+			setAdaptedPreview( ( preview ) =>
+				preview ? { ...preview, status: 'stale' } : null
+			);
+		}
+	}, [
+		canRecommend,
+		isInserterOpen,
+		currentInsertionTargetSignature,
+		currentPatternRuntimeSignature,
+	] );
+
+	const isInsertionActive = useCallback(
+		( transaction ) =>
+			mountedRef.current &&
+			transaction?.active &&
+			insertionTransactionRef.current === transaction,
+		[]
+	);
+	const isInsertionCurrent = useCallback(
+		( transaction ) =>
+			isInsertionActive( transaction ) &&
+			getPatternInsertionSnapshot( registry ).signature ===
+				transaction.snapshot.signature &&
+			getPatternSourceSignature(
+				resolvePatternBlocks( transaction.pattern )
+			) === transaction.sourceSignature,
+		[ isInsertionActive, registry ]
+	);
+	const canPublishInsertionNotice = useCallback(
+		( transaction ) =>
+			mountedRef.current &&
+			getPatternInsertionSnapshot( registry ).scopeSignature ===
+				transaction.snapshot.scopeSignature,
+		[ registry ]
+	);
+	const withInsertionLock = useCallback(
+		async ( pattern, insert ) => {
+			if (
+				insertionTransactionRef.current ||
+				! mountedRef.current ||
+				! liveInsertionRef.current?.canRecommend ||
+				! liveInsertionRef.current?.isInserterOpen
+			) {
+				return false;
+			}
+			const snapshot = getPatternInsertionSnapshot( registry );
+			if (
+				snapshot.targetSignature !==
+				liveInsertionRef.current.targetSignature
+			) {
+				return false;
+			}
+			const transaction = {
+				active: true,
+				phase: 'validating',
+				snapshot,
+				pattern,
+				sourceSignature: getPatternSourceSignature(
+					resolvePatternBlocks( pattern )
+				),
+			};
+			insertionTransactionRef.current = transaction;
+			setIsInserting( true );
+			try {
+				return await insert( transaction );
+			} catch {
+				if ( isInsertionActive( transaction ) ) {
+					createErrorNotice(
+						sprintf(
+							/* translators: %s: block pattern title. */
+							__(
+								'Cannot insert pattern "%s" because the insertion request failed. Try again.',
+								'flavor-agent'
+							),
+							getPatternTitle( pattern )
+						),
+						{ type: 'snackbar', id: 'inserter-notice' }
+					);
+				}
+				return false;
+			} finally {
+				if ( insertionTransactionRef.current === transaction ) {
+					insertionTransactionRef.current = null;
+					transaction.active = false;
+					if ( mountedRef.current ) {
+						setIsInserting( false );
+					}
+				}
+			}
+		},
+		[ createErrorNotice, isInsertionActive, registry ]
 	);
 	const patternSourceRequestSignature = useMemo(
 		() =>
@@ -1436,6 +1563,7 @@ export default function PatternRecommender() {
 			insertedClientIds,
 			successEvent,
 			failureEvent,
+			transaction,
 		} ) => {
 			if ( ! insertionVerified ) {
 				const insertedOutsideTarget = insertedClientIds.length > 0;
@@ -1470,10 +1598,12 @@ export default function PatternRecommender() {
 						? 'insert_blocks_wrong_target'
 						: 'insert_blocks_noop',
 				} );
-				createErrorNotice( failureMessage, {
-					type: 'snackbar',
-					id: 'inserter-notice',
-				} );
+				if ( canPublishInsertionNotice( transaction ) ) {
+					createErrorNotice( failureMessage, {
+						type: 'snackbar',
+						id: 'inserter-notice',
+					} );
+				}
 				return false;
 			}
 
@@ -1482,20 +1612,23 @@ export default function PatternRecommender() {
 				recommendation,
 				reason: 'insert_blocks_success',
 			} );
-			createSuccessNotice(
-				sprintf(
-					/* translators: %s: pattern title. */
-					__( 'Pattern "%s" inserted.', 'flavor-agent' ),
-					getPatternTitle( pattern )
-				),
-				{
-					type: 'snackbar',
-					id: 'inserter-notice',
-				}
-			);
+			if ( canPublishInsertionNotice( transaction ) ) {
+				createSuccessNotice(
+					sprintf(
+						/* translators: %s: pattern title. */
+						__( 'Pattern "%s" inserted.', 'flavor-agent' ),
+						getPatternTitle( pattern )
+					),
+					{
+						type: 'snackbar',
+						id: 'inserter-notice',
+					}
+				);
+			}
 			return true;
 		},
 		[
+			canPublishInsertionNotice,
 			createErrorNotice,
 			createSuccessNotice,
 			recordPatternOutcome,
@@ -1508,10 +1641,33 @@ export default function PatternRecommender() {
 			pattern,
 			recommendation = null,
 			blocks,
+			transaction,
 			e2eFailureMode = '',
 			successEvent,
 			failureEvent,
 		} ) => {
+			if ( ! isInsertionActive( transaction ) ) {
+				return false;
+			}
+			if ( ! isInsertionCurrent( transaction ) ) {
+				recordPatternOutcome( 'stale_blocked', {
+					pattern,
+					recommendation,
+					reason: 'insertion_context_changed_before_mutation',
+				} );
+				createErrorNotice(
+					sprintf(
+						/* translators: %s: block pattern title. */
+						__(
+							'Cannot insert pattern "%s" because the editor context changed during validation. Refresh recommendations and try again.',
+							'flavor-agent'
+						),
+						getPatternTitle( pattern )
+					),
+					{ type: 'snackbar', id: 'inserter-notice' }
+				);
+				return false;
+			}
 			let insertionVerified = false;
 			let insertedClientIds = [];
 
@@ -1540,6 +1696,7 @@ export default function PatternRecommender() {
 							insertionIndex === 0 ? Number.MAX_SAFE_INTEGER : 0;
 					}
 
+					transaction.phase = 'mutating';
 					await insertBlocks(
 						blocks,
 						dispatchInsertionIndex,
@@ -1580,20 +1737,22 @@ export default function PatternRecommender() {
 					recommendation,
 					reason: 'insert_blocks_exception',
 				} );
-				createErrorNotice(
-					sprintf(
-						/* translators: %s: block pattern title. */
-						__(
-							'Cannot insert pattern "%s" because Gutenberg rejected the insertion request.',
-							'flavor-agent'
+				if ( canPublishInsertionNotice( transaction ) ) {
+					createErrorNotice(
+						sprintf(
+							/* translators: %s: block pattern title. */
+							__(
+								'Cannot insert pattern "%s" because Gutenberg rejected the insertion request.',
+								'flavor-agent'
+							),
+							getPatternTitle( pattern )
 						),
-						getPatternTitle( pattern )
-					),
-					{
-						type: 'snackbar',
-						id: 'inserter-notice',
-					}
-				);
+						{
+							type: 'snackbar',
+							id: 'inserter-notice',
+						}
+					);
+				}
 				return false;
 			}
 
@@ -1604,12 +1763,16 @@ export default function PatternRecommender() {
 				insertedClientIds,
 				successEvent,
 				failureEvent,
+				transaction,
 			} );
 		},
 		[
+			canPublishInsertionNotice,
 			createErrorNotice,
 			finalizeGuardedInsert,
 			insertBlocks,
+			isInsertionActive,
+			isInsertionCurrent,
 			insertionIndex,
 			inserterRootClientId,
 			recordPatternOutcome,
@@ -1618,7 +1781,13 @@ export default function PatternRecommender() {
 	);
 
 	const runPatternFreshnessGate = useCallback(
-		async ( { pattern, recommendation = null, blocks, liveInput } ) => {
+		async ( {
+			pattern,
+			recommendation = null,
+			blocks,
+			liveInput,
+			transaction,
+		} ) => {
 			if (
 				patternInsertionTargetSignature &&
 				currentInsertionTargetSignature &&
@@ -1718,6 +1887,9 @@ export default function PatternRecommender() {
 			try {
 				const resolved =
 					await resolvePatternRecommendationSignature( liveInput );
+				if ( ! isInsertionActive( transaction ) ) {
+					return false;
+				}
 				const currentResolvedContextSignature =
 					getResolvedContextSignatureFromResponse( resolved );
 
@@ -1749,6 +1921,9 @@ export default function PatternRecommender() {
 					return false;
 				}
 			} catch {
+				if ( ! isInsertionActive( transaction ) ) {
+					return false;
+				}
 				recordPatternOutcome( 'stale_blocked', {
 					pattern,
 					recommendation,
@@ -1771,6 +1946,28 @@ export default function PatternRecommender() {
 				return false;
 			}
 
+			if ( ! isInsertionActive( transaction ) ) {
+				return false;
+			}
+			if ( ! isInsertionCurrent( transaction ) ) {
+				recordPatternOutcome( 'stale_blocked', {
+					pattern,
+					recommendation,
+					reason: 'insertion_context_changed_during_validation',
+				} );
+				createErrorNotice(
+					sprintf(
+						/* translators: %s: block pattern title. */
+						__(
+							'Cannot insert pattern "%s" because the editor context changed during validation. Refresh recommendations and try again.',
+							'flavor-agent'
+						),
+						getPatternTitle( pattern )
+					),
+					{ type: 'snackbar', id: 'inserter-notice' }
+				);
+				return false;
+			}
 			if ( rejectIfBlocksDisallowed() ) {
 				return false;
 			}
@@ -1783,6 +1980,8 @@ export default function PatternRecommender() {
 			effectivePostType,
 			fetchPatternRecommendationsForCurrentTarget,
 			inserterRootClientId,
+			isInsertionActive,
+			isInsertionCurrent,
 			patternInsertionTargetSignature,
 			patternResolvedContextSignature,
 			recordPatternOutcome,
@@ -1792,114 +1991,125 @@ export default function PatternRecommender() {
 	);
 
 	const handleInsertPattern = useCallback(
-		async ( pattern, recommendation = null ) => {
-			const blocks = resolvePatternBlocks( pattern );
+		( pattern, recommendation = null ) =>
+			withInsertionLock( pattern, async ( transaction ) => {
+				const blocks = resolvePatternBlocks( pattern );
 
-			if ( blocks.length === 0 ) {
-				recordPatternOutcome( 'validation_blocked', {
-					pattern,
-					recommendation,
-					reason: 'empty_pattern_blocks',
-				} );
-				createErrorNotice(
-					sprintf(
-						/* translators: %s: block pattern title. */
-						__(
-							'Cannot insert pattern "%s" because Gutenberg did not provide insertable block content for it.',
-							'flavor-agent'
+				if ( blocks.length === 0 ) {
+					recordPatternOutcome( 'validation_blocked', {
+						pattern,
+						recommendation,
+						reason: 'empty_pattern_blocks',
+					} );
+					createErrorNotice(
+						sprintf(
+							/* translators: %s: block pattern title. */
+							__(
+								'Cannot insert pattern "%s" because Gutenberg did not provide insertable block content for it.',
+								'flavor-agent'
+							),
+							getPatternTitle( pattern )
 						),
-						getPatternTitle( pattern )
-					),
-					{
-						type: 'snackbar',
-						id: 'inserter-notice',
-					}
+						{
+							type: 'snackbar',
+							id: 'inserter-notice',
+						}
+					);
+					return;
+				}
+
+				const liveInput = buildBaseInput();
+
+				if (
+					! ( await runPatternFreshnessGate( {
+						pattern,
+						recommendation,
+						blocks,
+						liveInput,
+						transaction,
+					} ) )
+				) {
+					return;
+				}
+
+				const clonedBlocks = blocks.map( ( block ) =>
+					cloneBlock( block )
 				);
-				return;
-			}
 
-			const liveInput = buildBaseInput();
-
-			if (
-				! ( await runPatternFreshnessGate( {
+				await runGuardedInsert( {
 					pattern,
 					recommendation,
-					blocks,
-					liveInput,
-				} ) )
-			) {
-				return;
-			}
-
-			const clonedBlocks = blocks.map( ( block ) => cloneBlock( block ) );
-
-			await runGuardedInsert( {
-				pattern,
-				recommendation,
-				blocks: clonedBlocks,
-				e2eFailureMode: consumeE2EPatternInsertFailureMode( pattern ),
-				successEvent: 'pattern_inserted_from_shelf',
-				failureEvent: 'insert_failed',
-			} );
-		},
+					blocks: clonedBlocks,
+					transaction,
+					e2eFailureMode:
+						consumeE2EPatternInsertFailureMode( pattern ),
+					successEvent: 'pattern_inserted_from_shelf',
+					failureEvent: 'insert_failed',
+				} );
+			} ),
 		[
 			buildBaseInput,
 			createErrorNotice,
 			recordPatternOutcome,
 			runGuardedInsert,
 			runPatternFreshnessGate,
+			withInsertionLock,
 		]
 	);
 
-	const handleInsertAdapted = useCallback( async () => {
+	const handleInsertAdapted = useCallback( () => {
 		if ( ! adaptedPreview || adaptedPreview.status !== 'ready' ) {
 			return;
 		}
 
 		const { pattern, recommendation, adaptedBlocks } = adaptedPreview;
-		const fresh = buildCurrentAdaptation( pattern );
+		return withInsertionLock( pattern, async ( transaction ) => {
+			const fresh = buildCurrentAdaptation( pattern );
 
-		if (
-			fresh.status !== 'ready' ||
-			fresh.adaptationSignature !== adaptedPreview.adaptationSignature
-		) {
-			recordPatternOutcome( 'stale_blocked', {
+			if (
+				fresh.status !== 'ready' ||
+				fresh.adaptationSignature !== adaptedPreview.adaptationSignature
+			) {
+				recordPatternOutcome( 'stale_blocked', {
+					pattern,
+					recommendation,
+					reason: 'adapted_preview_stale',
+				} );
+				setAdaptedPreview( { ...adaptedPreview, status: 'stale' } );
+				fetchPatternRecommendationsForCurrentTarget( buildBaseInput() );
+				return;
+			}
+
+			if (
+				! ( await runPatternFreshnessGate( {
+					pattern,
+					recommendation,
+					blocks: adaptedBlocks,
+					liveInput: buildBaseInput(),
+					transaction,
+				} ) )
+			) {
+				return;
+			}
+
+			const clonedBlocks = adaptedBlocks.map( ( block ) =>
+				cloneBlock( block )
+			);
+
+			const inserted = await runGuardedInsert( {
 				pattern,
 				recommendation,
-				reason: 'adapted_preview_stale',
+				blocks: clonedBlocks,
+				transaction,
+				e2eFailureMode: consumeE2EPatternInsertFailureMode( pattern ),
+				successEvent: 'adapted_inserted_from_preview',
+				failureEvent: 'adapted_insert_failed',
 			} );
-			setAdaptedPreview( { ...adaptedPreview, status: 'stale' } );
-			fetchPatternRecommendationsForCurrentTarget( buildBaseInput() );
-			return;
-		}
 
-		if (
-			! ( await runPatternFreshnessGate( {
-				pattern,
-				recommendation,
-				blocks: adaptedBlocks,
-				liveInput: buildBaseInput(),
-			} ) )
-		) {
-			return;
-		}
-
-		const clonedBlocks = adaptedBlocks.map( ( block ) =>
-			cloneBlock( block )
-		);
-
-		const inserted = await runGuardedInsert( {
-			pattern,
-			recommendation,
-			blocks: clonedBlocks,
-			e2eFailureMode: consumeE2EPatternInsertFailureMode( pattern ),
-			successEvent: 'adapted_inserted_from_preview',
-			failureEvent: 'adapted_insert_failed',
+			if ( inserted ) {
+				setAdaptedPreview( null );
+			}
 		} );
-
-		if ( inserted ) {
-			setAdaptedPreview( null );
-		}
 	}, [
 		adaptedPreview,
 		buildBaseInput,
@@ -1908,6 +2118,7 @@ export default function PatternRecommender() {
 		recordPatternOutcome,
 		runGuardedInsert,
 		runPatternFreshnessGate,
+		withInsertionLock,
 	] );
 
 	const recordShownPatternOutcome = useCallback( () => {
@@ -2167,6 +2378,7 @@ export default function PatternRecommender() {
 		} else if ( shouldShowPatternShelf ) {
 			notice = (
 				<PatternShelf
+					isInserting={ isInserting }
 					currentRequestSignature={ normalizeSourceRequestSignature(
 						currentPatternCacheKey
 					) }
@@ -2228,6 +2440,7 @@ export default function PatternRecommender() {
 				{ notice }
 				{ adaptedPreview && (
 					<PatternAdaptationPreview
+						isInserting={ isInserting }
 						title={ getPatternTitle( adaptedPreview.pattern ) }
 						status={ adaptedPreview.status }
 						reason={ adaptedPreview.reason }

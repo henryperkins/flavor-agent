@@ -199,7 +199,6 @@ final class ActivityPageTest extends TestCase {
 		$data = $this->activity_boot_data();
 
 		$this->assertSame( $manage_options, $data['canExportFixtures'] );
-		$this->assertSame( $edit_theme_options, $data['canApproveStyleApplies'] );
 	}
 
 	/** @return array<string, array{bool, bool}> */

@@ -1,6 +1,8 @@
 const { test, expect } = require( './test-fixtures' );
 const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
 
+const welcomeGuideHandlerPages = new WeakSet();
+
 const DOCS_WARNING_TEXT =
 	'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.';
 
@@ -28,6 +30,22 @@ async function waitForFlavorAgent( page ) {
 }
 
 async function dismissWelcomeGuide( page ) {
+	const welcomeOverlay = page
+		.locator( '.components-modal__screen-overlay' )
+		.filter( {
+			hasText:
+				/Welcome to the editor|Welcome to the Site Editor|Page 1 of 4/i,
+		} );
+
+	if ( ! welcomeGuideHandlerPages.has( page ) ) {
+		await page.addLocatorHandler( welcomeOverlay, async ( overlay ) => {
+			await overlay
+				.getByRole( 'button', { name: 'Close', exact: true } )
+				.click();
+		} );
+		welcomeGuideHandlerPages.add( page );
+	}
+
 	await page.evaluate( () => {
 		window.wp?.data
 			?.dispatch( 'core/preferences' )
@@ -37,34 +55,9 @@ async function dismissWelcomeGuide( page ) {
 			?.set?.( 'core/edit-post', 'welcomeGuideTemplate', false );
 	} );
 
-	const welcomeOverlay = page
-		.locator( '.components-modal__screen-overlay' )
-		.filter( {
-			hasText:
-				/Welcome to the editor|Welcome to the Site Editor|Page 1 of 4/i,
-		} );
-
-	for ( let attempt = 0; attempt < 4; attempt++ ) {
-		if ( ! ( await welcomeOverlay.isVisible().catch( () => false ) ) ) {
-			return;
-		}
-
-		const closeButton = welcomeOverlay
-			.getByRole( 'button', { name: 'Close' } )
-			.first();
-		const getStartedButton = welcomeOverlay
-			.getByRole( 'button', { name: 'Get started' } )
-			.first();
-
-		if ( await closeButton.isVisible().catch( () => false ) ) {
-			await closeButton.click().catch( () => {} );
-		} else if ( await getStartedButton.isVisible().catch( () => false ) ) {
-			await getStartedButton.click().catch( () => {} );
-		} else {
-			await page.keyboard.press( 'Escape' ).catch( () => {} );
-		}
-
-		await page.waitForTimeout( 250 );
+	if ( await welcomeOverlay.isVisible() ) {
+		await page.keyboard.press( 'Escape' );
+		await expect( welcomeOverlay ).toBeHidden();
 	}
 }
 

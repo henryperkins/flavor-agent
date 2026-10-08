@@ -10,6 +10,7 @@ import {
 	summarizeBlockAttributes,
 } from '../utils/live-structure-snapshots';
 import { buildContextSignature } from '../utils/context-signature';
+import { getEditorBlockIdentity } from '../utils/editor-block-identity';
 import { normalizeDesignSemantics } from '../utils/recommendation-design-semantics';
 import { __ } from '@wordpress/i18n';
 
@@ -95,6 +96,7 @@ function buildTemplatePartBlockNode( block, path, areaLookup ) {
 	}
 
 	const attributes = getBlockAttributes( block );
+	const editorIdentity = getEditorBlockIdentity( block );
 
 	return {
 		path,
@@ -102,6 +104,7 @@ function buildTemplatePartBlockNode( block, path, areaLookup ) {
 		label: describeEditorBlockLabel( block.name, attributes, areaLookup ),
 		attributes: summarizeTemplatePartBlockAttributes( attributes ),
 		childCount: getInnerBlocks( block ).length,
+		...( editorIdentity ? { editorIdentity } : {} ),
 	};
 }
 
@@ -247,6 +250,7 @@ function collectTemplatePartOperationTargets(
 				: [];
 
 		if ( canTarget ) {
+			const editorIdentity = getEditorBlockIdentity( block );
 			targets.push( {
 				path: nextPath,
 				name: block.name,
@@ -260,6 +264,7 @@ function collectTemplatePartOperationTargets(
 					childCount: getInnerBlocks( block ).length,
 					attributes:
 						summarizeTemplatePartBlockAttributes( attributes ),
+					...( editorIdentity ? { editorIdentity } : {} ),
 				},
 				allowedOperations,
 				allowedInsertions: [ ...TEMPLATE_PART_INSERTION_PLACEMENTS ],

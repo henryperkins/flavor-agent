@@ -299,6 +299,7 @@ final class StructuralOperationsGrammar {
 					'attributes' => is_array( $node['attributes'] ?? null ) ? $node['attributes'] : [],
 					'childCount' => isset( $node['childCount'] ) ? (int) $node['childCount'] : 0,
 					'slot'       => is_array( $node['slot'] ?? null ) ? $node['slot'] : [],
+					...( array_key_exists( 'editorIdentity', $node ) ? [ 'editorIdentity' => $node['editorIdentity'] ] : [] ),
 				];
 			}
 
@@ -334,6 +335,7 @@ final class StructuralOperationsGrammar {
 				'attributes' => is_array( $node['attributes'] ?? null ) ? $node['attributes'] : [],
 				'childCount' => isset( $node['childCount'] ) ? (int) $node['childCount'] : 0,
 				'slot'       => is_array( $node['slot'] ?? null ) ? $node['slot'] : [],
+				...( array_key_exists( 'editorIdentity', $node ) ? [ 'editorIdentity' => $node['editorIdentity'] ] : [] ),
 			];
 		}
 
@@ -435,12 +437,10 @@ final class StructuralOperationsGrammar {
 	 * Build the expectedTarget payload recorded on a stored operation: name,
 	 * label, attributes, childCount, and slot (when present).
 	 *
-	 * The apply-time drift comparison (StructuralOperationsApplier::assert_expected_target)
-	 * enforces only name + childCount — the stable structural fingerprint.
-	 * label, attributes, and slot ride along as request-time provenance but are
-	 * intentionally NOT part of the comparison: attribute-level fingerprints
-	 * churn on unrelated edits, so comparing them would reject an apply after
-	 * any incidental content change to the target.
+	 * The server executor compares name and childCount for saved block targets.
+	 * Local editor requests also carry editorIdentity, which the client executor
+	 * compares against the complete live subtree before mutating a reviewed target.
+	 * Keep that opaque proof from the request context rather than model output.
 	 *
 	 * @param array<string, mixed> $target_node
 	 * @return array<string, mixed>
@@ -454,6 +454,9 @@ final class StructuralOperationsGrammar {
 		];
 
 		$slot = is_array( $target_node['slot'] ?? null ) ? $target_node['slot'] : [];
+		if ( array_key_exists( 'editorIdentity', $target_node ) ) {
+			$expected['editorIdentity'] = $target_node['editorIdentity'];
+		}
 		if ( count( $slot ) > 0 ) {
 			$expected['slot'] = [
 				'slug'    => sanitize_key( (string) ( $slot['slug'] ?? '' ) ),

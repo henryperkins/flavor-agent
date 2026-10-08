@@ -1,10 +1,14 @@
 const mockUseDispatch = jest.fn();
+jest.mock( '@wordpress/rich-text', () => ( {
+	toHTMLString: ( { value } ) => value?.toHTMLString?.(),
+} ) );
 const mockUseRegistry = jest.fn();
 const mockUseSelect = jest.fn();
 const mockCloneBlock = jest.fn();
 const mockCreateBlock = jest.fn();
 const mockGetBlockBindingsSources = jest.fn();
 const mockParse = jest.fn();
+const mockRawHandler = jest.fn();
 const mockFetchPatternRecommendations = jest.fn();
 const mockFetchPatternRequestContext = jest.fn();
 const mockHydratePatternRecommendationsFromCache = jest.fn();
@@ -21,6 +25,7 @@ const mockFindInserterContainer = jest.fn();
 const mockFindInserterSearchInput = jest.fn();
 const mockGetVisiblePatternNames = jest.fn();
 const mockInvalidateResolutionForStoreSelector = jest.fn();
+const mockGetPatternRankingCacheEntry = jest.fn();
 
 const fs = require( 'fs' );
 const path = require( 'path' );
@@ -44,6 +49,7 @@ jest.mock( '@wordpress/blocks', () => ( {
 	getBlockBindingsSources: ( ...args ) =>
 		mockGetBlockBindingsSources( ...args ),
 	parse: ( ...args ) => mockParse( ...args ),
+	rawHandler: ( ...args ) => mockRawHandler( ...args ),
 } ) );
 
 jest.mock( '@wordpress/data', () => ( {
@@ -114,6 +120,7 @@ import PatternRecommender from '../PatternRecommender';
 
 const { getRoot } = setupReactTest();
 
+const EMPTY_TEST_BLOCKS = [];
 let state = null;
 let originalMutationObserver = null;
 const DOCS_WARNING_TEXT =
@@ -167,7 +174,7 @@ function createSelectMap() {
 			getBlocks: jest.fn(
 				( rootClientId ) =>
 					( state.blockEditor.blocks || {} )[ rootClientId ?? '' ] ??
-					[]
+					EMPTY_TEST_BLOCKS
 			),
 			getBlock: jest.fn( ( clientId ) => {
 				for ( const blocks of Object.values(
@@ -220,14 +227,7 @@ function createSelectMap() {
 			getPatternDocsGroundingWarning: jest.fn(
 				() => state.store.patternDocsGroundingWarning
 			),
-			getPatternRankingCacheEntry: jest.fn(
-				( cacheKey ) =>
-					state.store.patternRankingCache?.[ cacheKey ] ||
-					Object.values(
-						state.store.patternRankingCache || {}
-					)[ 0 ] ||
-					null
-			),
+			getPatternRankingCacheEntry: mockGetPatternRankingCacheEntry,
 		},
 	};
 }
@@ -340,6 +340,12 @@ describe( 'PatternRecommender', () => {
 			},
 		};
 		mockUseDispatch.mockReset();
+		mockGetPatternRankingCacheEntry.mockImplementation(
+			( cacheKey ) =>
+				state.store.patternRankingCache?.[ cacheKey ] ||
+				Object.values( state.store.patternRankingCache || {} )[ 0 ] ||
+				null
+		);
 		mockUseRegistry.mockReset();
 		mockUseSelect.mockReset();
 		mockCloneBlock.mockReset();
@@ -347,6 +353,8 @@ describe( 'PatternRecommender', () => {
 		mockGetBlockBindingsSources.mockReset();
 		mockGetBlockBindingsSources.mockReturnValue( {} );
 		mockParse.mockReset();
+		mockRawHandler.mockReset();
+		mockRawHandler.mockReturnValue( [] );
 		mockFetchPatternRecommendations.mockReset();
 		mockFetchPatternRequestContext.mockReset();
 		mockHydratePatternRecommendationsFromCache.mockReset();
@@ -409,20 +417,21 @@ describe( 'PatternRecommender', () => {
 		mockSprintf.mockImplementation( ( template, ...values ) =>
 			formatTemplate( template, values )
 		);
+		const flavorAgentDispatchers = {
+			fetchPatternRecommendations: ( input, requestContext ) => {
+				mockFetchPatternRequestContext( requestContext );
+				return mockFetchPatternRecommendations( input );
+			},
+			resolvePatternRecommendationSignature: ( input ) =>
+				mockResolvePatternRecommendationSignature( input ),
+			recordRecommendationOutcome: ( outcome ) =>
+				mockRecordRecommendationOutcome( outcome ),
+			hydratePatternRecommendationsFromCache: ( entry ) =>
+				mockHydratePatternRecommendationsFromCache( entry ),
+		};
 		mockUseDispatch.mockImplementation( ( storeName ) => {
 			if ( storeName === 'flavor-agent' ) {
-				return {
-					fetchPatternRecommendations: ( input, requestContext ) => {
-						mockFetchPatternRequestContext( requestContext );
-						return mockFetchPatternRecommendations( input );
-					},
-					resolvePatternRecommendationSignature: ( input ) =>
-						mockResolvePatternRecommendationSignature( input ),
-					recordRecommendationOutcome: ( outcome ) =>
-						mockRecordRecommendationOutcome( outcome ),
-					hydratePatternRecommendationsFromCache: ( entry ) =>
-						mockHydratePatternRecommendationsFromCache( entry ),
-				};
+				return flavorAgentDispatchers;
 			}
 
 			if ( storeName === 'core/block-editor' ) {
@@ -441,7 +450,7 @@ describe( 'PatternRecommender', () => {
 
 			return {};
 		} );
-		mockUseRegistry.mockImplementation( () => ( {
+		mockUseRegistry.mockReturnValue( {
 			select: ( storeName ) => createSelectMap()[ storeName ] || {},
 			dispatch: ( storeName ) =>
 				storeName === 'core'
@@ -450,7 +459,7 @@ describe( 'PatternRecommender', () => {
 								mockInvalidateResolutionForStoreSelector,
 					  }
 					: {},
-		} ) );
+		} );
 		mockUseSelect.mockImplementation( ( callback ) =>
 			callback( ( storeName ) => createSelectMap()[ storeName ] )
 		);
@@ -505,6 +514,432 @@ describe( 'PatternRecommender', () => {
 		jest.runOnlyPendingTimers();
 		jest.useRealTimers();
 	} );
+
+	test.each( [ 'original', 'adapted' ] )(
+		'blocks %s insertion when the target changes during server validation',
+		async ( variant ) => {
+			setPrecedingHeadingContext( 2 );
+			state.blockEditor.blocks[ 'root-a' ] = [
+				{
+					clientId: 'heading-before',
+					name: 'core/heading',
+					attributes: { level: 2 },
+				},
+			];
+			let releaseValidation;
+			mockResolvePatternRecommendationSignature.mockReturnValue(
+				new Promise( ( resolve ) => {
+					releaseValidation = resolve;
+				} )
+			);
+			const pattern = {
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [
+					{
+						clientId: 'pattern-heading',
+						name: 'core/heading',
+						attributes: { level: 5 },
+					},
+				],
+			};
+			const container = renderReadyPatternShelf( { pattern } );
+			if ( variant === 'adapted' ) {
+				act( () =>
+					findButtonByText( container, 'Preview adapted' ).click()
+				);
+			}
+			act( () => {
+				findButtonByText(
+					container,
+					variant === 'adapted' ? 'Insert adapted' : 'Insert original'
+				).click();
+			} );
+			state.blockEditor.insertionPoint = {
+				rootClientId: 'root-b',
+				index: 0,
+			};
+			state.blockEditor.blockNames[ 'root-b' ] = 'core/group';
+			state.blockEditor.blockOrder[ 'root-b' ] = [];
+			state.blockEditor.blockRoots[ 'root-b' ] = null;
+			state.blockEditor.blocks[ 'root-b' ] = [];
+			renderComponent();
+			await act( async () => {
+				releaseValidation( {
+					resolvedContextSignature: 'resolved-pattern-context',
+				} );
+			} );
+			expect( mockInsertBlocks ).not.toHaveBeenCalled();
+			expect( state.blockEditor.blocks[ 'root-a' ] ).toHaveLength( 1 );
+			expect( state.blockEditor.blocks[ 'root-b' ] ).toHaveLength( 0 );
+			expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
+		}
+	);
+
+	test.each( [ 'original', 'adapted' ] )(
+		'keeps %s insertion to one pipeline during duplicate activation',
+		async ( variant ) => {
+			setPrecedingHeadingContext( 2 );
+			state.blockEditor.blocks[ 'root-a' ] = [
+				{
+					clientId: 'heading-before',
+					name: 'core/heading',
+					attributes: { level: 2 },
+				},
+			];
+			let releaseValidation;
+			mockResolvePatternRecommendationSignature.mockReturnValue(
+				new Promise( ( resolve ) => {
+					releaseValidation = resolve;
+				} )
+			);
+			let cloneId = 0;
+			mockCloneBlock.mockImplementation( ( block ) => ( {
+				...block,
+				clientId: `clone-${ ++cloneId }`,
+				cloned: true,
+			} ) );
+			const pattern = {
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [ { name: 'core/heading', attributes: { level: 5 } } ],
+			};
+			const container = renderReadyPatternShelf( { pattern } );
+			if ( variant === 'adapted' ) {
+				act( () =>
+					findButtonByText( container, 'Preview adapted' ).click()
+				);
+			}
+			const insert = findButtonByText(
+				container,
+				variant === 'adapted' ? 'Insert adapted' : 'Insert original'
+			);
+			act( () => {
+				insert.click();
+				insert.click();
+			} );
+			expect( insert.disabled ).toBe( true );
+			await act( async () => {
+				releaseValidation( {
+					resolvedContextSignature: 'resolved-pattern-context',
+				} );
+			} );
+			expect( mockInsertBlocks ).toHaveBeenCalledTimes( 1 );
+			expect( state.blockEditor.blocks[ 'root-a' ] ).toHaveLength( 2 );
+			expect( mockRemoveBlocks ).not.toHaveBeenCalled();
+			expect( mockCreateErrorNotice ).not.toHaveBeenCalled();
+		}
+	);
+
+	test( 'cancels pending insertion when the inserter closes and allows retry after reopening', async () => {
+		let releaseValidation;
+		mockResolvePatternRecommendationSignature.mockReturnValueOnce(
+			new Promise( ( resolve ) => {
+				releaseValidation = resolve;
+			} )
+		);
+		const pattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					clientId: 'new-block',
+					name: 'core/paragraph',
+					attributes: {},
+				},
+			],
+		};
+		const container = renderReadyPatternShelf( { pattern } );
+		act( () => findShelfInsertButton( container ).click() );
+		state.isInserterOpen = false;
+		renderComponent();
+		await act( async () =>
+			releaseValidation( {
+				resolvedContextSignature: 'resolved-pattern-context',
+			} )
+		);
+		expect( mockInsertBlocks ).not.toHaveBeenCalled();
+		state.isInserterOpen = true;
+		renderComponent();
+		await act( async () => findShelfInsertButton( container ).click() );
+		expect( state.blockEditor.blocks[ 'root-a' ] ).toHaveLength( 1 );
+	} );
+
+	test( 'releases insertion controls after server validation fails', async () => {
+		mockResolvePatternRecommendationSignature.mockRejectedValueOnce(
+			new Error( 'Offline' )
+		);
+		const pattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					clientId: 'new-block',
+					name: 'core/paragraph',
+					attributes: {},
+				},
+			],
+		};
+		const container = renderReadyPatternShelf( { pattern } );
+		await act( async () => findShelfInsertButton( container ).click() );
+		expect( findShelfInsertButton( container ).disabled ).toBe( false );
+		await act( async () => findShelfInsertButton( container ).click() );
+		expect( state.blockEditor.blocks[ 'root-a' ] ).toHaveLength( 1 );
+	} );
+
+	test( 'holds the mutation lock across inserter close and target changes until verification finishes', async () => {
+		const insertImmediately = mockInsertBlocks.getMockImplementation();
+		let releaseInsertion;
+		mockInsertBlocks.mockImplementation( ( ...args ) => {
+			insertImmediately( ...args );
+			return new Promise( ( resolve ) => {
+				releaseInsertion = resolve;
+			} );
+		} );
+		const pattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					clientId: 'new-block',
+					name: 'core/paragraph',
+					attributes: {},
+				},
+			],
+		};
+		const container = renderReadyPatternShelf( { pattern } );
+		await act( async () => findShelfInsertButton( container ).click() );
+		expect( mockInsertBlocks ).toHaveBeenCalledTimes( 1 );
+		state.isInserterOpen = false;
+		renderComponent();
+		state.isInserterOpen = true;
+		state.blockEditor.insertionPoint = { rootClientId: 'root-b', index: 0 };
+		state.blockEditor.blockNames[ 'root-b' ] = 'core/group';
+		state.blockEditor.blockOrder[ 'root-b' ] = [];
+		state.blockEditor.blockRoots[ 'root-b' ] = null;
+		state.blockEditor.blocks[ 'root-b' ] = [];
+		renderComponent();
+		expect( findShelfInsertButton( container ).disabled ).toBe( true );
+		act( () => findShelfInsertButton( container ).click() );
+		expect( mockInsertBlocks ).toHaveBeenCalledTimes( 1 );
+		await act( async () => releaseInsertion() );
+		expect( state.blockEditor.blocks[ 'root-a' ] ).toHaveLength( 1 );
+		expect( state.blockEditor.blocks[ 'root-b' ] ).toHaveLength( 0 );
+		expect( mockRemoveBlocks ).not.toHaveBeenCalled();
+		expect( findShelfInsertButton( container ).disabled ).toBe( false );
+	} );
+
+	test( 'cleans up only the failed insertion after unmount without a late notice', async () => {
+		const insertImmediately = mockInsertBlocks.getMockImplementation();
+		state.blockEditor.blocks[ 'root-b' ] = [];
+		let releaseInsertion;
+		mockInsertBlocks.mockImplementation( ( blocks, index ) => {
+			insertImmediately( blocks, index, 'root-b' );
+			return new Promise( ( resolve ) => {
+				releaseInsertion = resolve;
+			} );
+		} );
+		const pattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					clientId: 'new-block',
+					name: 'core/paragraph',
+					attributes: {},
+				},
+			],
+		};
+		const container = renderReadyPatternShelf( { pattern } );
+		await act( async () => findShelfInsertButton( container ).click() );
+		act( () => getRoot().unmount() );
+		await act( async () => releaseInsertion() );
+		expect( mockRemoveBlocks ).toHaveBeenCalledWith(
+			[ 'new-block' ],
+			false
+		);
+		expect( mockCreateErrorNotice ).not.toHaveBeenCalled();
+		expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
+	} );
+
+	test( 'accepts unchanged pattern content when parsing assigns new source client IDs', async () => {
+		let parsedId = 0;
+		mockRawHandler.mockImplementation( () => [
+			{
+				clientId: `parsed-${ ++parsedId }`,
+				name: 'core/paragraph',
+				attributes: { content: 'Stable catalog content' },
+			},
+		] );
+		const pattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			content:
+				'<!-- wp:paragraph --><p>Stable catalog content</p><!-- /wp:paragraph -->',
+		};
+		const container = renderReadyPatternShelf( { pattern } );
+		await act( async () => findShelfInsertButton( container ).click() );
+		expect( parsedId ).toBeGreaterThan( 1 );
+		expect( mockInsertBlocks ).toHaveBeenCalledTimes( 1 );
+		expect( mockCreateErrorNotice ).not.toHaveBeenCalled();
+	} );
+
+	test.each( [
+		'features',
+		'__experimentalFeatures',
+		'layout',
+		'colors',
+		'gradients',
+		'fontSizes',
+	] )(
+		'blocks adapted insertion if %s settings change during validation before React renders',
+		async ( setting ) => {
+			setPrecedingHeadingContext( 2 );
+			let releaseValidation;
+			mockResolvePatternRecommendationSignature.mockReturnValueOnce(
+				new Promise( ( resolve ) => {
+					releaseValidation = resolve;
+				} )
+			);
+			const pattern = {
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [ { name: 'core/heading', attributes: { level: 5 } } ],
+			};
+			const container = renderReadyPatternShelf( { pattern } );
+			act( () =>
+				findButtonByText( container, 'Preview adapted' ).click()
+			);
+			act( () =>
+				findButtonByText( container, 'Insert adapted' ).click()
+			);
+			state.blockEditor.settings[ setting ] = { changed: true };
+			await act( async () =>
+				releaseValidation( {
+					resolvedContextSignature: 'resolved-pattern-context',
+				} )
+			);
+			expect( mockInsertBlocks ).not.toHaveBeenCalled();
+		}
+	);
+
+	test( 'ignores mismatched server validation after the inserter closes', async () => {
+		let releaseValidation;
+		mockResolvePatternRecommendationSignature.mockReturnValueOnce(
+			new Promise( ( resolve ) => {
+				releaseValidation = resolve;
+			} )
+		);
+		const pattern = {
+			name: 'theme/hero',
+			title: 'Hero',
+			blocks: [
+				{
+					clientId: 'new-block',
+					name: 'core/paragraph',
+					attributes: {},
+				},
+			],
+		};
+		const container = renderReadyPatternShelf( { pattern } );
+		act( () => findShelfInsertButton( container ).click() );
+		state.isInserterOpen = false;
+		renderComponent();
+		mockRecordRecommendationOutcome.mockClear();
+		mockFetchPatternRecommendations.mockClear();
+		await act( async () =>
+			releaseValidation( { resolvedContextSignature: 'changed-context' } )
+		);
+		expect( mockInsertBlocks ).not.toHaveBeenCalled();
+		expect( mockCreateErrorNotice ).not.toHaveBeenCalled();
+		expect( mockRecordRecommendationOutcome ).not.toHaveBeenCalled();
+		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
+	} );
+
+	test.each( [ 'original', 'adapted' ] )(
+		'checks the synchronous editor state immediately before %s insertion',
+		async ( variant ) => {
+			setPrecedingHeadingContext( 2 );
+			state.blockEditor.blocks[ 'root-a' ] = [
+				{
+					clientId: 'heading-before',
+					name: 'core/heading',
+					attributes: { level: 2 },
+				},
+			];
+			const pattern = {
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [
+					{
+						clientId: 'pattern-heading',
+						name: 'core/heading',
+						attributes: { level: 5 },
+					},
+				],
+			};
+			const container = renderReadyPatternShelf( { pattern } );
+			if ( variant === 'adapted' ) {
+				act( () =>
+					findButtonByText( container, 'Preview adapted' ).click()
+				);
+			}
+			mockCloneBlock.mockImplementation( ( block ) => {
+				state.blockEditor.blocks[ 'root-a' ][ 0 ].attributes.level = 4;
+				return { ...block, clientId: 'new-block' };
+			} );
+			await act( async () =>
+				findButtonByText(
+					container,
+					variant === 'adapted' ? 'Insert adapted' : 'Insert original'
+				).click()
+			);
+			expect( mockInsertBlocks ).not.toHaveBeenCalled();
+			expect( state.blockEditor.blocks[ 'root-a' ] ).toHaveLength( 1 );
+		}
+	);
+
+	test.each( [ 'original', 'adapted' ] )(
+		'blocks %s insertion when pattern content changes during validation',
+		async ( variant ) => {
+			setPrecedingHeadingContext( 2 );
+			let releaseValidation;
+			mockResolvePatternRecommendationSignature.mockReturnValueOnce(
+				new Promise( ( resolve ) => {
+					releaseValidation = resolve;
+				} )
+			);
+			const pattern = {
+				name: 'theme/hero',
+				title: 'Hero',
+				blocks: [
+					{
+						name: 'core/heading',
+						attributes: { level: 5, content: 'Reviewed heading' },
+					},
+				],
+			};
+			const container = renderReadyPatternShelf( { pattern } );
+			if ( variant === 'adapted' ) {
+				act( () =>
+					findButtonByText( container, 'Preview adapted' ).click()
+				);
+			}
+			act( () =>
+				findButtonByText(
+					container,
+					variant === 'adapted' ? 'Insert adapted' : 'Insert original'
+				).click()
+			);
+			pattern.blocks[ 0 ].attributes.content = 'Changed catalog heading';
+			await act( async () =>
+				releaseValidation( {
+					resolvedContextSignature: 'resolved-pattern-context',
+				} )
+			);
+			expect( mockInsertBlocks ).not.toHaveBeenCalled();
+		}
+	);
 
 	test( 'uses the defined editor text token for pattern shelf titles', () => {
 		expect( EDITOR_CSS ).toMatch(
@@ -2100,7 +2535,7 @@ describe( 'PatternRecommender', () => {
 		expect( labels ).toContain( 'Insert' );
 	} );
 
-	test( 'blocks insert and refetches when the live insertion context drifts from the ranked context', () => {
+	test( 'blocks insert and refetches when the live insertion context drifts from the ranked context', async () => {
 		const {
 			buildPatternInsertionTargetSignature,
 		} = require( '../../utils/recommendation-request-signature' );
@@ -2153,7 +2588,7 @@ describe( 'PatternRecommender', () => {
 
 		const insertButton = findShelfInsertButton( inserterContainer );
 
-		act( () => {
+		await act( async () => {
 			insertButton.click();
 		} );
 
@@ -2181,7 +2616,7 @@ describe( 'PatternRecommender', () => {
 		);
 	} );
 
-	test( 'blocks insert when root and index match but insertion context changes', () => {
+	test( 'blocks insert when root and index match but insertion context changes', async () => {
 		const {
 			buildPatternInsertionTargetSignature,
 		} = require( '../../utils/recommendation-request-signature' );
@@ -2235,7 +2670,7 @@ describe( 'PatternRecommender', () => {
 
 		const insertButton = findShelfInsertButton( inserterContainer );
 
-		act( () => {
+		await act( async () => {
 			insertButton.click();
 		} );
 
@@ -2943,7 +3378,7 @@ describe( 'PatternRecommender', () => {
 		// The pre-check and core's insert-time filter both read canInsertBlockType
 		// from the active registry select; the before/after snapshots come from the
 		// same select, so delegate getBlocks/getBlock to the shared map.
-		mockUseRegistry.mockImplementation( () => ( {
+		mockUseRegistry.mockReturnValue( {
 			select: ( storeName ) => {
 				const base = createSelectMap()[ storeName ] || {};
 				if ( storeName === 'core/block-editor' ) {
@@ -2955,7 +3390,7 @@ describe( 'PatternRecommender', () => {
 				}
 				return base;
 			},
-		} ) );
+		} );
 
 		// Real core insertBlocks: keep only the canInsertBlockType-allowed blocks
 		// and insert them into the requested root at the requested index.
@@ -3444,7 +3879,7 @@ describe( 'PatternRecommender', () => {
 		);
 	} );
 
-	test( 'shows an error notice and skips dispatch when the resolved blocks are not allowed at the insertion point', () => {
+	test( 'shows an error notice and skips dispatch when the resolved blocks are not allowed at the insertion point', async () => {
 		// Defense in depth: if pre-filter is bypassed (e.g., a click races a
 		// settings change), the click handler must surface a clear error
 		// rather than silently dispatch a no-op.
@@ -3474,10 +3909,11 @@ describe( 'PatternRecommender', () => {
 
 		// Pre-filter pass-through (true), but a fresh active-registry select at
 		// click time rejects the template-part blocks.
-		mockUseRegistry.mockImplementation( () => ( {
+		mockUseRegistry.mockReturnValue( {
 			select: ( storeName ) => {
 				if ( storeName === 'core/block-editor' ) {
 					return {
+						...createSelectMap()[ storeName ],
 						canInsertBlockType: ( blockName ) =>
 							blockName !== 'core/template-part',
 					};
@@ -3485,13 +3921,13 @@ describe( 'PatternRecommender', () => {
 
 				return createSelectMap()[ storeName ] || {};
 			},
-		} ) );
+		} );
 
 		renderComponent();
 
 		expect( document.body.textContent ).toContain( 'Photo blog page' );
 
-		act( () => {
+		await act( async () => {
 			findShelfInsertButton( inserterContainer ).click();
 		} );
 
@@ -3520,7 +3956,7 @@ describe( 'PatternRecommender', () => {
 		expect( mockCreateSuccessNotice ).not.toHaveBeenCalled();
 	} );
 
-	test( 'validates pattern insertion against the active registry instead of the global data store', () => {
+	test( 'validates pattern insertion against the active registry instead of the global data store', async () => {
 		const inserterContainer = document.createElement( 'div' );
 		const blockedPattern = {
 			name: 'theme/template-with-parts',
@@ -3546,10 +3982,11 @@ describe( 'PatternRecommender', () => {
 		];
 		state.allowedPatterns = [ blockedPattern ];
 		mockFindInserterContainer.mockReturnValue( inserterContainer );
-		mockUseRegistry.mockImplementation( () => ( {
+		mockUseRegistry.mockReturnValue( {
 			select: ( storeName ) => {
 				if ( storeName === 'core/block-editor' ) {
 					return {
+						...createSelectMap()[ storeName ],
 						canInsertBlockType: ( blockName ) =>
 							blockName !== 'core/template-part',
 					};
@@ -3557,13 +3994,13 @@ describe( 'PatternRecommender', () => {
 
 				return createSelectMap()[ storeName ] || {};
 			},
-		} ) );
+		} );
 		window.wp = { data: { select: globalSelect } };
 
 		try {
 			renderComponent();
 
-			act( () => {
+			await act( async () => {
 				findShelfInsertButton( inserterContainer ).click();
 			} );
 

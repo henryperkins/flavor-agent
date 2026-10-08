@@ -5,6 +5,22 @@ import {
 } from '../template-part-recommender-helpers';
 
 describe( 'template-part recommender helpers', () => {
+	test( 'invalidates review after same-shaped blocks exchange paths', () => {
+		const a = {
+			clientId: 'a',
+			name: 'core/paragraph',
+			attributes: { content: 'Same' },
+			innerBlocks: [],
+		};
+		const b = { ...a, clientId: 'b' };
+		const signature = ( blocks ) =>
+			buildTemplatePartRecommendationContextSignature( {
+				editorStructure:
+					buildEditorTemplatePartStructureSnapshot( blocks ),
+			} );
+
+		expect( signature( [ a, b ] ) ).not.toBe( signature( [ b, a ] ) );
+	} );
 	test( 'buildTemplatePartFetchInput trims prompt and keeps the full live structure snapshot', () => {
 		expect(
 			buildTemplatePartFetchInput( {

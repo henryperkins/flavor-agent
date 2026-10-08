@@ -2532,7 +2532,7 @@ function GovernanceEvidenceSection( {
 	const canDecide =
 		! isLocallyDecided &&
 		isPendingExternalApply( entry ) &&
-		bootData?.canApproveStyleApplies;
+		entry?.canDecide === true;
 
 	useEffect( () => {
 		if ( ! canDecide || ! entry?.id ) {
@@ -2661,7 +2661,7 @@ function GovernanceEvidenceSection( {
 	];
 
 	const submitDecision = async ( decision ) => {
-		if ( isSubmittingRef.current ) {
+		if ( ! canDecide || isSubmittingRef.current ) {
 			return;
 		}
 
@@ -3133,6 +3133,9 @@ export function ActivityLogApp( { bootData } ) {
 			const claim = isPlainRecord( response.claim )
 				? response.claim
 				: null;
+			const decisionPermission = isPlainRecord( responseEntry )
+				? { canDecide: responseEntry.canDecide === true }
+				: {};
 			setResponseData( ( current ) => ( {
 				...current,
 				entries: current.entries.map( ( existingEntry ) =>
@@ -3140,6 +3143,7 @@ export function ActivityLogApp( { bootData } ) {
 					isPlainRecord( existingEntry.apply )
 						? {
 								...existingEntry,
+								...decisionPermission,
 								apply: { ...existingEntry.apply, claim },
 						  }
 						: existingEntry
@@ -3767,7 +3771,7 @@ export function ActivityLogApp( { bootData } ) {
 			if (
 				selected?.id &&
 				selected.status === 'pending' &&
-				bootData?.canApproveStyleApplies &&
+				selected.canDecide === true &&
 				selected.id !== releasedClaimIdRef.current
 			) {
 				apiFetch( buildClaimRequest( bootData, selected.id ) )

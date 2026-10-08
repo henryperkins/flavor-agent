@@ -6,6 +6,7 @@ import {
 	describeEditorBlockLabel,
 } from '../utils/editor-context-metadata';
 import { buildContextSignature } from '../utils/context-signature';
+import { getEditorBlockIdentity } from '../utils/editor-block-identity';
 import {
 	collectNestedBlockStats,
 	normalizeVisiblePatternNames,
@@ -170,6 +171,10 @@ export function buildEditorTemplateTopLevelStructureSnapshot(
 					area,
 					isEmpty: ! slug,
 				};
+			}
+			const editorIdentity = getEditorBlockIdentity( block );
+			if ( editorIdentity ) {
+				entry.editorIdentity = editorIdentity;
 			}
 
 			return entry;

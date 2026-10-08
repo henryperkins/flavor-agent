@@ -103,6 +103,11 @@ function normalizeExpectedTarget( value ) {
 	if ( ! expectedTarget.name ) {
 		return null;
 	}
+	if ( Object.prototype.hasOwnProperty.call( value, 'editorIdentity' ) ) {
+		// Invalid supplied proofs must fail the live target check instead of
+		// silently becoming a legacy name/count-only target.
+		expectedTarget.editorIdentity = value.editorIdentity;
+	}
 
 	return expectedTarget;
 }

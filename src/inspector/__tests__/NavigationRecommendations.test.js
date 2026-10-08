@@ -321,6 +321,50 @@ afterEach( () => {
 } );
 
 describe( 'NavigationRecommendations', () => {
+	test( 'preserves the next draft typed while an embedded navigation request is loading', () => {
+		currentState.blockEditor.blocks = {
+			'nav-1': {
+				clientId: 'nav-1',
+				name: 'core/navigation',
+				attributes: { ref: 42 },
+				innerBlocks: [],
+			},
+		};
+		mockSerialize.mockReturnValue( '<!-- wp:navigation {"ref":42} /-->' );
+		renderEmbeddedComponent();
+		let textarea = getContainer().querySelector( 'textarea' );
+		act( () => {
+			textarea.value = 'First request';
+			textarea.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		} );
+		act( () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find(
+					( button ) =>
+						button.textContent === 'Get Navigation Suggestions'
+				)
+				.click();
+		} );
+		const request = mockFetchNavigationRecommendations.mock.calls[ 0 ][ 0 ];
+		currentState.store.navigationBlockClientId = 'nav-1';
+		currentState.store.navigationStatus = 'loading';
+		renderEmbeddedComponent();
+		textarea = getContainer().querySelector( 'textarea' );
+		act( () => {
+			textarea.value = 'Next draft typed while waiting';
+			textarea.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		} );
+		Object.assign( currentState.store, {
+			navigationStatus: 'ready',
+			navigationRequestPrompt: request.prompt,
+			navigationContextSignature: request.contextSignature,
+		} );
+		renderEmbeddedComponent();
+		expect( getContainer().querySelector( 'textarea' ).value ).toBe(
+			'Next draft typed while waiting'
+		);
+	} );
+
 	test( 'renders docs grounding warnings for current navigation results', () => {
 		const navigationMarkup =
 			'<!-- wp:navigation --><!-- wp:navigation-link {"label":"Home"} /--><!-- /wp:navigation -->';

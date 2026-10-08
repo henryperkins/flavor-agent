@@ -1,13 +1,7 @@
 import { serialize } from '@wordpress/blocks';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
-import {
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from '@wordpress/element';
+import { useCallback, useEffect, useMemo, useRef } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 
 import {
@@ -23,6 +17,7 @@ import RecommendationLane from '../components/RecommendationLane';
 import RecommendationDismissal from '../components/RecommendationDismissal';
 import StaleResultBanner from '../components/StaleResultBanner';
 import SurfaceComposer from '../components/SurfaceComposer';
+import useRecommendationDraft from '../components/use-recommendation-draft';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import { STORE_NAME } from '../store';
@@ -397,8 +392,8 @@ export default function NavigationRecommendations( {
 		fetchNavigationRecommendations,
 		revalidateNavigationReviewFreshness,
 	} = useDispatch( STORE_NAME );
-	const [ prompt, setPrompt ] = useState( '' );
-	const isPromptInitializedRef = useRef( false );
+	const { prompt, setPrompt, hydratePrompt, resetPrompt } =
+		useRecommendationDraft();
 	const previousClientId = useRef( clientId );
 	const hydratedResultKeyRef = useRef( '' );
 	const liveContextSignature = useSelect(
@@ -530,11 +525,10 @@ export default function NavigationRecommendations( {
 
 		previousClientId.current = clientId;
 		hydratedResultKeyRef.current = '';
-		isPromptInitializedRef.current = false;
 
 		clearNavigationRecommendations();
-		setPrompt( '' );
-	}, [ clientId, clearNavigationRecommendations ] );
+		resetPrompt();
+	}, [ resetPrompt, clientId, clearNavigationRecommendations ] );
 
 	useEffect( () => {
 		const hydrationKey =
@@ -549,9 +543,9 @@ export default function NavigationRecommendations( {
 		}
 
 		hydratedResultKeyRef.current = hydrationKey;
-		isPromptInitializedRef.current = true;
-		setPrompt( requestPrompt || '' );
+		hydratePrompt( requestPrompt );
 	}, [
+		hydratePrompt,
 		clientId,
 		currentResultContextSignature,
 		requestPrompt,
@@ -607,6 +601,7 @@ export default function NavigationRecommendations( {
 		} );
 
 		if ( canRecommend && refreshInput ) {
+			setPrompt( refreshPrompt );
 			fetchNavigationRecommendations( {
 				...refreshInput,
 				contextSignature: refreshContextSignature,
@@ -620,12 +615,10 @@ export default function NavigationRecommendations( {
 		navigationBlock,
 		prompt,
 		requestPrompt,
+		setPrompt,
 	] );
 
-	const handlePromptChange = useCallback( ( nextPrompt ) => {
-		isPromptInitializedRef.current = true;
-		setPrompt( nextPrompt );
-	}, [] );
+	const handlePromptChange = setPrompt;
 
 	if ( navigationBlock?.name !== 'core/navigation' ) {
 		return null;

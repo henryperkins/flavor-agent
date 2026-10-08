@@ -2,13 +2,7 @@ import { Button, Tooltip } from '@wordpress/components';
 import { store as blockEditorStore } from '@wordpress/block-editor';
 import { useDispatch, useSelect } from '@wordpress/data';
 import { PluginDocumentSettingPanel } from '@wordpress/editor';
-import {
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from '@wordpress/element';
+import { useCallback, useEffect, useMemo, useRef } from '@wordpress/element';
 import { __, sprintf } from '@wordpress/i18n';
 
 import AIActivitySection from '../components/AIActivitySection';
@@ -20,6 +14,7 @@ import LinkedEntityText from '../components/LinkedEntityText';
 import RecommendationLane from '../components/RecommendationLane';
 import RecommendationDismissal from '../components/RecommendationDismissal';
 import SurfaceComposer from '../components/SurfaceComposer';
+import useRecommendationDraft from '../components/use-recommendation-draft';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
 	REVIEW_LANE_LABEL,
@@ -222,6 +217,7 @@ function buildTemplatePartSuggestionViewModel(
 								)
 									? operation.targetPath
 									: null,
+								expectedTarget: operation.expectedTarget,
 								badgeLabel: 'Insert',
 							};
 
@@ -235,6 +231,7 @@ function buildTemplatePartSuggestionViewModel(
 									operation.patternName,
 								expectedBlockName: operation.expectedBlockName,
 								targetPath: operation.targetPath,
+								expectedTarget: operation.expectedTarget,
 								badgeLabel: 'Replace',
 							};
 
@@ -244,6 +241,7 @@ function buildTemplatePartSuggestionViewModel(
 								type: TEMPLATE_OPERATION_REMOVE_BLOCK,
 								expectedBlockName: operation.expectedBlockName,
 								targetPath: operation.targetPath,
+								expectedTarget: operation.expectedTarget,
 								badgeLabel: 'Remove',
 							};
 
@@ -498,7 +496,8 @@ export default function TemplatePartRecommender() {
 		setTemplatePartStatus,
 		undoActivity,
 	} = useDispatch( STORE_NAME );
-	const [ prompt, setPrompt ] = useState( '' );
+	const { prompt, setPrompt, hydratePrompt, resetPrompt, getPrompt } =
+		useRecommendationDraft();
 	const hydratedResultKeyRef = useRef( null );
 	const previousTemplatePartRef = useRef( templatePartRef );
 	const templatePartAreaLookup = useMemo(
@@ -590,6 +589,25 @@ export default function TemplatePartRecommender() {
 			visiblePatternNames,
 		]
 	);
+	const liveRequestRef = useRef( null );
+	liveRequestRef.current = {
+		requestSignature: recommendationRequestSignature,
+		requestInput: currentRequestInput,
+	};
+	const getLiveRequestState = useCallback( () => {
+		const liveState = liveRequestRef.current;
+		if ( ! liveState.requestInput ) {
+			return liveState;
+		}
+		const { prompt: previousPrompt, ...requestInput } =
+			liveState.requestInput;
+		void previousPrompt;
+		const currentPrompt = getPrompt().trim();
+		if ( currentPrompt ) {
+			requestInput.prompt = currentPrompt;
+		}
+		return { ...liveState, requestInput };
+	}, [ getPrompt ] );
 	const resultRequestSignature = useMemo(
 		() =>
 			buildTemplatePartRecommendationRequestSignature( {
@@ -649,9 +667,10 @@ export default function TemplatePartRecommender() {
 		clearTemplatePartRecommendations();
 
 		if ( templatePartChanged ) {
-			setPrompt( '' );
+			resetPrompt();
 		}
 	}, [
+		resetPrompt,
 		clearTemplatePartRecommendations,
 		recommendationContextSignature,
 		templatePartRef,
@@ -670,8 +689,9 @@ export default function TemplatePartRecommender() {
 		}
 
 		hydratedResultKeyRef.current = hydrationKey;
-		setPrompt( resultPrompt );
+		hydratePrompt( resultPrompt );
 	}, [
+		hydratePrompt,
 		hasStoredResultForTemplatePart,
 		resultPrompt,
 		resultRef,
@@ -872,10 +892,15 @@ export default function TemplatePartRecommender() {
 			applyTemplatePartSuggestion(
 				suggestion,
 				currentRequestSignature,
-				currentRequestInput
+				currentRequestInput,
+				getLiveRequestState
 			);
 		},
-		[ applyTemplatePartSuggestion, currentRequestInput ]
+		[
+			applyTemplatePartSuggestion,
+			currentRequestInput,
+			getLiveRequestState,
+		]
 	);
 	const handleUndo = useCallback(
 		( activityId ) => {

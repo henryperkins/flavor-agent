@@ -12,6 +12,36 @@ use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 
 final class TemplateAbilitiesTest extends TestCase {
+	public function test_editor_target_identity_changes_the_resolved_signature_on_both_template_surfaces(): void {
+		foreach ( [ 'template', 'template-part' ] as $surface ) {
+			$node  = [
+				'path'           => [ 0 ],
+				'name'           => 'core/paragraph',
+				'childCount'     => 0,
+				'editorIdentity' => [
+					'clientId'         => 'a',
+					'subtreeSignature' => '{"content":"Reviewed"}',
+				],
+			];
+			$input = [ 'resolveSignatureOnly' => true ];
+			if ( 'template' === $surface ) {
+				$input['templateRef']     = 'theme//home';
+				$input['editorStructure'] = [ 'topLevelBlockTree' => [ $node ] ];
+				$baseline                 = TemplateAbilities::recommend_template( $input );
+				$input['editorStructure']['topLevelBlockTree'][0]['editorIdentity']['clientId'] = 'b';
+				$changed = TemplateAbilities::recommend_template( $input );
+			} else {
+				$input['templatePartRef'] = 'theme//header';
+				$input['editorStructure'] = [ 'allBlockPaths' => [ $node ] ];
+				$baseline                 = TemplateAbilities::recommend_template_part( $input );
+				$input['editorStructure']['allBlockPaths'][0]['editorIdentity']['clientId'] = 'b';
+				$changed = TemplateAbilities::recommend_template_part( $input );
+			}
+			$this->assertIsArray( $baseline );
+			$this->assertIsArray( $changed );
+			$this->assertNotSame( $baseline['resolvedContextSignature'], $changed['resolvedContextSignature'], $surface );
+		}
+	}
 
 	protected function setUp(): void {
 		parent::setUp();

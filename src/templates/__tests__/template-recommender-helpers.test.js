@@ -18,6 +18,22 @@ import {
 import { buildContextSignature } from '../../utils/context-signature';
 
 describe( 'template recommender helpers', () => {
+	test( 'invalidates review after same-shaped insertion anchors exchange paths', () => {
+		const a = {
+			clientId: 'a',
+			name: 'core/paragraph',
+			attributes: { content: 'Same' },
+			innerBlocks: [],
+		};
+		const b = { ...a, clientId: 'b' };
+		const signature = ( blocks ) =>
+			buildTemplateRecommendationContextSignature( {
+				editorStructure:
+					buildEditorTemplateTopLevelStructureSnapshot( blocks ),
+			} );
+
+		expect( signature( [ a, b ] ) ).not.toBe( signature( [ b, a ] ) );
+	} );
 	test( 'buildTemplateFetchInput trims prompt and keeps template requests template-global', () => {
 		expect(
 			buildTemplateFetchInput( {

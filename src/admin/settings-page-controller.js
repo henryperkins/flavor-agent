@@ -1393,6 +1393,11 @@ function initializePatternSync( root, fetchImpl ) {
 			setBusy( keepBusyAfterRequest );
 		}
 	} );
+
+	if ( getCurrentSyncStatus() === 'indexing' ) {
+		setBusy( true );
+		pollSyncState();
+	}
 }
 
 export function initializeSettingsPage( {

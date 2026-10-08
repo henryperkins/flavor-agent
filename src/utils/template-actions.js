@@ -34,6 +34,7 @@ import {
 	matchesTemplatePartArea,
 } from './template-part-areas';
 import { deepStructuralEqual } from './structural-equality';
+import { matchesEditorBlockIdentity } from './editor-block-identity';
 import { __ } from '@wordpress/i18n';
 
 /* ------------------------------------------------------------------ */
@@ -245,6 +246,14 @@ function normalizeRichTextValue( value ) {
 			return value.toHTMLString();
 		}
 	} catch {}
+
+	if (
+		typeof value?.text !== 'string' ||
+		! Array.isArray( value.formats ) ||
+		! Array.isArray( value.replacements )
+	) {
+		return null;
+	}
 
 	try {
 		return toHTMLString( { value } );
@@ -1058,6 +1067,15 @@ function matchesExpectedTemplateTarget( block, expectedTarget = {} ) {
 	}
 
 	if ( block.name !== expectedTarget.name ) {
+		return false;
+	}
+	if (
+		Object.prototype.hasOwnProperty.call(
+			expectedTarget,
+			'editorIdentity'
+		) &&
+		! matchesEditorBlockIdentity( block, expectedTarget.editorIdentity )
+	) {
 		return false;
 	}
 

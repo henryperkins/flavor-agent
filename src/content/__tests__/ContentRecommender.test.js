@@ -191,6 +191,53 @@ beforeEach( () => {
 } );
 
 describe( 'ContentRecommender', () => {
+	test( 'preserves the next draft typed while a content request is loading', () => {
+		act( () => getRoot().render( <ContentRecommender /> ) );
+		let textarea = getContainer().querySelector( 'textarea' );
+		act( () => {
+			textarea.value = 'First request';
+			textarea.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		} );
+		act( () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find(
+					( button ) => button.textContent === 'Generate Draft Text'
+				)
+				.click();
+		} );
+		const request = mockFetchContentRecommendations.mock.calls[ 0 ][ 0 ];
+		currentState.store.contentStatus = 'loading';
+		act( () => getRoot().render( <ContentRecommender /> ) );
+		textarea = getContainer().querySelector( 'textarea' );
+		act( () => {
+			textarea.value = 'Next draft typed while waiting';
+			textarea.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		} );
+		Object.assign( currentState.store, {
+			contentStatus: 'ready',
+			contentRequestPrompt: request.prompt,
+			contentRecommendationRequestSignature:
+				buildContentRecommendationRequestSignature( request ),
+			contentRecommendation: { mode: 'draft', content: 'Generated text' },
+		} );
+		act( () => getRoot().render( <ContentRecommender /> ) );
+		act( () => {
+			getContainer()
+				.querySelector(
+					'.flavor-agent-content-recommender__refine-toggle'
+				)
+				.click();
+		} );
+		expect( getContainer().querySelector( 'textarea' ).value ).toBe(
+			'Next draft typed while waiting'
+		);
+		expect(
+			Array.from( getContainer().querySelectorAll( 'button' ) ).find(
+				( button ) => button.textContent === 'Copy generated text'
+			).disabled
+		).toBe( true );
+	} );
+
 	test( 'renders on supported posts and sends current post context with requests', () => {
 		act( () => {
 			getRoot().render( <ContentRecommender /> );

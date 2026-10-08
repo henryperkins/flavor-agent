@@ -17,6 +17,111 @@ final class ActivitySerializerTest extends TestCase {
 		WordPressTestState::reset();
 	}
 
+	/** @dataProvider decision_permission_modes */
+	public function test_hydrated_decision_permission_uses_the_current_viewer_and_row_target( string $surface, array $capabilities, bool $expected ): void {
+		WordPressTestState::$capabilities = $capabilities;
+		$is_post                          = 'post-blocks' === $surface;
+		$entry                            = Serializer::hydrate_row(
+			[
+				'activity_id'   => 'pending-permission',
+				'activity_type' => $is_post ? 'apply_post_blocks_suggestion' : 'apply_global_styles_suggestion',
+				'surface'       => $surface,
+				'apply_lane'    => 'server-executed',
+				'target_json'   => wp_json_encode(
+					$is_post ? [
+						'postId'   => 42,
+						'postType' => 'post',
+					] : [ 'globalStylesId' => '17' ]
+				),
+				'document_json' => wp_json_encode(
+					$is_post ? [
+						'scopeKey' => 'post:42',
+						'postType' => 'post',
+						'entityId' => '42',
+					] : [
+						'scopeKey' => 'global_styles:17',
+						'postType' => 'global_styles',
+						'entityId' => '17',
+					]
+				),
+				'request_json'  => wp_json_encode( [ 'apply' => [ 'status' => 'pending' ] ] ),
+			]
+		);
+
+		$this->assertArrayHasKey( 'canDecide', $entry );
+		$this->assertSame( $expected, $entry['canDecide'] );
+	}
+
+	public static function decision_permission_modes(): array {
+		return [
+			'post operator without themes' => [
+				'post-blocks',
+				[
+					'manage_options'     => true,
+					'edit_post:42'       => true,
+					'edit_theme_options' => false,
+				],
+				true,
+			],
+			'wrong post'                   => [
+				'post-blocks',
+				[
+					'manage_options' => true,
+					'edit_post:42'   => false,
+					'edit_post:99'   => true,
+				],
+				false,
+			],
+			'no admin access'              => [
+				'post-blocks',
+				[
+					'manage_options' => false,
+					'edit_post:42'   => true,
+				],
+				false,
+			],
+			'theme operator'               => [
+				'global-styles',
+				[
+					'manage_options'     => true,
+					'edit_theme_options' => true,
+				],
+				true,
+			],
+			'theme denied'                 => [
+				'global-styles',
+				[
+					'manage_options'     => true,
+					'edit_theme_options' => false,
+				],
+				false,
+			],
+		];
+	}
+
+	public function test_editor_authored_apply_payload_cannot_grant_a_server_decision(): void {
+		WordPressTestState::$capabilities = [
+			'manage_options'     => true,
+			'edit_theme_options' => true,
+		];
+		$entry                            = Serializer::hydrate_row(
+			[
+				'surface'       => 'global-styles',
+				'activity_type' => 'apply_global_styles_suggestion',
+				'apply_lane'    => 'editor-state',
+				'document_json' => wp_json_encode(
+					[
+						'scopeKey' => 'global_styles:17',
+						'postType' => 'global_styles',
+						'entityId' => '17',
+					]
+				),
+				'request_json'  => wp_json_encode( [ 'apply' => [ 'status' => 'pending' ] ] ),
+			]
+		);
+		$this->assertFalse( $entry['canDecide'] );
+	}
+
 	public function test_normalize_entry_trims_scalars_and_normalizes_undo_state(): void {
 		$entry = Serializer::normalize_entry(
 			[

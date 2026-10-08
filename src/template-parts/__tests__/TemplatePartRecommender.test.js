@@ -2,6 +2,7 @@ const mockUseDispatch = jest.fn();
 const mockUseSelect = jest.fn();
 const mockGetBlockPatterns = jest.fn();
 const mockFetchTemplatePartRecommendations = jest.fn();
+const mockApplyTemplatePartSuggestion = jest.fn();
 const mockRevalidateTemplatePartReviewFreshness = jest.fn();
 const mockRecordRecommendationOutcome = jest.fn();
 const mockGetTemplatePartActivityUndoState = jest.fn(
@@ -346,7 +347,7 @@ beforeEach( async () => {
 	mockOpenInserterForPattern.mockReset();
 	mockSelectBlockByPath.mockReset();
 	mockUseDispatch.mockImplementation( () => ( {
-		applyTemplatePartSuggestion: jest.fn(),
+		applyTemplatePartSuggestion: mockApplyTemplatePartSuggestion,
 		clearTemplatePartRecommendations: jest.fn(),
 		clearUndoError: jest.fn(),
 		fetchTemplatePartRecommendations: mockFetchTemplatePartRecommendations,
@@ -368,6 +369,106 @@ afterEach( async () => {
 } );
 
 describe( 'TemplatePartRecommender', () => {
+	test.each( [
+		{
+			type: 'insert_pattern',
+			patternName: 'theme/utility-links',
+			placement: 'before_block_path',
+			targetPath: [ 0 ],
+		},
+		{
+			type: 'replace_block_with_pattern',
+			patternName: 'theme/utility-links',
+			expectedBlockName: 'core/navigation',
+			targetPath: [ 0 ],
+		},
+		{
+			type: 'remove_block',
+			expectedBlockName: 'core/navigation',
+			targetPath: [ 0 ],
+		},
+	] )(
+		'forwards the reviewed target proof and live request for $type',
+		async ( operation ) => {
+			const expectedTarget = {
+				name: 'core/navigation',
+				editorIdentity: {
+					clientId: 'reviewed-id',
+					subtreeSignature: 'opaque reviewed subtree',
+				},
+			};
+			currentState = createState( {
+				store: {
+					templatePartRecommendations: [
+						{
+							label: 'Update navigation',
+							operations: [ { ...operation, expectedTarget } ],
+						},
+					],
+					templatePartResultRef: 'theme//header',
+					templatePartSelectedSuggestionKey: 'Update navigation-0',
+					templatePartStatus: 'ready',
+				},
+			} );
+			currentState.store.templatePartContextSignature =
+				buildTemplatePartContextSignature();
+			await renderPanel();
+			expect( getButton( 'Confirm Apply' )?.disabled ).toBe( false );
+			await act( async () => getButton( 'Confirm Apply' ).click() );
+			const [
+				suggestion,
+				requestSignature,
+				requestInput,
+				getLiveRequestState,
+			] = mockApplyTemplatePartSuggestion.mock.calls[ 0 ];
+			expect( suggestion.operations[ 0 ].expectedTarget ).toEqual(
+				expectedTarget
+			);
+			expect( getLiveRequestState ).toEqual( expect.any( Function ) );
+			expect( getLiveRequestState() ).toEqual( {
+				requestSignature,
+				requestInput,
+			} );
+			const textarea = getContainer().querySelector( 'textarea' );
+			act( () => {
+				textarea.value = 'Next review request';
+				textarea.dispatchEvent(
+					new Event( 'input', { bubbles: true } )
+				);
+				expect( getLiveRequestState().requestInput.prompt ).toBe(
+					'Next review request'
+				);
+			} );
+			expect( getLiveRequestState().requestInput.prompt ).toBe(
+				'Next review request'
+			);
+			expect( getLiveRequestState().requestSignature ).not.toBe(
+				requestSignature
+			);
+		}
+	);
+
+	test( 'preserves the next draft typed while a template-part request is loading', async () => {
+		currentState.store.templatePartStatus = 'loading';
+		await renderPanel();
+		const textarea = getContainer().querySelector( 'textarea' );
+		act( () => {
+			textarea.value = 'Next draft typed while waiting';
+			textarea.dispatchEvent( new Event( 'input', { bubbles: true } ) );
+		} );
+		Object.assign( currentState.store, {
+			templatePartStatus: 'ready',
+			templatePartRequestPrompt: 'Completed request',
+			templatePartResultRef: 'theme//header',
+			templatePartResultToken: 2,
+			templatePartContextSignature: buildTemplatePartContextSignature(),
+		} );
+		await renderPanel();
+		expect( getContainer().querySelector( 'textarea' ).value ).toBe(
+			'Next draft typed while waiting'
+		);
+	} );
+
 	test( 'renders docs grounding warnings before template-part suggestions', async () => {
 		currentState = createState( {
 			store: {

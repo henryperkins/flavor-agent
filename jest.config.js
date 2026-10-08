@@ -14,6 +14,16 @@ module.exports = {
 		...( baseConfig.testPathIgnorePatterns || [ '/node_modules/' ] ),
 		'/tools/code-search/',
 		'/\\.worktrees/',
+		'/\\.claude/worktrees/',
+		'/output/',
+	],
+	// Ignore generated harness trees and adjacent checkouts during module
+	// discovery too, so their package.json files cannot create haste collisions.
+	modulePathIgnorePatterns: [
+		...( baseConfig.modulePathIgnorePatterns || [] ),
+		'<rootDir>/.worktrees/',
+		'<rootDir>/.claude/worktrees/',
+		'<rootDir>/output/',
 	],
 	transformIgnorePatterns: [
 		'/node_modules/(?!(uuid)/)',

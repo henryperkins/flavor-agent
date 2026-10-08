@@ -1006,6 +1006,7 @@ EXAMPLE
 				'attributes' => is_array( $node['attributes'] ?? null ) ? $node['attributes'] : [],
 				'childCount' => isset( $node['childCount'] ) ? (int) $node['childCount'] : 0,
 				'slot'       => is_array( $node['slot'] ?? null ) ? $node['slot'] : [],
+				...( array_key_exists( 'editorIdentity', $node ) ? [ 'editorIdentity' => $node['editorIdentity'] ] : [] ),
 			];
 		}
 
@@ -1049,6 +1050,9 @@ EXAMPLE
 		];
 
 		$slot = is_array( $target_node['slot'] ?? null ) ? $target_node['slot'] : [];
+		if ( array_key_exists( 'editorIdentity', $target_node ) ) {
+			$expected['editorIdentity'] = $target_node['editorIdentity'];
+		}
 		if ( count( $slot ) > 0 ) {
 			$expected['slot'] = [
 				'slug'    => sanitize_key( (string) ( $slot['slug'] ?? '' ) ),

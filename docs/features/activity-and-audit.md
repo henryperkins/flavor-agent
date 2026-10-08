@@ -20,6 +20,8 @@ External-agent applies are intentionally narrower than the editor-owned apply ma
 - The admin approval/audit/attestation-discovery page appears only for users with `manage_options`
 - Sitewide activity queries are admin-only; scoped activity access follows contextual capability checks through `FlavorAgent\Activity\Permissions`
 
+Each server-hydrated row includes a viewer-specific boolean `canDecide`, derived from the same authorization used by the decision route. Pending post-blocks rows require `manage_options` and the target post's edit capability; theme rows additionally require `edit_theme_options`. The admin UI enables approval, rejection, and advisory review claims only for `canDecide: true`. Missing grants fail closed, and every mutation route still rechecks authorization.
+
 ## End-To-End Flow
 
 1. A deterministic apply flow succeeds in the block, template, template-part, Global Styles, or Style Book surface, or a scoped recommendation request succeeds, fails, or returns diagnostic-only output

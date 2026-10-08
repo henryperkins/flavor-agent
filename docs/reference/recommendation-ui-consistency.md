@@ -152,6 +152,10 @@ All executable history surfaces depend on `src/store/activity-history.js` for or
 
 ### Intentional Loading Differences
 
+Prompt composers remain editable while a request is loading. Completing that request must preserve a draft edited since submission; only an untouched draft may hydrate the stored request prompt. A preserved draft makes the older result stale and keeps executable or copy actions disabled until refreshed. An untouched remounted panel still restores its stored prompt.
+
+Template, Template-Part, Global Styles, and Style Book apply actions recheck the latest panel request and the synchronous editor state after asynchronous server preflight. Scope, block identity/content, execution settings, or style config drift blocks mutation and asks for refreshed recommendations.
+
 - Template and Template-Part keep explicit `Analyzing … structure…` notices because the user is waiting on structural validation that may or may not yield executable operations.
 - Block, Style Book, and Global Styles rely on the composer button's loading label while the rest of the surface shell stays visible, which is acceptable because those panels keep the active scope and lane context on screen during the request.
 - Content keeps the full composer visible before usable output and after empty responses. Once a usable result exists, the mode and prompt controls move behind the `Refine request` disclosure so the latest generated recommendation remains the primary object on screen.

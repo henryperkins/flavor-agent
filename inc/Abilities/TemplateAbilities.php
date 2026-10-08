@@ -441,6 +441,9 @@ final class TemplateAbilities {
 				];
 
 				$attributes = self::normalize_template_block_attributes( $node['attributes'] ?? null );
+				if ( array_key_exists( 'editorIdentity', $node ) ) {
+					$entry['editorIdentity'] = self::normalize_editor_block_identity( $node['editorIdentity'] );
+				}
 				if ( [] !== $attributes ) {
 					$entry['attributes'] = $attributes;
 				}
@@ -1178,11 +1181,29 @@ final class TemplateAbilities {
 		];
 
 		$slot = self::normalize_template_slot_summary( $node['slot'] ?? null );
+		if ( array_key_exists( 'editorIdentity', $node ) ) {
+			$entry['editorIdentity'] = self::normalize_editor_block_identity( $node['editorIdentity'] );
+		}
 		if ( [] !== $slot ) {
 			$entry['slot'] = $slot;
 		}
 
 		return $entry;
+	}
+
+	/**
+	 * Preserve the opaque local editor proof for signatures and client execution.
+	 * Invalid proof stays invalid so the client cannot fall back to a path match.
+	 *
+	 * @return array{clientId: string, subtreeSignature: string}
+	 */
+	private static function normalize_editor_block_identity( mixed $input ): array {
+		$input = self::normalize_input( $input );
+
+		return [
+			'clientId'         => is_string( $input['clientId'] ?? null ) ? sanitize_text_field( $input['clientId'] ) : '',
+			'subtreeSignature' => is_string( $input['subtreeSignature'] ?? null ) ? $input['subtreeSignature'] : '',
+		];
 	}
 
 	/**

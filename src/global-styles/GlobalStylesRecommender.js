@@ -19,6 +19,7 @@ import DocsGroundingNotice from '../components/DocsGroundingNotice';
 import RecommendationHero from '../components/RecommendationHero';
 import RecommendationLane from '../components/RecommendationLane';
 import SurfaceComposer from '../components/SurfaceComposer';
+import useRecommendationDraft from '../components/use-recommendation-draft';
 import SurfacePanelIntro from '../components/SurfacePanelIntro';
 import SurfaceScopeBar from '../components/SurfaceScopeBar';
 import {
@@ -360,7 +361,8 @@ function GlobalStylesPanel( {
 
 export default function GlobalStylesRecommender() {
 	const registry = useRegistry();
-	const [ prompt, setPrompt ] = useState( '' );
+	const { prompt, setPrompt, hydratePrompt, resetPrompt, getPrompt } =
+		useRecommendationDraft();
 	const [ portalNode, setPortalNode ] = useState( null );
 	const hydratedResultKeyRef = useRef( null );
 	const [ styleBookUiState, setStyleBookUiState ] = useState( () =>
@@ -572,6 +574,25 @@ export default function GlobalStylesRecommender() {
 			themeTokenDiagnostics,
 		]
 	);
+	const liveRequestRef = useRef( null );
+	liveRequestRef.current = {
+		requestSignature: recommendationRequestSignature,
+		requestInput: currentRequestInput,
+	};
+	const getLiveRequestState = useCallback( () => {
+		const liveState = liveRequestRef.current;
+		if ( ! liveState.requestInput ) {
+			return liveState;
+		}
+		const { prompt: previousPrompt, ...requestInput } =
+			liveState.requestInput;
+		void previousPrompt;
+		const currentPrompt = getPrompt().trim();
+		if ( currentPrompt ) {
+			requestInput.prompt = currentPrompt;
+		}
+		return { ...liveState, requestInput };
+	}, [ getPrompt ] );
 	const resultRequestSignature =
 		buildGlobalStylesRecommendationRequestSignature( {
 			scope: {
@@ -809,9 +830,10 @@ export default function GlobalStylesRecommender() {
 		clearGlobalStylesRecommendations();
 
 		if ( entityChanged ) {
-			setPrompt( '' );
+			resetPrompt();
 		}
 	}, [
+		resetPrompt,
 		clearGlobalStylesRecommendations,
 		recommendationContextSignature,
 		scope?.globalStylesId,
@@ -830,8 +852,9 @@ export default function GlobalStylesRecommender() {
 		}
 
 		hydratedResultKeyRef.current = hydrationKey;
-		setPrompt( currentRequestPrompt );
+		hydratePrompt( currentRequestPrompt );
 	}, [
+		hydratePrompt,
 		currentRequestPrompt,
 		currentResultRef,
 		currentResultToken,
@@ -905,12 +928,14 @@ export default function GlobalStylesRecommender() {
 			applyGlobalStylesSuggestion(
 				selectedSuggestion,
 				recommendationRequestSignature,
-				currentRequestInput
+				currentRequestInput,
+				getLiveRequestState
 			);
 		}
 	}, [
 		applyGlobalStylesSuggestion,
 		currentRequestInput,
+		getLiveRequestState,
 		recommendationRequestSignature,
 		selectedSuggestion,
 	] );

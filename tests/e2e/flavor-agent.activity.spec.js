@@ -409,6 +409,7 @@ for ( const harnessTag of [ '', '@wp70-site-editor ' ] ) {
 				surface,
 				applyLane: 'server-executed',
 				status: 'pending',
+				canDecide: true,
 				suggestion: 'Review this proposed change',
 				target: {
 					globalStylesId: '17',
