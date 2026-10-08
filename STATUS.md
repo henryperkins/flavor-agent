@@ -1,6 +1,22 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-10-07
+> Last updated: 2026-10-08
+
+## v0.1.2 dependency candidate
+
+The [v0.1.2 candidate](docs/releases/v0.1.2.md) patches locked dependencies. The AI Activity bundle now ships colord 2.9.4, the fix for GHSA-2wm5-q62r-hmrv, and other locked packages move to patched releases within their declared ranges. No PHP logic, editor or admin source changed. Only `build/activity-log.js` and its asset version hash differ among the built assets. Against the October 7 Dependabot snapshot, 64 of 78 alerts are projected resolved, including all critical and all runtime alerts. Fourteen development-only alerts remain.
+
+The [validation record](docs/validation/2026-10-08-v0.1.2-release-validation.md) keeps these runs separate:
+
+- Strict run 1 at `c50e0e4`: its Site Editor failure came from a pre-existing pattern-catalog hydration race, which was reproduced on fresh installs. The product race stays open in [current open work](docs/reference/current-open-work.md).
+- The test-only hardening at `ec2b9f9`.
+- Strict run 2 at `ec2b9f9`, 9 of 9: 123 suites / 2,207 Jest tests, 2,536 PHPUnit tests, Playground 35/35 and Site Editor 47/47.
+- The bundled-editor leg, 47/47.
+- A production-matched leg on WordPress 7.1.3, PHP 8.4.26 and Gutenberg 24.1.0, 47/47.
+- PHP 8.4.26 PHPUnit.
+- The exact 223-file ZIP, SHA-256 `7a736f443a31d95b77e50de8bfa1721460627cf46e0eb99073650199803c1466`, with clean native probes and Plugin Check.
+
+Corpus settlement still blocks release, and a Cloudflare escalation is open. Automated deployment remains off.
 
 ## v0.1.1 release preparation
 
