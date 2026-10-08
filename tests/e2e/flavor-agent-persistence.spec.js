@@ -72,6 +72,30 @@ async function dismissWelcomeGuide( page ) {
 	await expect( welcome ).toBeHidden();
 }
 
+async function waitForPatternCatalogHydration( page ) {
+	// Structural block actions hash the allowed-pattern catalog into the request
+	// signature. On a fresh install the catalog can hydrate after the first
+	// request, which marks that result stale although neither block nor prompt
+	// changed. Mirrors the smoke spec's helper of the same name.
+	await expect
+		.poll(
+			() =>
+				page.evaluate( () => {
+					const blockEditor =
+						window.wp?.data?.select( 'core/block-editor' );
+					const allowed =
+						blockEditor?.getAllowedPatterns?.( '' ) ||
+						blockEditor?.__experimentalGetAllowedPatterns?.( '' ) ||
+						[];
+
+					return allowed.filter( ( pattern ) => pattern?.name )
+						.length;
+				} ),
+			{ timeout: 30_000 }
+		)
+		.toBeGreaterThan( 0 );
+}
+
 async function openRecommendationEditor( page, title, { apply = true } = {} ) {
 	// Same-type neighbors require the apply's unchanged attributes to identify
 	// its target; a single paragraph would hide a missing identity snapshot.
@@ -174,6 +198,7 @@ async function openRecommendationEditor( page, title, { apply = true } = {} ) {
 			.click();
 	}
 	await expect( prompt ).toBeVisible();
+	await waitForPatternCatalogHydration( page );
 	await page
 		.getByRole( 'button', { name: 'Get Suggestions', exact: true } )
 		.click();
