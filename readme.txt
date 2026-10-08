@@ -4,7 +4,7 @@ Tags: ai, blocks, patterns, editor
 Requires at least: 7.0
 Tested up to: 7.1
 Requires PHP: 8.2
-Stable tag: 0.1.1
+Stable tag: 0.1.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -79,6 +79,10 @@ Only data needed for the requested surface is sent after setup or explicit user 
 Source code and build tooling are maintained at https://github.com/henryperkins/flavor-agent. The submitted plugin zip contains compiled editor/admin assets in `build/`; those assets are built from the repository source with `npm ci`, `composer install`, and `npm run build`.
 
 == Changelog ==
+
+= 0.1.2 =
+* Update the colord color parser bundled in the AI Activity screen to 2.9.4, which parses color strings in linear time (GHSA-2wm5-q62r-hmrv).
+* Move locked build and test tooling to patched releases. Plugin code is otherwise unchanged from 0.1.1.
 
 = 0.1.1 =
 * Add explicit, nonterminal recommendation dismissal with visible suggestion identities and separate coverage counts.
