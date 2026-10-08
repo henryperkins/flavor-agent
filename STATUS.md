@@ -9,10 +9,10 @@ The [v0.1.2 candidate](docs/releases/v0.1.2.md) patches locked dependencies. The
 The [validation record](docs/validation/2026-10-08-v0.1.2-release-validation.md) keeps these runs separate:
 
 - Strict run 1 at `c50e0e4`: its Site Editor failure came from a pre-existing pattern-catalog hydration race, which was reproduced on fresh installs. The product race stays open in [current open work](docs/reference/current-open-work.md).
-- The test-only hardening at `ec2b9f9`.
-- Strict run 2 at `ec2b9f9`, 9 of 9: 123 suites / 2,207 Jest tests, 2,536 PHPUnit tests, Playground 35/35 and Site Editor 47/47.
-- The bundled-editor leg, 47/47.
-- A production-matched leg on WordPress 7.1.3, PHP 8.4.26 and Gutenberg 24.1.0, 47/47.
+- The test-only hardening at `ec2b9f9`, and the settled-catalog wait at `3bb701a` adopted from PR review.
+- Strict runs 2 (`ec2b9f9`) and 3 (`3bb701a`), each 9 of 9: 123 suites / 2,207 Jest tests, 2,536 PHPUnit tests, Playground 35/35 and Site Editor 47/47.
+- Bundled-editor legs at both revisions, 47/47 each.
+- Production-matched legs on WordPress 7.1.3, PHP 8.4.26 and Gutenberg 24.1.0 at both revisions, 47/47 each.
 - PHP 8.4.26 PHPUnit.
 - The exact 223-file ZIP, SHA-256 `7a736f443a31d95b77e50de8bfa1721460627cf46e0eb99073650199803c1466`, with clean native probes and Plugin Check.
 
