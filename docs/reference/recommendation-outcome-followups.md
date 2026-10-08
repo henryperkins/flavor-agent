@@ -1,6 +1,6 @@
 # Recommendation Outcome Follow-up Contracts
 
-Contract version: v1. Runtime target: 0.1.1, 2026-10-07. Explicit dismissal and the local fixture exporter implement these contracts. A valid export remains a local review candidate; production qualification, sharing, and adaptive ranking require their separate evidence and authorization. Runtime contracts remain in [abilities and routes](abilities-and-routes.md), [activity state machine](activity-state-machine.md), and [save persistence outcomes](../features/save-persistence-outcomes.md).
+Contract version: v1. Runtime target: 0.1.2, 2026-10-08 (contracts unchanged since 0.1.1). Explicit dismissal and the local fixture exporter implement these contracts. A valid export remains a local review candidate; production qualification, sharing, and adaptive ranking require their separate evidence and authorization. Runtime contracts remain in [abilities and routes](abilities-and-routes.md), [activity state machine](activity-state-machine.md), and [save persistence outcomes](../features/save-persistence-outcomes.md).
 
 ## Current Runtime Boundary
 

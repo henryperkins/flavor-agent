@@ -3,7 +3,7 @@
 > Created: 2026-03-25
 > Purpose: documentation entry point and maintenance contract for the repo
 
-Current v0.1.1 preparation: [release notes](releases/v0.1.1.md) and [exact candidate/archive validation](validation/2026-10-07-v0.1.1-release-validation.md). Local implementation and package gates passed; corpus settlement and production qualification/deployment retain separate evidence.
+Current v0.1.2 preparation: [release notes](releases/v0.1.2.md). This dependency-security candidate supersedes the never-deployed v0.1.1 candidate ([notes](releases/v0.1.1.md), [exact candidate/archive validation](validation/2026-10-07-v0.1.1-release-validation.md)). Corpus settlement and production qualification/deployment retain separate evidence.
 
 ## Why This Exists
 
