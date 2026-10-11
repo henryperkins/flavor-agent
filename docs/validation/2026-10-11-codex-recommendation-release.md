@@ -56,8 +56,8 @@ Immediately before and after upload, the site retained 34 installed plugins, 25 
 
 Production receipts, backup status, plugin inventories, downloaded public asset bytes, hashes, and public health evidence are retained under `output/release-a622fe0-production/`, including `upload-receipt.json`, `deployment-evidence.json`, `post-upload-plugins.json`, `public-after.log`, and the timestamped asset-verification directories. Installed PHP hashes were not directly read from the server.
 
-## Live Recommendation Boundary
+## User-Confirmed Live Recommendation
 
-Live Codex generation remains awaiting the user's authenticated editor test. The available workspace browser redirects the admin URL to a WordPress.com login challenge (HTTP 403). The user confirmed their signed-in browser is only on their own computer. An admin URL alone does not transfer that browser session.
+After deployment, the user was asked to hard-refresh [page 6](https://hperkins.blog/wp-admin/post.php?post=6&action=edit), select the original Group block, open **AI Recommendations**, and click **Get Suggestions**. On October 11, 2026, the user reported: **“Recommendations appeared.”** This closes the requested live block recommendation check as user-confirmed production success.
 
-After deployment, the user was asked to hard-refresh page 6, select the original Group block, open **AI Recommendations**, and click **Get Suggestions**, then report the result or the exact error and fresh AI Activity diagnostics. No production request has yet been independently observed or confirmed by the user. Local synthetic capability checks and public asset matches do not establish a live provider response.
+The successful result came from the user's authenticated browser on their own computer. The workspace browser reaches a WordPress.com login challenge (HTTP 403), so the agent did not independently observe the editor interaction or inspect a fresh provider trace. The report confirms recommendations appeared; it does not establish a freshly audited provider/model identity or installed PHP hashes. The exact test prompt and user reply are retained in `output/release-a622fe0-production/live-recommendation-confirmation.json`.
