@@ -91,6 +91,27 @@ final class WordPressAIClientTest extends TestCase {
 		);
 	}
 
+	public function test_chat_records_time_to_failure_for_provider_errors(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = new \WP_Error(
+			'wp_ai_client_request_failed',
+			'Bad Gateway',
+			[ 'status' => 500 ]
+		);
+
+		$result = WordPressAIClient::chat(
+			'WordPress Gutenberg block styling and configuration assistant.',
+			'Recommend a better block.'
+		);
+		$meta   = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'Bad Gateway', $meta['errorSummary']['wrappedMessage'] ?? null );
+		$this->assertIsInt( $meta['latencyMs'] ?? null );
+		$this->assertGreaterThanOrEqual( 0, $meta['latencyMs'] );
+		$this->assertSame( [], $meta['tokenUsage'] );
+	}
+
 	public function test_chat_preserves_connector_approval_error_data(): void {
 		WordPressTestState::$capabilities['manage_options'] = true;
 		WordPressTestState::$ai_client_supported            = true;
