@@ -7,6 +7,9 @@ namespace FlavorAgent\Embeddings;
 abstract class BaseHttpClient {
 
 	private const MAX_RETRY_AFTER_SECONDS = 60;
+	// Cloudflare reports monthly AI Search query, storage, and ingestion quotas
+	// as HTTP 429, but waiting cannot clear them.
+	private const CLOUDFLARE_QUOTA_ERROR_CODES = [ 7069, 7112, 7116 ];
 
 	/**
 	 * @param array<string, string> $headers
@@ -141,7 +144,11 @@ abstract class BaseHttpClient {
 		return is_string( $encoded ) ? $encoded : '';
 	}
 
-	public static function parse_retry_after_header( string|false $header, ?int $now = null ): ?int {
+	public static function parse_retry_after_header(
+		string|false $header,
+		?int $now = null,
+		int $max_seconds = self::MAX_RETRY_AFTER_SECONDS
+	): ?int {
 		if ( false === $header ) {
 			return null;
 		}
@@ -153,7 +160,7 @@ abstract class BaseHttpClient {
 		}
 
 		if ( preg_match( '/^\d+$/', $header ) ) {
-			return max( 1, min( self::MAX_RETRY_AFTER_SECONDS, (int) $header ) );
+			return max( 1, min( $max_seconds, (int) $header ) );
 		}
 
 		$retry_at = strtotime( $header );
@@ -164,7 +171,7 @@ abstract class BaseHttpClient {
 
 		$delay = $retry_at - ( $now ?? time() );
 
-		return max( 1, min( self::MAX_RETRY_AFTER_SECONDS, $delay ) );
+		return max( 1, min( $max_seconds, $delay ) );
 	}
 
 	public static function build_retryable_rate_limit_error(
@@ -229,19 +236,53 @@ abstract class BaseHttpClient {
 		$response_headers = self::extract_response_headers( $response );
 
 		if ( 429 === $status ) {
-			$message = is_array( $data ) && isset( $data['error']['message'] ) && is_string( $data['error']['message'] )
-				? $data['error']['message']
-				: "{$label} is temporarily rate limited.";
+			$cloudflare_error = self::extract_cloudflare_error( $data );
+			$extra_data       = [
+				'http_status'         => $status,
+				'response_headers'    => $response_headers,
+				'response_body_bytes' => strlen( $raw_body ),
+			];
+
+			if ( null !== $cloudflare_error ) {
+				$extra_data['remote_error_code'] = $cloudflare_error['code'];
+			}
+
+			if ( null !== $cloudflare_error && in_array( $cloudflare_error['code'], self::CLOUDFLARE_QUOTA_ERROR_CODES, true ) ) {
+				return new \WP_Error(
+					'quota_exceeded',
+					sprintf(
+						'%1$s was rejected because the Cloudflare account reached a usage quota (%2$s). Waiting will not clear it; review the Cloudflare plan or usage limits.',
+						$label,
+						self::describe_cloudflare_error( $cloudflare_error )
+					),
+					array_merge(
+						[
+							'status'      => 429,
+							'retryable'   => false,
+							'retry_after' => null,
+						],
+						$extra_data
+					)
+				);
+			}
+
+			if ( is_array( $data ) && isset( $data['error']['message'] ) && is_string( $data['error']['message'] ) ) {
+				$message = $data['error']['message'];
+			} elseif ( null !== $cloudflare_error ) {
+				$message = sprintf(
+					'%1$s is temporarily rate limited (%2$s).',
+					$label,
+					self::describe_cloudflare_error( $cloudflare_error )
+				);
+			} else {
+				$message = "{$label} is temporarily rate limited.";
+			}
 
 			return self::build_retryable_rate_limit_error(
 				'rate_limited',
 				$message,
 				wp_remote_retrieve_header( $response, 'retry-after' ),
-				[
-					'http_status'         => $status,
-					'response_headers'    => $response_headers,
-					'response_body_bytes' => strlen( $raw_body ),
-				]
+				$extra_data
 			);
 		}
 
@@ -252,6 +293,33 @@ abstract class BaseHttpClient {
 			'headers'    => $response_headers,
 			'body_bytes' => strlen( $raw_body ),
 		];
+	}
+
+	/**
+	 * Cloudflare v4 responses report failures as `errors: [{code, message}]`.
+	 *
+	 * @return array{code: int, message: string}|null
+	 */
+	private static function extract_cloudflare_error( mixed $data ): ?array {
+		$error = is_array( $data ) && is_array( $data['errors'] ?? null ) ? reset( $data['errors'] ) : null;
+
+		if ( ! is_array( $error ) || ! is_numeric( $error['code'] ?? null ) || (int) $error['code'] <= 0 ) {
+			return null;
+		}
+
+		return [
+			'code'    => (int) $error['code'],
+			'message' => is_string( $error['message'] ?? null ) ? sanitize_text_field( $error['message'] ) : '',
+		];
+	}
+
+	/**
+	 * @param array{code: int, message: string} $error
+	 */
+	private static function describe_cloudflare_error( array $error ): string {
+		return '' !== $error['message']
+			? sprintf( 'Cloudflare error %1$d: %2$s', $error['code'], $error['message'] )
+			: sprintf( 'Cloudflare error %d', $error['code'] );
 	}
 
 	/**

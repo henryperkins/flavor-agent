@@ -699,6 +699,40 @@ final class CloudflarePatternSearchClientTest extends TestCase {
 		$this->assertSame( 'DELETE', WordPressTestState::$last_remote_post['args']['method'] ?? null );
 	}
 
+	public function test_throttled_delete_reports_the_cloudflare_error_and_retry_hint(): void {
+		$this->seed_options();
+
+		WordPressTestState::$remote_post_response = [
+			'response' => [ 'code' => 429 ],
+			'headers'  => [ 'Retry-After' => '120' ],
+			'body'     => wp_json_encode(
+				[
+					'success' => false,
+					'errors'  => [
+						[
+							'code'    => 7114,
+							'message' => 'ai_search_instance_overloaded',
+						],
+					],
+				]
+			),
+		];
+
+		$result = PatternSearchClient::delete_pattern( 'theme-hero' );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'rate_limited', $result->get_error_code() );
+		$this->assertSame(
+			'Cloudflare Pattern AI Search item delete is temporarily rate limited (Cloudflare error 7114: ai_search_instance_overloaded).',
+			$result->get_error_message()
+		);
+		$this->assertSame( 429, $result->get_error_data()['status'] );
+		$this->assertTrue( $result->get_error_data()['retryable'] );
+		$this->assertSame( 60, $result->get_error_data()['retry_after'] );
+		$this->assertSame( '120', $result->get_error_data()['retry_after_raw'] );
+		$this->assertSame( 7114, $result->get_error_data()['remote_error_code'] );
+	}
+
 	public function test_validate_configuration_reports_filterable_metadata_schema_error(): void {
 		WordPressTestState::$remote_post_response = [
 			'response' => [ 'code' => 400 ],

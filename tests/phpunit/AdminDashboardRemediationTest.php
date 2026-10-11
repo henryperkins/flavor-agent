@@ -289,6 +289,47 @@ final class AdminDashboardRemediationTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 	}
 
+	public function test_scheduled_sync_retry_renders_as_retrying_until_an_error_needs_attention(): void {
+		$this->seed_cloudflare_catalog();
+		WordPressTestState::$options[ PatternIndex::STATE_OPTION ] = array_merge(
+			WordPressTestState::$options[ PatternIndex::STATE_OPTION ],
+			[
+				'status'                 => 'error',
+				'last_synced_at'         => null,
+				'last_error'             => 'Cloudflare Pattern AI Search item delete is temporarily rate limited (Cloudflare error 7114: ai_search_instance_overloaded).',
+				'last_error_code'        => 'rate_limited',
+				'last_error_status'      => 429,
+				'last_error_retryable'   => true,
+				'last_error_retry_after' => 30,
+			]
+		);
+		$state  = State::get_page_state();
+		$output = $this->render_page();
+
+		$this->assertSame( State::make_badge( 'Retrying', 'warning' ), State::get_pattern_overview_status( $state ) );
+		$this->assertMatchesRegularExpression( '/badge--warning"[^>]*data-pattern-status-badge="panel"[^>]*>\s*Retrying\s*</', $output );
+		$this->assertStringContainsString( 'Pattern catalog sync paused after a temporary Cloudflare error and resumes automatically.', $output );
+		$this->assertStringContainsString( 'keeps the progress it already made', $output );
+		$this->assertStringContainsString( 'ai_search_instance_overloaded', $output );
+		$this->assertStringNotContainsString( 'Pattern recommendations need attention before use.', $output );
+		$this->assertStringNotContainsString( 'Review Cloudflare credentials', $output );
+		$this->assertStringNotContainsString( 'flavor-agent-sync-panel__metric-value--error', $output );
+		$this->assertSame( 1, preg_match( '/data-pattern-runtime-state="([^"]*)"/', $output, $matches ) );
+		$this->assertTrue( json_decode( html_entity_decode( $matches[1], ENT_QUOTES ), true )['last_error_retryable'] );
+
+		WordPressTestState::$options[ PatternIndex::STATE_OPTION ]['last_error_retryable']   = false;
+		WordPressTestState::$options[ PatternIndex::STATE_OPTION ]['last_error_retry_after'] = null;
+		$output = $this->render_page();
+
+		$this->assertSame( 'Needs attention', State::get_pattern_overview_status( State::get_page_state() )['label'] );
+		$this->assertMatchesRegularExpression( '/badge--error"[^>]*data-pattern-status-badge="panel"[^>]*>\s*Error\s*</', $output );
+		$this->assertStringContainsString( 'Pattern recommendations need attention before use.', $output );
+		$this->assertStringContainsString( 'Review Cloudflare credentials', $output );
+		$this->assertStringContainsString( 'flavor-agent-sync-panel__metric-value--error', $output );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+	}
+
 	public function test_post_editor_handoff_requires_actual_create_permission_even_when_editing_is_allowed(): void {
 		$this->enable_editor_recommendations();
 		WordPressTestState::$post_type_objects['post']               = (object) [

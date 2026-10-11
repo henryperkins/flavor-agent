@@ -708,6 +708,109 @@ describe( 'pattern sync monitoring and saved configuration', () => {
 		expect( sync.disabled ).toBe( false );
 	} );
 
+	test( 'a scheduled automatic retry reports retrying and keeps monitoring until the sync recovers', async () => {
+		const retryingState = {
+			...SAVED_STATE,
+			status: 'error',
+			last_synced_at: null,
+			last_error:
+				'Cloudflare Pattern AI Search item delete is temporarily rate limited (Cloudflare error 7114: ai_search_instance_overloaded).',
+			last_error_retryable: true,
+			last_error_retry_after: 30,
+		};
+		const root = renderSyncSettings();
+		const fetchImpl = jest
+			.fn()
+			.mockResolvedValueOnce(
+				response( { runtimeState: retryingState } )
+			)
+			.mockResolvedValueOnce(
+				response( {
+					runtimeState: {
+						...SAVED_STATE,
+						last_error: null,
+						last_error_retryable: false,
+						last_error_retry_after: null,
+					},
+				} )
+			);
+		const { sync, check } = start( root, fetchImpl );
+		check.click();
+		await settleRequests();
+
+		expect( statusLabels( root ) ).toEqual( Array( 4 ).fill( 'Retrying' ) );
+		expect(
+			root.querySelector( '#flavor-agent-sync-summary' ).textContent
+		).toBe(
+			'Pattern catalog sync paused after a temporary Cloudflare error and resumes automatically.'
+		);
+		expect(
+			root.querySelector( '#flavor-agent-sync-notice .notice-warning' )
+				.textContent
+		).toBe(
+			'Pattern catalog status updated: Retrying. Cloudflare Pattern AI Search item delete is temporarily rate limited (Cloudflare error 7114: ai_search_instance_overloaded).'
+		);
+		expect(
+			root.querySelector( '#flavor-agent-sync-notice .notice-error' )
+		).toBeNull();
+		expect(
+			root
+				.querySelector( '[data-pattern-metric-value="last_error"]' )
+				.classList.contains(
+					'flavor-agent-sync-panel__metric-value--error'
+				)
+		).toBe( false );
+		expect(
+			root.querySelector( '#flavor-agent-sync-status' ).textContent
+		).toBe( 'Waiting to retry…' );
+		expect( sync.disabled ).toBe( false );
+
+		jest.advanceTimersByTime( 5000 );
+		await settleRequests();
+
+		expect( fetchImpl ).toHaveBeenCalledTimes( 2 );
+		expect( statusLabels( root ) ).toEqual( Array( 4 ).fill( 'Ready' ) );
+		expect(
+			root.querySelector( '#flavor-agent-sync-status' ).textContent
+		).toBe( '' );
+	} );
+
+	test( 'a page opened while a retry is scheduled resumes monitoring', async () => {
+		const retryingState = {
+			...SAVED_STATE,
+			status: 'error',
+			last_error:
+				'Cloudflare Pattern AI Search item upload is temporarily rate limited.',
+			last_error_retryable: true,
+		};
+		const root = renderSyncSettings( retryingState );
+		const fetchImpl = jest
+			.fn()
+			.mockResolvedValue( response( { runtimeState: retryingState } ) );
+		start( root, fetchImpl );
+
+		expect( fetchImpl ).toHaveBeenCalledTimes( 1 );
+		await settleRequests();
+		expect( statusLabels( root ) ).toEqual( Array( 4 ).fill( 'Retrying' ) );
+	} );
+
+	test( 'a retryable error does not start monitoring when pattern prerequisites are missing', () => {
+		const root = renderSyncSettings( {
+			...SAVED_STATE,
+			status: 'error',
+			last_error:
+				'Cloudflare Pattern AI Search item upload is temporarily rate limited.',
+			last_error_retryable: true,
+		} );
+		root.querySelector(
+			'.flavor-agent-sync-panel'
+		).dataset.patternPrerequisitesReady = '0';
+		const fetchImpl = jest.fn();
+		start( root, fetchImpl );
+
+		expect( fetchImpl ).not.toHaveBeenCalled();
+	} );
+
 	test( 'both actions prevent overlapping requests while a status check is pending', async () => {
 		const root = renderSyncSettings();
 		let resolveRequest;

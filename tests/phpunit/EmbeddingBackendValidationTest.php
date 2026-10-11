@@ -177,6 +177,12 @@ final class EmbeddingBackendValidationTest extends TestCase {
 		$this->assertSame( 7, $parsed );
 	}
 
+	public function test_parse_retry_after_header_caps_foreground_waits_unless_the_caller_allows_longer(): void {
+		$this->assertSame( 60, BaseHttpClient::parse_retry_after_header( '240' ) );
+		$this->assertSame( 240, BaseHttpClient::parse_retry_after_header( '240', null, 300 ) );
+		$this->assertSame( 300, BaseHttpClient::parse_retry_after_header( '900', null, 300 ) );
+	}
+
 	public function test_rank_ignores_saved_connector_provider_and_uses_wordpress_ai_client(): void {
 		WordPressTestState::$options = [
 			'flavor_agent_openai_provider' => 'anthropic',

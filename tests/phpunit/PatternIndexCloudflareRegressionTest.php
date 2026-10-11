@@ -136,6 +136,254 @@ final class PatternIndexCloudflareRegressionTest extends TestCase {
 		];
 	}
 
+	public function test_full_reindex_interrupted_by_a_throttled_delete_resumes_without_reuploading(): void {
+		$this->register_pattern( 'theme/hero', 'Hero copy' );
+		$this->register_pattern( 'theme/footer', 'Footer copy' );
+		$hero_uuid    = PatternIndex::pattern_uuid( 'theme/hero' );
+		$footer_uuid  = PatternIndex::pattern_uuid( 'theme/footer' );
+		$retired_uuid = PatternIndex::pattern_uuid( 'theme/retired' );
+		// Rotated credentials invalidate the catalog signature and force a full rebuild.
+		PatternIndex::save_state(
+			[
+				'status'                         => 'ready',
+				'pattern_backend'                => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+				'fingerprint'                    => 'previous-catalog',
+				'cloudflare_ai_search_namespace' => PatternSearchInstanceManager::managed_namespace(),
+				'cloudflare_ai_search_instance'  => PatternSearchInstanceManager::managed_instance_id(),
+				'cloudflare_ai_search_signature' => 'previous-signature',
+				'last_synced_at'                 => '2026-10-01T00:00:00+00:00',
+				'indexed_count'                  => 3,
+				'pattern_fingerprints'           => [
+					$hero_uuid    => 'previous-hero',
+					$footer_uuid  => 'previous-footer',
+					$retired_uuid => 'previous-retired',
+				],
+			]
+		);
+
+		$this->queue_item_list(
+			[
+				$this->remote_item( $hero_uuid ),
+				$this->remote_item( $footer_uuid ),
+				$this->remote_item( $retired_uuid ),
+			]
+		);
+		$this->queue_successful_writes( 2 );
+		WordPressTestState::$remote_post_responses[] = $this->instance_overloaded_response( '7' );
+
+		$before = time();
+		$first  = PatternIndex::sync();
+		$after  = time();
+		$paused = PatternIndex::get_state();
+
+		$this->assertInstanceOf( \WP_Error::class, $first );
+		$this->assertSame( 'rate_limited', $first->get_error_code() );
+		$this->assertSame( 7114, $first->get_error_data()['remote_error_code'] );
+		$this->assertSame(
+			'Cloudflare Pattern AI Search item delete is temporarily rate limited (Cloudflare error 7114: ai_search_instance_overloaded).',
+			$first->get_error_message()
+		);
+		$this->assertSame( 'error', $paused['status'] );
+		$this->assertTrue( PatternIndex::has_retryable_error( $paused ) );
+		$this->assertSame( 7, $paused['last_error_retry_after'] );
+		$this->assertSame( PatternSearchInstanceManager::managed_instance_id(), $paused['cloudflare_ai_search_instance'] );
+		$this->assertNotSame( 'previous-signature', $paused['cloudflare_ai_search_signature'] );
+		$this->assertSame( 'previous-retired', $paused['pattern_fingerprints'][ $retired_uuid ] );
+		$this->assertNotSame( 'previous-hero', $paused['pattern_fingerprints'][ $hero_uuid ] );
+		$this->assertNotSame( 'previous-footer', $paused['pattern_fingerprints'][ $footer_uuid ] );
+		$scheduled = WordPressTestState::$scheduled_events[ PatternIndex::CRON_HOOK ]['timestamp'];
+		$this->assertGreaterThanOrEqual( $before + 7, $scheduled );
+		$this->assertLessThanOrEqual( $after + 7, $scheduled );
+
+		WordPressTestState::$remote_get_calls  = [];
+		WordPressTestState::$remote_post_calls = [];
+		$this->queue_item_list(
+			[
+				$this->remote_item( $hero_uuid, 'queued' ),
+				$this->remote_item( $footer_uuid, 'queued' ),
+				$this->remote_item( $retired_uuid ),
+			]
+		);
+		$this->queue_successful_writes( 1 );
+		$this->queue_item_list( [ $this->remote_item( $hero_uuid ), $this->remote_item( $footer_uuid ) ] );
+
+		$second = PatternIndex::sync();
+		$state  = PatternIndex::get_state();
+
+		$this->assertIsArray( $second );
+		$this->assertSame( 'ready', $second['status'] );
+		$this->assertSame( 0, $second['indexed'] );
+		$this->assertSame( 1, $second['removed'] );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls, 'A resumed rebuild must not upload accepted patterns again.' );
+		$this->assertSame( 'DELETE', WordPressTestState::$remote_post_calls[0]['args']['method'] );
+		$this->assertStringContainsString( '/items/cloudflare-' . $retired_uuid, WordPressTestState::$remote_post_calls[0]['url'] );
+		$this->assertSame( 'ready', $state['status'] );
+		$this->assertNotNull( $state['last_synced_at'] );
+		$this->assertSame( 2, $state['indexed_count'] );
+		$this->assertSame( $paused['cloudflare_ai_search_signature'], $state['cloudflare_ai_search_signature'] );
+		$this->assertSame(
+			[
+				$hero_uuid   => $paused['pattern_fingerprints'][ $hero_uuid ],
+				$footer_uuid => $paused['pattern_fingerprints'][ $footer_uuid ],
+			],
+			$state['pattern_fingerprints']
+		);
+	}
+
+	public function test_incremental_sync_interrupted_by_a_throttled_delete_resumes_with_only_remaining_writes(): void {
+		$this->register_pattern( 'theme/hero', 'Original hero copy' );
+		$this->register_pattern( 'theme/footer', 'Footer copy' );
+		$this->register_pattern( 'theme/retired-a', 'Retired copy A' );
+		$this->register_pattern( 'theme/retired-b', 'Retired copy B' );
+		$this->queue_item_list( [] );
+		$this->queue_successful_writes( 4 );
+		$this->queue_item_list( $this->completed_items_for_current_patterns() );
+		$this->assertSame( 'ready', PatternIndex::sync()['status'] );
+		$initial = PatternIndex::get_state();
+
+		$hero_uuid      = PatternIndex::pattern_uuid( 'theme/hero' );
+		$footer_uuid    = PatternIndex::pattern_uuid( 'theme/footer' );
+		$retired_a_uuid = PatternIndex::pattern_uuid( 'theme/retired-a' );
+		$retired_b_uuid = PatternIndex::pattern_uuid( 'theme/retired-b' );
+		\WP_Block_Patterns_Registry::get_instance()->reset();
+		$this->register_pattern( 'theme/hero', 'Updated hero copy' );
+		$this->register_pattern( 'theme/footer', 'Footer copy' );
+		PatternIndex::mark_dirty();
+		WordPressTestState::$remote_post_calls = [];
+		$this->queue_item_list(
+			[
+				$this->remote_item( $hero_uuid ),
+				$this->remote_item( $footer_uuid ),
+				$this->remote_item( $retired_a_uuid ),
+				$this->remote_item( $retired_b_uuid ),
+			]
+		);
+		$this->queue_successful_writes( 2 );
+		WordPressTestState::$remote_post_responses[] = $this->instance_overloaded_response( '3' );
+
+		$first  = PatternIndex::sync();
+		$paused = PatternIndex::get_state();
+
+		$this->assertInstanceOf( \WP_Error::class, $first );
+		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
+		$this->assertNotSame( $initial['pattern_fingerprints'][ $hero_uuid ], $paused['pattern_fingerprints'][ $hero_uuid ] );
+		$this->assertSame( $initial['pattern_fingerprints'][ $footer_uuid ], $paused['pattern_fingerprints'][ $footer_uuid ] );
+		$this->assertArrayNotHasKey( $retired_a_uuid, $paused['pattern_fingerprints'] );
+		$this->assertArrayHasKey( $retired_b_uuid, $paused['pattern_fingerprints'] );
+		$this->assertNotNull( $paused['last_synced_at'], 'The previous catalog stays usable while the incremental sync waits.' );
+
+		WordPressTestState::$remote_post_calls = [];
+		$this->queue_item_list(
+			[
+				$this->remote_item( $hero_uuid, 'queued' ),
+				$this->remote_item( $footer_uuid ),
+				$this->remote_item( $retired_b_uuid ),
+			]
+		);
+		$this->queue_successful_writes( 1 );
+		$this->queue_item_list( $this->completed_items_for_current_patterns() );
+
+		$second = PatternIndex::sync();
+
+		$this->assertIsArray( $second );
+		$this->assertSame( 'ready', $second['status'] );
+		$this->assertSame( 0, $second['indexed'] );
+		$this->assertSame( 1, $second['removed'] );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
+		$this->assertSame( 'DELETE', WordPressTestState::$remote_post_calls[0]['args']['method'] );
+		$this->assertStringContainsString( '/items/cloudflare-' . $retired_b_uuid, WordPressTestState::$remote_post_calls[0]['url'] );
+		$this->assertSame(
+			[ $hero_uuid, $footer_uuid ],
+			array_keys( PatternIndex::get_state()['pattern_fingerprints'] )
+		);
+	}
+
+	public function test_rate_limited_sync_waits_for_the_full_cloudflare_retry_after(): void {
+		$this->register_pattern( 'theme/hero', 'Hero copy' );
+		$this->queue_item_list( [] );
+		WordPressTestState::$remote_post_responses[] = [
+			'response' => [ 'code' => 429 ],
+			'headers'  => [ 'retry-after' => '240' ],
+			'body'     => wp_json_encode(
+				[
+					'success' => false,
+					'errors'  => [
+						[
+							'code'    => 971,
+							'message' => 'Please wait and consider throttling your request speed',
+						],
+					],
+				]
+			),
+		];
+
+		$before = time();
+		$result = PatternIndex::sync();
+		$after  = time();
+		$state  = PatternIndex::get_state();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 60, $result->get_error_data()['retry_after'], 'Foreground callers keep their bounded wait.' );
+		$this->assertSame( 240, $state['last_error_retry_after'] );
+		$scheduled = WordPressTestState::$scheduled_events[ PatternIndex::CRON_HOOK ]['timestamp'];
+		$this->assertGreaterThanOrEqual( $before + 240, $scheduled );
+		$this->assertLessThanOrEqual( $after + 240, $scheduled );
+	}
+
+	public function test_rate_limited_sync_without_retry_after_backs_off_before_retrying(): void {
+		$this->register_pattern( 'theme/hero', 'Hero copy' );
+		$this->queue_item_list( [] );
+		WordPressTestState::$remote_post_responses[] = [
+			'response' => [ 'code' => 429 ],
+			'body'     => '',
+		];
+
+		$before = time();
+		$result = PatternIndex::sync();
+		$after  = time();
+		$state  = PatternIndex::get_state();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'Cloudflare Pattern AI Search item upload is temporarily rate limited.', $result->get_error_message() );
+		$this->assertTrue( PatternIndex::has_retryable_error( $state ) );
+		$this->assertSame( 30, $state['last_error_retry_after'] );
+		$scheduled = WordPressTestState::$scheduled_events[ PatternIndex::CRON_HOOK ]['timestamp'];
+		$this->assertGreaterThanOrEqual( $before + 30, $scheduled );
+		$this->assertLessThanOrEqual( $after + 30, $scheduled );
+	}
+
+	public function test_exhausted_cloudflare_quota_stops_the_sync_without_scheduling_retries(): void {
+		$this->register_pattern( 'theme/hero', 'Hero copy' );
+		$this->queue_item_list( [] );
+		WordPressTestState::$remote_post_responses[] = [
+			'response' => [ 'code' => 429 ],
+			'body'     => wp_json_encode(
+				[
+					'success' => false,
+					'errors'  => [
+						[
+							'code'    => 7116,
+							'message' => 'monthly_ingestion_quota_exceeded',
+						],
+					],
+				]
+			),
+		];
+
+		$result = PatternIndex::sync();
+		$state  = PatternIndex::get_state();
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'quota_exceeded', $result->get_error_code() );
+		$this->assertFalse( $result->get_error_data()['retryable'] );
+		$this->assertStringContainsString( 'Cloudflare error 7116: monthly_ingestion_quota_exceeded', $result->get_error_message() );
+		$this->assertSame( 'error', $state['status'] );
+		$this->assertSame( 'quota_exceeded', $state['last_error_code'] );
+		$this->assertFalse( PatternIndex::has_retryable_error( $state ) );
+		$this->assertNull( $state['last_error_retry_after'] );
+		$this->assertArrayNotHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+	}
+
 	private function register_pattern( string $name, string $copy ): void {
 		\WP_Block_Patterns_Registry::get_instance()->register(
 			$name,
@@ -163,6 +411,34 @@ final class PatternIndexCloudflareRegressionTest extends TestCase {
 			},
 			ServerCollector::for_patterns()
 		);
+	}
+
+	/** @return array<string, string> */
+	private function remote_item( string $uuid, string $status = 'completed' ): array {
+		return [
+			'id'     => 'cloudflare-' . $uuid,
+			'key'    => $uuid . '.md',
+			'status' => $status,
+		];
+	}
+
+	/** @return array<string, mixed> */
+	private function instance_overloaded_response( string $retry_after ): array {
+		return [
+			'response' => [ 'code' => 429 ],
+			'headers'  => [ 'retry-after' => $retry_after ],
+			'body'     => wp_json_encode(
+				[
+					'success' => false,
+					'errors'  => [
+						[
+							'code'    => 7114,
+							'message' => 'ai_search_instance_overloaded',
+						],
+					],
+				]
+			),
+		];
 	}
 
 	/** @param array<int, array<string, string>> $items */

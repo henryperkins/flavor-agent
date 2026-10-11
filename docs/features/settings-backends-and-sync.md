@@ -59,6 +59,7 @@ External Developer Docs grounding is temporarily disabled by default in v0.1.3 t
 6. Polling calls opportunistically run due `flavor_agent_reindex_patterns` events before returning state, so a local environment with disabled or delayed WP-Cron cannot strand a manual sync in `indexing`
 7. A lost or unusable response changes all client status surfaces to `Status unavailable`, retaining a qualified last-confirmed state rather than declaring the server job failed. `Check sync status` performs a status request; another sync cannot start until a valid response establishes the current state. A definite enqueue rejection reports that the sync did not start and preserves the server's recovery message.
 8. Sync uses saved configuration. Unsaved changes to relevant storage or embedding fields block starting a job until the administrator saves or restores them; checking an uncertain existing job remains available.
+9. A retryable error, such as a Cloudflare rate limit, is shown as `Retrying` with warning tone rather than `Error`. Its follow-up sync is already scheduled and resumes from the writes that previous attempts completed. Status surfaces keep checking until it finishes. Errors that cannot clear on their own, such as an exhausted Cloudflare quota, keep the `Error` and `Needs attention` states.
 
 Managed-index sync behavior and debugging checks are canonical in `docs/reference/pattern-recommendation-debugging.md`; external-service disclosure details live in `docs/reference/external-service-disclosure.md`.
 

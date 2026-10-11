@@ -6,6 +6,8 @@
 
 Cloudflare AI Search is the sole supported pattern store. Existing Qdrant installations require explicit Cloudflare setup and a new sync; the local migration does not provision remote storage, copy vectors/data, or reuse the old cosine threshold. Legacy URL/key/threshold options remain unused until uninstall cleanup. Cloudflare account/token/model settings remain for setup and validation; direct Workers AI embedding requests are validation probes, while managed AI Search owns catalog embeddings. See [pattern storage migration](docs/reference/pattern-storage-migration.md) and the [current settings contract](docs/features/settings-backends-and-sync.md).
 
+Pattern catalog sync resumes after an interruption from its checkpointed uploads and deletes instead of uploading the catalog again. Cloudflare 429 responses keep their error code, follow-up syncs honor `Retry-After` for up to five minutes, and Settings shows a scheduled automatic retry as `Retrying` instead of `Error`. Exhausted monthly AI Search quotas are not retried. See the [sync runbook](docs/reference/pattern-recommendation-debugging.md#3-distinguish-queued-processing-and-unknown-sync-state).
+
 The entries below preserve their dated release/verification boundaries. Their earlier provider inventory, Guidelines export behavior, and verification counts do not establish the current worktree contract or qualification.
 
 ## v0.1.3 compatibility candidate

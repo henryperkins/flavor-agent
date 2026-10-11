@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-11T05:56:36+00:00\n"
+"POT-Creation-Date: 2026-10-11T11:56:37+02:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: flavor-agent\n"
@@ -1028,11 +1028,11 @@ msgstr ""
 
 #: inc/Admin/Settings/Page.php:330
 #: inc/Admin/Settings/State.php:197
-#: inc/Admin/Settings/State.php:302
-#: inc/Admin/Settings/State.php:337
-#: inc/Admin/Settings/State.php:483
+#: inc/Admin/Settings/State.php:306
+#: inc/Admin/Settings/State.php:348
+#: inc/Admin/Settings/State.php:494
 #: src/admin/settings-page-controller.js:8
-#: src/admin/settings-page-controller.js:200
+#: src/admin/settings-page-controller.js:216
 #: src/templates/TemplateRecommender.js:1091
 msgid "Ready"
 msgstr ""
@@ -1040,8 +1040,8 @@ msgstr ""
 #: inc/Admin/Settings/Page.php:331
 #: inc/Admin/Settings/State.php:194
 #: inc/Admin/Settings/State.php:276
-#: src/admin/settings-page-controller.js:178
-#: src/admin/settings-page-controller.js:406
+#: src/admin/settings-page-controller.js:187
+#: src/admin/settings-page-controller.js:430
 msgid "Needs setup"
 msgstr ""
 
@@ -1265,7 +1265,7 @@ msgid "Cancel"
 msgstr ""
 
 #: inc/Admin/Settings/Page.php:983
-#: src/admin/settings-page-controller.js:971
+#: src/admin/settings-page-controller.js:1001
 msgid "Add Block Guideline"
 msgstr ""
 
@@ -1312,8 +1312,8 @@ msgid "Managed pattern index needs attention. Flavor Agent will not adopt %s unt
 msgstr ""
 
 #: inc/Admin/Settings/Page.php:1110
-#: inc/Admin/Settings/Page.php:1451
-#: inc/Admin/Settings/State.php:441
+#: inc/Admin/Settings/Page.php:1454
+#: inc/Admin/Settings/State.php:452
 msgid "Saved managed pattern index needs re-validation for the current Cloudflare credentials. Save settings again to re-validate."
 msgstr ""
 
@@ -1351,124 +1351,140 @@ msgstr ""
 msgid "Advanced details"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1298
-#: inc/Admin/Settings/State.php:294
-#: inc/Admin/Settings/State.php:305
-#: src/admin/settings-page-controller.js:114
-#: src/admin/settings-page-controller.js:185
-#: src/admin/settings-page-controller.js:215
-msgid "Needs sync"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1303
-#: src/admin/settings-page-controller.js:479
+#: inc/Admin/Settings/Page.php:1304
+#: src/admin/settings-page-controller.js:503
 msgid "Not synced yet"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1340
-#: inc/Admin/Settings/Page.php:1405
+#: inc/Admin/Settings/Page.php:1341
+#: inc/Admin/Settings/Page.php:1408
 msgid "Sync Pattern Catalog"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1353
+#: inc/Admin/Settings/Page.php:1354
 msgid "Sync uses saved Cloudflare storage settings. It uploads pattern text to Cloudflare AI Search, which manages catalog embeddings. Checking status may continue an already queued sync."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1354
+#: inc/Admin/Settings/Page.php:1355
 msgid "Save Changes before syncing changed Cloudflare credentials or storage settings."
 msgstr ""
 
 #: inc/Admin/Settings/Page.php:1357
+msgid "Cloudflare reported a temporary error. The sync resumes automatically and keeps the progress it already made."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1360
 msgid "Review the last error below. Check the Cloudflare credentials in Embedding Model and Pattern Storage settings, save any corrections, then check sync status before starting another sync."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1358
+#: inc/Admin/Settings/Page.php:1361
 msgid "Review Cloudflare credentials"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1369
+#: inc/Admin/Settings/Page.php:1372
 #: src/admin/activity-log.js:3510
 msgid "Status"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1375
+#: inc/Admin/Settings/Page.php:1378
 msgid "Indexed Patterns"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1381
+#: inc/Admin/Settings/Page.php:1384
 msgid "Last Synced"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1387
+#: inc/Admin/Settings/Page.php:1390
 msgid "Refresh Needed Because"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1394
+#: inc/Admin/Settings/Page.php:1397
 msgid "Last Error"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1407
+#: inc/Admin/Settings/Page.php:1410
 msgid "Check sync status"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1434
+#: inc/Admin/Settings/Page.php:1437
 msgid "The saved pattern storage setting is unsupported. Save valid Cloudflare settings, then sync the catalog."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1447
+#: inc/Admin/Settings/Page.php:1450
 msgid "Managed pattern index is provisioning in the background. Wait for validation before syncing."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1455
+#: inc/Admin/Settings/Page.php:1458
 msgid "Managed pattern index provisioning failed. Check Cloudflare credentials in Embedding Model, then save settings again."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1458
+#: inc/Admin/Settings/Page.php:1461
 msgid "Save Cloudflare credentials in Embedding Model to create the managed pattern index, then sync the catalog."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1467
-msgid "Provisioning"
+#: inc/Admin/Settings/Page.php:1466
+#: inc/Admin/Settings/State.php:294
+#: inc/Admin/Settings/State.php:309
+#: src/admin/settings-page-controller.js:114
+#: src/admin/settings-page-controller.js:194
+#: src/admin/settings-page-controller.js:231
+msgid "Needs sync"
 msgstr ""
 
 #: inc/Admin/Settings/Page.php:1470
+#: inc/Admin/Settings/State.php:298
+#: src/admin/settings-page-controller.js:118
+#: src/admin/settings-page-controller.js:201
+msgid "Retrying"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1480
+msgid "Provisioning"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1483
 #: inc/Admin/Settings/State.php:290
 msgid "Needs pattern storage"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1477
+#: inc/Admin/Settings/Page.php:1490
 msgid "Pattern recommendations stay unavailable until setup is complete."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1482
-#: src/admin/settings-page-controller.js:238
+#: inc/Admin/Settings/Page.php:1495
+#: src/admin/settings-page-controller.js:254
 msgid "Pattern recommendations are unavailable until the catalog is rebuilt in Cloudflare AI Search. Save Cloudflare settings and sync the catalog; existing vectors are not copied."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1485
-#: src/admin/settings-page-controller.js:244
+#: inc/Admin/Settings/Page.php:1498
+#: src/admin/settings-page-controller.js:260
 msgid "Pattern recommendations are unavailable until the catalog is rebuilt or revalidated in Cloudflare AI Search. Review and save Cloudflare settings, then sync the catalog."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1489
+#: inc/Admin/Settings/Page.php:1502
+#: src/admin/settings-page-controller.js:267
+msgid "Pattern catalog sync paused after a temporary Cloudflare error and resumes automatically."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1506
 msgid "Pattern recommendations need attention before use."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1493
-#: src/admin/settings-page-controller.js:259
+#: inc/Admin/Settings/Page.php:1510
+#: src/admin/settings-page-controller.js:282
 msgid "Pattern recommendations are ready."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1494
+#: inc/Admin/Settings/Page.php:1511
 msgid "Pattern recommendations are available but out of date."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1495
-#: src/admin/settings-page-controller.js:266
+#: inc/Admin/Settings/Page.php:1512
+#: src/admin/settings-page-controller.js:289
 msgid "Pattern recommendations are syncing now."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1496
+#: inc/Admin/Settings/Page.php:1513
 msgid "Pattern recommendations stay unavailable until you sync the catalog."
 msgstr ""
 
@@ -1524,143 +1540,143 @@ msgid "Configured"
 msgstr ""
 
 #: inc/Admin/Settings/State.php:286
-#: inc/Admin/Settings/State.php:298
-#: inc/Admin/Settings/State.php:334
-#: src/admin/settings-page-controller.js:192
+#: inc/Admin/Settings/State.php:302
+#: inc/Admin/Settings/State.php:345
+#: src/admin/settings-page-controller.js:208
 msgid "Needs attention"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:303
-#: inc/Admin/Settings/State.php:484
+#: inc/Admin/Settings/State.php:307
+#: inc/Admin/Settings/State.php:495
 #: src/admin/settings-page-controller.js:9
-#: src/admin/settings-page-controller.js:205
+#: src/admin/settings-page-controller.js:221
 msgid "Refresh needed"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:304
-#: inc/Admin/Settings/State.php:482
+#: inc/Admin/Settings/State.php:308
+#: inc/Admin/Settings/State.php:493
 #: src/admin/settings-page-controller.js:7
-#: src/admin/settings-page-controller.js:210
+#: src/admin/settings-page-controller.js:226
 msgid "Syncing"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:326
+#: inc/Admin/Settings/State.php:337
 msgid "Temporarily disabled"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:330
+#: inc/Admin/Settings/State.php:341
 #: src/admin/activity-log.js:351
 msgid "Unavailable"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:344
+#: inc/Admin/Settings/State.php:355
 msgid "The last live Developer Docs grounding request failed to reach the search backend. Recommendations still run without it."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:347
+#: inc/Admin/Settings/State.php:358
 msgid "The last live Developer Docs grounding request failed. Recommendations still run without it."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:352
+#: inc/Admin/Settings/State.php:363
 msgid "Grounding attached successfully."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:353
+#: inc/Admin/Settings/State.php:364
 msgid "The last live docs request returned no trusted Developer Docs matches."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:354
+#: inc/Admin/Settings/State.php:365
 msgid "The last live docs request failed before any Developer Docs guidance could be attached."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:364
 #: inc/Admin/Settings/State.php:375
+#: inc/Admin/Settings/State.php:386
 msgid "Off"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:367
 #: inc/Admin/Settings/State.php:378
+#: inc/Admin/Settings/State.php:389
 msgid "On"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:392
+#: inc/Admin/Settings/State.php:403
 msgid "Text generation is not configured. Open Connectors to choose a provider."
 msgstr ""
 
 #. translators: 1: provider label
-#: inc/Admin/Settings/State.php:399
+#: inc/Admin/Settings/State.php:410
 #, php-format
 msgid "%1$s is saved from an older setup, but that connector is not available. Open Connectors to choose a provider."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:410
+#: inc/Admin/Settings/State.php:421
 msgid "Embedding model is not configured."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:415
+#: inc/Admin/Settings/State.php:426
 msgid "Cloudflare credentials and model settings are saved. Configured does not confirm current connectivity. Save Changes sends an embedding validation request and creates or revalidates the managed pattern index. Cloudflare AI Search manages catalog embeddings."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:424
+#: inc/Admin/Settings/State.php:435
 msgid "The saved pattern storage setting is unsupported. Save valid Cloudflare credentials to use Cloudflare AI Search, then sync the pattern catalog."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:433
+#: inc/Admin/Settings/State.php:444
 msgid "Save Cloudflare credentials in Embedding Model to create the managed Cloudflare AI Search pattern index, then sync the catalog."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:439
+#: inc/Admin/Settings/State.php:450
 msgid "Managed Cloudflare AI Search pattern index is provisioning. Sync will unlock after validation finishes."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:444
+#: inc/Admin/Settings/State.php:455
 msgid "Managed Cloudflare AI Search pattern index provisioning failed. Check the status panel, then save settings again."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:485
+#: inc/Admin/Settings/State.php:496
 #: src/admin/settings-page-controller.js:6
 msgid "Error"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:486
+#: inc/Admin/Settings/State.php:497
 #: src/admin/settings-page-controller.js:10
 msgid "Not synced"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:503
+#: inc/Admin/Settings/State.php:514
 msgid "Embedding model, provider, or vector size changed."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:504
+#: inc/Admin/Settings/State.php:515
 msgid "Embedding endpoint changed."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:505
+#: inc/Admin/Settings/State.php:516
 #: src/admin/settings-page-controller.js:26
 msgid "The previous pattern catalog must be rebuilt in Cloudflare AI Search. Save Cloudflare settings and sync; existing vectors are not copied."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:506
+#: inc/Admin/Settings/State.php:517
 #: src/admin/settings-page-controller.js:30
 msgid "Pattern storage changed. Sync the Cloudflare AI Search catalog."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:507
+#: inc/Admin/Settings/State.php:518
 #: src/admin/settings-page-controller.js:34
 msgid "Cloudflare storage namespace changed. Save Cloudflare settings and sync the catalog."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:508
+#: inc/Admin/Settings/State.php:519
 #: src/admin/settings-page-controller.js:38
 msgid "Cloudflare managed index changed. Save Cloudflare settings and sync the catalog."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:509
+#: inc/Admin/Settings/State.php:520
 #: src/admin/settings-page-controller.js:42
 msgid "Cloudflare credentials or managed embedding model changed. Save Cloudflare settings and sync the catalog."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:510
+#: inc/Admin/Settings/State.php:521
 #: src/admin/settings-page-controller.js:46
 msgid "Registered patterns changed."
 msgstr ""
@@ -3391,189 +3407,193 @@ msgstr ""
 msgid "Cloudflare credentials or managed embedding model changed."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:226
+#: src/admin/settings-page-controller.js:242
 msgid "Pattern recommendations are not available until the required setup is complete."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:251
+#: src/admin/settings-page-controller.js:274
 msgid "Pattern recommendations need attention before they can be trusted."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:261
+#: src/admin/settings-page-controller.js:284
 msgid "Pattern recommendations are usable but out of date."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:271
+#: src/admin/settings-page-controller.js:294
 msgid "Pattern recommendations are not available until you sync the catalog."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:414
+#: src/admin/settings-page-controller.js:438
 msgid "Status unavailable"
 msgstr ""
 
-#: src/admin/settings-page-controller.js:415
+#: src/admin/settings-page-controller.js:439
 msgid "Sync not started"
 msgstr ""
 
 #. translators: %s: last confirmed sync status.
-#: src/admin/settings-page-controller.js:445
+#: src/admin/settings-page-controller.js:469
 #, js-format
 msgid "Current sync status is unavailable. Last confirmed status: %s. Index details below are last confirmed values. The server may still be working. Check sync status before starting another sync."
 msgstr ""
 
 #. translators: %s: last confirmed sync status.
-#: src/admin/settings-page-controller.js:453
+#: src/admin/settings-page-controller.js:477
 #, js-format
 msgid "The latest sync request was not accepted. Last confirmed catalog status: %s. Index details below are last confirmed values. Review the error below before trying again."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:938
+#: src/admin/settings-page-controller.js:968
 msgid "Select a block"
 msgstr ""
 
-#: src/admin/settings-page-controller.js:981
+#: src/admin/settings-page-controller.js:1011
 msgid "Update Block Guideline"
 msgstr ""
 
-#: src/admin/settings-page-controller.js:996
+#: src/admin/settings-page-controller.js:1026
 msgid "No block guidelines yet."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1039
+#: src/admin/settings-page-controller.js:1069
 #: src/content/ContentRecommender.js:52
 msgid "Edit"
 msgstr ""
 
 #. translators: %s: block label.
-#: src/admin/settings-page-controller.js:1044
+#: src/admin/settings-page-controller.js:1074
 #, js-format
 msgid "Edit guideline for %s"
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1055
+#: src/admin/settings-page-controller.js:1085
 msgid "Remove"
 msgstr ""
 
 #. translators: %s: block label.
-#: src/admin/settings-page-controller.js:1061
+#: src/admin/settings-page-controller.js:1091
 #, js-format
 msgid "Remove guideline for %s"
 msgstr ""
 
 #. translators: %s: block label.
-#: src/admin/settings-page-controller.js:1075
+#: src/admin/settings-page-controller.js:1105
 #, js-format
 msgid "Remove the block guideline for %s?"
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1114
+#: src/admin/settings-page-controller.js:1144
 msgid "Fallback block guideline removed. Save Changes to persist the inactive fallback."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1118
+#: src/admin/settings-page-controller.js:1148
 msgid "Block guideline removed. Save Changes to persist."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1145
+#: src/admin/settings-page-controller.js:1175
 msgid "Check that your file contains a guideline_categories object."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1194
+#: src/admin/settings-page-controller.js:1224
 msgid "Choose a block before saving a block guideline."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1208
+#: src/admin/settings-page-controller.js:1238
 msgid "Enter guideline text before saving a block guideline."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1225
+#: src/admin/settings-page-controller.js:1255
 msgid "Fallback block guideline ready. Save Changes to persist the inactive fallback."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1229
+#: src/admin/settings-page-controller.js:1259
 msgid "Block guideline ready. Save Changes to persist."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1270
+#: src/admin/settings-page-controller.js:1300
 msgid "Check that your file contains valid JSON and try again."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1282
+#: src/admin/settings-page-controller.js:1312
 msgid "Fallback guidelines imported into the form. Save Changes to persist the inactive fallback."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1286
+#: src/admin/settings-page-controller.js:1316
 msgid "Guidelines imported into the form. Save Changes to persist."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1297
+#: src/admin/settings-page-controller.js:1327
 msgid "Could not import guidelines."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1321
+#: src/admin/settings-page-controller.js:1351
 msgid "Fallback guidelines exported."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1322
+#: src/admin/settings-page-controller.js:1352
 msgid "Guidelines exported."
 msgstr ""
 
 #. translators: %s: sync status label.
-#: src/admin/settings-page-controller.js:1358
+#: src/admin/settings-page-controller.js:1388
 #, js-format
 msgid "Pattern catalog sync queued. Status: %s."
 msgstr ""
 
 #. translators: 1: indexed pattern count, 2: removed pattern count, 3: sync status label.
-#: src/admin/settings-page-controller.js:1368
+#: src/admin/settings-page-controller.js:1398
 #, js-format
 msgid "Synced %1$d patterns, removed %2$d. Status: %3$s."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1532
+#: src/admin/settings-page-controller.js:1566
 msgid "The server did not return a usable sync status."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1550
-#: src/admin/settings-page-controller.js:1595
+#: src/admin/settings-page-controller.js:1584
+#: src/admin/settings-page-controller.js:1629
 msgid "Unable to refresh sync status."
 msgstr ""
 
 #. translators: %s: error returned while contacting the server.
-#: src/admin/settings-page-controller.js:1554
+#: src/admin/settings-page-controller.js:1588
 #, js-format
 msgid "The sync request could not be confirmed and may have been accepted. Check sync status before starting another sync. %s"
 msgstr ""
 
 #. translators: %s: error returned while contacting the server.
-#: src/admin/settings-page-controller.js:1562
+#: src/admin/settings-page-controller.js:1596
 #, js-format
 msgid "Sync monitoring is unavailable. The server may still be working. Check sync status before starting another sync. %s"
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1583
+#: src/admin/settings-page-controller.js:1617
 msgid "Checking sync status…"
 msgstr ""
 
 #. translators: %s: confirmed sync status.
-#: src/admin/settings-page-controller.js:1602
+#: src/admin/settings-page-controller.js:1636
 #, js-format
 msgid "Pattern catalog status updated: %s."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1629
+#: src/admin/settings-page-controller.js:1666
 msgid "Syncing…"
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1650
+#: src/admin/settings-page-controller.js:1668
+msgid "Waiting to retry…"
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1689
 msgid "Starting sync…"
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1654
+#: src/admin/settings-page-controller.js:1693
 msgid "Requesting pattern catalog sync."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1669
+#: src/admin/settings-page-controller.js:1708
 msgid "The sync request was rejected."
 msgstr ""
 

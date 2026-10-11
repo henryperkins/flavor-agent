@@ -114,6 +114,10 @@ function getPatternSyncStatusLabel( status, state = null ) {
 		return __( 'Needs sync', 'flavor-agent' );
 	}
 
+	if ( state && isPatternSyncRetrying( { ...state, status } ) ) {
+		return __( 'Retrying', 'flavor-agent' );
+	}
+
 	return PATTERN_STATUS_LABELS[ status ] || normalizeText( status );
 }
 
@@ -132,6 +136,11 @@ function getPatternStaleReasons( state ) {
 		  )
 		: [];
 	return reasons.length ? reasons : [ normalizeText( state.stale_reason ) ];
+}
+
+// The server schedules a follow-up sync whenever it records a retryable error.
+function isPatternSyncRetrying( state ) {
+	return state?.status === 'error' && state?.last_error_retryable === true;
 }
 
 function hasConfirmedPatternCatalog( state ) {
@@ -183,6 +192,13 @@ function getPatternOverviewStatus( runtimeState, hasPrerequisites ) {
 	if ( patternCatalogNeedsSync( state ) ) {
 		return {
 			label: __( 'Needs sync', 'flavor-agent' ),
+			tone: 'warning',
+		};
+	}
+
+	if ( isPatternSyncRetrying( state ) ) {
+		return {
+			label: __( 'Retrying', 'flavor-agent' ),
 			tone: 'warning',
 		};
 	}
@@ -243,6 +259,13 @@ function getPatternSyncStatusSentence( runtimeState, prerequisiteMessage ) {
 
 		return __(
 			'Pattern recommendations are unavailable until the catalog is rebuilt or revalidated in Cloudflare AI Search. Review and save Cloudflare settings, then sync the catalog.',
+			'flavor-agent'
+		);
+	}
+
+	if ( isPatternSyncRetrying( state ) ) {
+		return __(
+			'Pattern catalog sync paused after a temporary Cloudflare error and resumes automatically.',
 			'flavor-agent'
 		);
 	}
@@ -392,9 +415,10 @@ function updateSyncPanelState( root, runtimeState ) {
 	const statusUnavailable = currentStatus === 'unavailable';
 	const requestRejected = currentStatus === 'rejected';
 	syncBody.dataset.patternSyncStatus = currentStatus;
+	const retrying = isPatternSyncRetrying( state );
 	let syncBadgeTone = 'warning';
 
-	if ( hasPrerequisites ) {
+	if ( hasPrerequisites && ! retrying ) {
 		syncBadgeTone = state.last_error
 			? 'error'
 			: getPatternSyncStatusTone( currentStatus );
@@ -487,7 +511,13 @@ function updateSyncPanelState( root, runtimeState ) {
 	updateMetric( root, 'stale_reason', staleReason, Boolean( staleReason ) );
 
 	const lastError = normalizeText( state.last_error, '' );
-	updateMetric( root, 'last_error', lastError, Boolean( lastError ), true );
+	updateMetric(
+		root,
+		'last_error',
+		lastError,
+		Boolean( lastError ),
+		! retrying
+	);
 
 	if (
 		syncPanel &&
@@ -1436,6 +1466,10 @@ function initializePatternSync( root, fetchImpl ) {
 
 	const getCurrentSyncStatus = () =>
 		normalizeText( syncBody.dataset.patternSyncStatus, 'uninitialized' );
+	const isWaitingToRetry = () =>
+		havePatternPrerequisites() &&
+		getCurrentSyncStatus() === 'error' &&
+		isPatternSyncRetrying( lastRuntimeState );
 	const prerequisiteCopy = syncBody.querySelector(
 		'[data-pattern-prerequisite-copy]'
 	);
@@ -1608,13 +1642,16 @@ function initializePatternSync( root, fetchImpl ) {
 			const message = lastRuntimeState.last_error
 				? `${ statusMessage } ${ lastRuntimeState.last_error }`
 				: statusMessage;
-			renderNotice(
-				noticeRoot,
-				lastRuntimeState.last_error ? 'error' : 'success',
-				message
-			);
+			let noticeTone = lastRuntimeState.last_error ? 'error' : 'success';
+			if ( isPatternSyncRetrying( lastRuntimeState ) ) {
+				noticeTone = 'warning';
+			}
+			renderNotice( noticeRoot, noticeTone, message );
 			setStatusText( liveRegion, message );
-			if ( lastRuntimeState.status === 'indexing' ) {
+			if (
+				lastRuntimeState.status === 'indexing' ||
+				isWaitingToRetry()
+			) {
 				pollTimeout = setTimeout(
 					pollSyncState,
 					PATTERN_SYNC_POLL_INTERVAL_MS
@@ -1624,11 +1661,13 @@ function initializePatternSync( root, fetchImpl ) {
 			showUnavailable( error );
 		} finally {
 			requestInFlight = false;
-			updateActivity(
-				getCurrentSyncStatus() === 'indexing'
-					? __( 'Syncing…', 'flavor-agent' )
-					: ''
-			);
+			let activity = '';
+			if ( getCurrentSyncStatus() === 'indexing' ) {
+				activity = __( 'Syncing…', 'flavor-agent' );
+			} else if ( isWaitingToRetry() ) {
+				activity = __( 'Waiting to retry…', 'flavor-agent' );
+			}
+			updateActivity( activity );
 		}
 	};
 
@@ -1701,7 +1740,7 @@ function initializePatternSync( root, fetchImpl ) {
 	} );
 
 	updateButtonAccessibility();
-	if ( getCurrentSyncStatus() === 'indexing' ) {
+	if ( getCurrentSyncStatus() === 'indexing' || isWaitingToRetry() ) {
 		pollSyncState();
 	}
 }

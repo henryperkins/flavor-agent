@@ -23,6 +23,9 @@ final class PatternIndex {
 	private const COOLDOWN                                    = 300;
 	private const CLOUDFLARE_AI_SEARCH_PENDING_RETRY_AFTER    = 30;
 	private const CLOUDFLARE_AI_SEARCH_PROCESSING_RETRY_AFTER = 60;
+	private const CLOUDFLARE_AI_SEARCH_RATE_LIMIT_RETRY_AFTER = 30;
+	private const DEFAULT_RETRY_AFTER                         = 5;
+	private const MAX_RETRY_AFTER                             = 300;
 	private const CLOUDFLARE_AI_SEARCH_RETRYABLE_ITEM_ERRORS  = [
 		'workers_ai_out_of_capacity_error',
 	];
@@ -212,7 +215,7 @@ final class PatternIndex {
 		$state['last_error_status']              = max( 0, (int) ( $state['last_error_status'] ?? 0 ) );
 		$state['last_error_retryable']           = ! empty( $state['last_error_retryable'] );
 		$state['last_error_retry_after']         = isset( $state['last_error_retry_after'] ) && $state['last_error_retry_after'] !== null
-			? max( 1, min( 60, (int) $state['last_error_retry_after'] ) )
+			? max( 1, min( self::MAX_RETRY_AFTER, (int) $state['last_error_retry_after'] ) )
 			: null;
 		$state['stale_reason']                   = (string) ( $state['stale_reason'] ?? '' );
 		$state['stale_reasons']                  = self::normalize_stale_reasons( $state );
@@ -865,14 +868,20 @@ final class PatternIndex {
 		$state['status']                         = 'indexing';
 		$state['pattern_backend']                = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH;
 		$state['cloudflare_ai_search_namespace'] = $namespace;
+		// Recording the target identity now lets an interrupted rebuild resume
+		// from its checkpointed writes instead of uploading every pattern again.
+		$state['cloudflare_ai_search_instance']  = $instance;
+		$state['cloudflare_ai_search_signature'] = $signature;
 		$state['last_attempt_at']                = gmdate( 'c' );
 		$state['last_error']                     = null;
 		$state['stale_reason']                   = '';
 		$state['stale_reasons']                  = [];
 		if ( $requires_full_reindex ) {
-			$state['last_synced_at']       = null;
-			$state['indexed_count']        = 0;
-			$state['pattern_fingerprints'] = [];
+			$state['last_synced_at'] = null;
+			$state['indexed_count']  = 0;
+			// Current patterns upload again; retired entries stay recorded so
+			// their remote items are still deleted if this pass is interrupted.
+			$state['pattern_fingerprints'] = array_diff_key( $previous_pattern_fingerprints, $current );
 		}
 		self::save_state( $state );
 
@@ -916,6 +925,9 @@ final class PatternIndex {
 				self::save_error_state( $upload );
 				return $upload;
 			}
+
+			$state['pattern_fingerprints'][ $uuid ] = $current_pattern_fingerprints[ $uuid ];
+			self::save_state( $state );
 		}
 
 		$current_ids = array_fill_keys( array_keys( $current ), true );
@@ -932,17 +944,20 @@ final class PatternIndex {
 			}
 
 			if ( ! isset( $current_ids[ $remote_pattern_id ] ) ) {
-				$to_delete[] = $remote_item['item_id'];
+				$to_delete[ $remote_pattern_id ] = $remote_item['item_id'];
 			}
 		}
 
-		foreach ( $to_delete as $item_id ) {
+		foreach ( $to_delete as $pattern_id => $item_id ) {
 			$delete = PatternSearchClient::delete_pattern( $item_id );
 
 			if ( is_wp_error( $delete ) ) {
 				self::save_error_state( $delete );
 				return $delete;
 			}
+
+			unset( $state['pattern_fingerprints'][ $pattern_id ] );
+			self::save_state( $state );
 		}
 
 		$latest_remote_items = ( [] !== $to_upload || [] !== $to_delete )
@@ -1217,17 +1232,16 @@ final class PatternIndex {
 	}
 
 	private static function save_error_state( string|\WP_Error $error ): void {
-		$state = self::get_state();
+		$state       = self::get_state();
+		$retry_after = is_wp_error( $error ) ? self::retry_delay_for_error( $error ) : null;
 
 		if ( is_wp_error( $error ) ) {
 			$data                            = $error->get_error_data();
 			$state['last_error']             = $error->get_error_message();
 			$state['last_error_code']        = (string) $error->get_error_code();
 			$state['last_error_status']      = is_array( $data ) ? max( 0, (int) ( $data['status'] ?? 0 ) ) : 0;
-			$state['last_error_retryable']   = is_array( $data ) && ! empty( $data['retryable'] );
-			$state['last_error_retry_after'] = is_array( $data ) && isset( $data['retry_after'] ) && $data['retry_after'] !== null
-				? max( 1, min( 60, (int) $data['retry_after'] ) )
-				: null;
+			$state['last_error_retryable']   = null !== $retry_after;
+			$state['last_error_retry_after'] = $retry_after;
 		} else {
 			$state               = self::clear_error_metadata( $state );
 			$state['last_error'] = $error;
@@ -1238,9 +1252,38 @@ final class PatternIndex {
 		$state['stale_reasons'] = [];
 		self::save_state( $state );
 
-		if ( is_wp_error( $error ) ) {
-			self::schedule_retry_for_error( $error );
+		if ( null !== $retry_after ) {
+			self::schedule_sync_after( $retry_after );
 		}
+	}
+
+	/**
+	 * Background syncs honor Cloudflare's full Retry-After, up to the five
+	 * minutes its API-wide rate limit blocks requests. The shared client caps
+	 * its own retry hint for foreground requests.
+	 */
+	private static function retry_delay_for_error( \WP_Error $error ): ?int {
+		$data = $error->get_error_data();
+
+		if ( ! is_array( $data ) || empty( $data['retryable'] ) ) {
+			return null;
+		}
+
+		$delay = is_string( $data['retry_after_raw'] ?? null )
+			? PatternSearchClient::parse_retry_after_header( $data['retry_after_raw'], null, self::MAX_RETRY_AFTER )
+			: null;
+
+		if ( null === $delay && isset( $data['retry_after'] ) ) {
+			$delay = (int) $data['retry_after'];
+		}
+
+		if ( null === $delay ) {
+			$delay = 'rate_limited' === $error->get_error_code()
+				? self::CLOUDFLARE_AI_SEARCH_RATE_LIMIT_RETRY_AFTER
+				: self::DEFAULT_RETRY_AFTER;
+		}
+
+		return max( 1, min( self::MAX_RETRY_AFTER, $delay ) );
 	}
 
 	/**
@@ -1257,26 +1300,13 @@ final class PatternIndex {
 		return $state;
 	}
 
-	private static function schedule_retry_for_error( \WP_Error $error ): void {
-		$data = $error->get_error_data();
-
-		if ( ! is_array( $data ) || empty( $data['retryable'] ) || ! self::recommendation_backends_configured() ) {
-			return;
-		}
-
-		$retry_after = isset( $data['retry_after'] ) && $data['retry_after'] !== null
-			? max( 1, min( 60, (int) $data['retry_after'] ) )
-			: 5;
-		self::schedule_sync_after( $retry_after );
-	}
-
 	private static function schedule_sync_after( int $delay ): void {
 		if ( ! self::recommendation_backends_configured() ) {
 			return;
 		}
 
 		$hook        = self::CRON_HOOK;
-		$target_time = time() + max( 1, min( 60, $delay ) );
+		$target_time = time() + max( 1, min( self::MAX_RETRY_AFTER, $delay ) );
 		$scheduled   = wp_next_scheduled( $hook );
 
 		if ( false !== $scheduled && $scheduled <= $target_time ) {

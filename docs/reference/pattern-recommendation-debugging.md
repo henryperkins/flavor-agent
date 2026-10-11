@@ -61,6 +61,8 @@ Sync uses saved configuration. Save or restore unsaved relevant Cloudflare setti
 
 For stalled managed indexing, inspect the item-processing summary and reported error. Uploads use `wait_for_completion=false`; successful upload acceptance is not completed indexing. The runtime waits for listed current items to report `completed`. Pending/missing items and retryable processing failures schedule follow-up syncs. Workers AI capacity/timeouts can appear as managed AI Search item errors even though the plugin-owned embedding client did not run.
 
+Sync records each accepted upload and confirmed delete as it goes, so an interrupted pass resumes with only its remaining writes instead of uploading the catalog again. A full rebuild records the new catalog identity before its first write and keeps retired entries until their remote items are deleted. Cloudflare HTTP 429 messages keep the Cloudflare error code and message; Cloudflare documents an item-delete 429 as `7114 ai_search_instance_overloaded`. The follow-up sync waits for Cloudflare's full `Retry-After`, capped at five minutes, or 30 seconds when none is sent. While that follow-up is scheduled, settings shows `Retrying` instead of `Error` and keeps checking status. Monthly AI Search query, storage, and ingestion quota responses (`7069`, `7112`, `7116`) are not retried; they remain errors until the quota resets or the plan changes.
+
 Distinguish remote item `key` (Flavor Agent's stable pattern identity) from Cloudflare's generated item `id` used for deletion. Sync preserves unknown remote items and the owner marker. Do not clear an entire instance as a generic repair.
 
 ## 4. Verify The Eligible Pattern Scope

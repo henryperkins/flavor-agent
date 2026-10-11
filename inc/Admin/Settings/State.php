@@ -294,6 +294,10 @@ final class State {
 			return self::make_badge( __( 'Needs sync', 'flavor-agent' ), 'warning' );
 		}
 
+		if ( self::pattern_sync_is_retrying( $pattern_state ) ) {
+			return self::make_badge( __( 'Retrying', 'flavor-agent' ), 'warning' );
+		}
+
 		if ( ! empty( $pattern_state['last_error'] ) ) {
 			return self::make_badge( __( 'Needs attention', 'flavor-agent' ), 'error' );
 		}
@@ -304,6 +308,13 @@ final class State {
 			'indexing' => self::make_badge( __( 'Syncing', 'flavor-agent' ), 'accent' ),
 			default => self::make_badge( __( 'Needs sync', 'flavor-agent' ), 'warning' ),
 		};
+	}
+
+	/**
+	 * Sync schedules a follow-up run whenever it records a retryable error.
+	 */
+	public static function pattern_sync_is_retrying( array $state ): bool {
+		return 'error' === (string) ( $state['status'] ?? '' ) && PatternIndex::has_retryable_error( $state );
 	}
 
 	public static function pattern_catalog_needs_sync( array $state ): bool {

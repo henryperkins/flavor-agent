@@ -1290,14 +1290,15 @@ final class Page {
 		$state                                  = is_array( $page_state['pattern_state'] ?? null ) ? $page_state['pattern_state'] : PatternIndex::get_runtime_state();
 		$display_state                          = array_intersect_key(
 			$state,
-			array_flip( [ 'status', 'indexed_count', 'last_synced_at', 'last_attempt_at', 'stale_reason', 'stale_reasons', 'last_error' ] )
+			array_flip( [ 'status', 'indexed_count', 'last_synced_at', 'last_attempt_at', 'stale_reason', 'stale_reasons', 'last_error', 'last_error_retryable' ] )
 		);
 		$display_state['recommendations_ready'] = PatternIndex::recommendation_index_readiness( $state )['ready'];
 		$has_prerequisites                      = ! empty( $page_state['patterns_ready'] );
+		$is_retrying                            = State::pattern_sync_is_retrying( $state );
 		$status_label                           = $has_prerequisites
-			? ( State::pattern_catalog_needs_sync( $state ) ? __( 'Needs sync', 'flavor-agent' ) : State::get_pattern_sync_status_label( (string) $state['status'] ) )
+			? self::get_pattern_sync_panel_status_label( $state )
 			: self::get_pattern_sync_prerequisite_status_label( $page_state );
-		$status_tone                            = ! $has_prerequisites
+		$status_tone                            = ! $has_prerequisites || $is_retrying
 			? 'warning'
 			: ( ! empty( $state['last_error'] ) ? 'error' : State::get_pattern_sync_status_tone( (string) $state['status'] ) );
 		$last_synced_label                      = $state['last_synced_at'] ? (string) $state['last_synced_at'] : __( 'Not synced yet', 'flavor-agent' );
@@ -1352,7 +1353,9 @@ final class Page {
 				</p>
 				<p class="description"><?php echo esc_html__( 'Sync uses saved Cloudflare storage settings. It uploads pattern text to Cloudflare AI Search, which manages catalog embeddings. Checking status may continue an already queued sync.', 'flavor-agent' ); ?></p>
 				<p id="flavor-agent-sync-config-hint" class="description" data-pattern-sync-config-hint hidden><?php echo esc_html__( 'Save Changes before syncing changed Cloudflare credentials or storage settings.', 'flavor-agent' ); ?></p>
-				<?php if ( ! empty( $state['last_error'] ) ) : ?>
+				<?php if ( $is_retrying ) : ?>
+					<p class="description"><?php echo esc_html__( 'Cloudflare reported a temporary error. The sync resumes automatically and keeps the progress it already made.', 'flavor-agent' ); ?></p>
+				<?php elseif ( ! empty( $state['last_error'] ) ) : ?>
 					<p class="description">
 						<?php echo esc_html__( 'Review the last error below. Check the Cloudflare credentials in Embedding Model and Pattern Storage settings, save any corrections, then check sync status before starting another sync.', 'flavor-agent' ); ?>
 						<a href="#<?php echo esc_attr( State::get_section_dom_id( Config::GROUP_EMBEDDINGS ) ); ?>"><?php echo esc_html__( 'Review Cloudflare credentials', 'flavor-agent' ); ?></a>
@@ -1393,7 +1396,7 @@ final class Page {
 					self::render_sync_metric(
 						__( 'Last Error', 'flavor-agent' ),
 						(string) ( $state['last_error'] ?? '' ),
-						true,
+						! $is_retrying,
 						'last_error',
 						! empty( $state['last_error'] )
 					);
@@ -1458,6 +1461,16 @@ final class Page {
 		return __( 'Save Cloudflare credentials in Embedding Model to create the managed pattern index, then sync the catalog.', 'flavor-agent' );
 	}
 
+	private static function get_pattern_sync_panel_status_label( array $state ): string {
+		if ( State::pattern_catalog_needs_sync( $state ) ) {
+			return __( 'Needs sync', 'flavor-agent' );
+		}
+
+		return State::pattern_sync_is_retrying( $state )
+			? __( 'Retrying', 'flavor-agent' )
+			: State::get_pattern_sync_status_label( (string) $state['status'] );
+	}
+
 	private static function get_pattern_sync_prerequisite_status_label( array $page_state ): string {
 		$provisioning = is_array( $page_state['cloudflare_pattern_ai_search_provisioning'] ?? null )
 			? $page_state['cloudflare_pattern_ai_search_provisioning']
@@ -1483,6 +1496,10 @@ final class Page {
 			}
 
 			return __( 'Pattern recommendations are unavailable until the catalog is rebuilt or revalidated in Cloudflare AI Search. Review and save Cloudflare settings, then sync the catalog.', 'flavor-agent' );
+		}
+
+		if ( State::pattern_sync_is_retrying( $state ) ) {
+			return __( 'Pattern catalog sync paused after a temporary Cloudflare error and resumes automatically.', 'flavor-agent' );
 		}
 
 		if ( ! empty( $state['last_error'] ) ) {

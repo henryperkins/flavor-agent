@@ -30,7 +30,11 @@ test( '@wp70-site-editor Settings resumes a sync already indexing when the page 
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify( {
-					runtimeState: { status: 'ready', indexed_count: 12 },
+					runtimeState: {
+						status: 'ready',
+						pattern_backend: 'cloudflare_ai_search',
+						indexed_count: 12,
+					},
 				} ),
 			} );
 		}
@@ -50,6 +54,91 @@ test( '@wp70-site-editor Settings resumes a sync already indexing when the page 
 	);
 	await expect( page.locator( '#flavor-agent-sync-button' ) ).toBeEnabled();
 	expect( statusRequests ).toBe( 1 );
+} );
+
+test( '@wp70-site-editor Settings reports a scheduled sync retry and keeps monitoring until it recovers', async ( {
+	page,
+} ) => {
+	const retryMessage =
+		'Cloudflare Pattern AI Search item delete is temporarily rate limited (Cloudflare error 7114: ai_search_instance_overloaded).';
+	let statusRequests = 0;
+	await page.route(
+		'**/wp-admin/options-general.php?page=flavor-agent',
+		async ( route ) => {
+			const response = await route.fetch();
+			const body = ( await response.text() ).replace(
+				/data-pattern-prerequisites-ready="[^"]*"/g,
+				'data-pattern-prerequisites-ready="1"'
+			);
+			await route.fulfill( { response, body } );
+		}
+	);
+	await page.route(
+		'**/wp-json/flavor-agent/v1/sync-patterns',
+		async ( route ) => {
+			expect( route.request().method() ).toBe( 'GET' );
+			statusRequests += 1;
+			const runtimeState =
+				statusRequests === 1
+					? {
+							status: 'error',
+							pattern_backend: 'cloudflare_ai_search',
+							indexed_count: 0,
+							last_error: retryMessage,
+							last_error_retryable: true,
+							last_error_retry_after: 7,
+					  }
+					: {
+							status: 'ready',
+							pattern_backend: 'cloudflare_ai_search',
+							cloudflare_ai_search_namespace: 'default',
+							cloudflare_ai_search_instance:
+								'flavor-agent-patterns-e2e',
+							cloudflare_ai_search_signature: 'e2e-signature',
+							indexed_count: 12,
+							last_synced_at: '2026-10-11T10:00:00Z',
+							last_error: null,
+							last_error_retryable: false,
+							last_error_retry_after: null,
+					  };
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify( { runtimeState } ),
+			} );
+		}
+	);
+
+	await page.goto( '/wp-admin/options-general.php?page=flavor-agent', {
+		waitUntil: 'domcontentloaded',
+	} );
+	await waitForWordPressReady( page );
+	const patterns = page.locator( '[data-flavor-agent-section="patterns"]' );
+	if ( ! ( await patterns.evaluate( ( element ) => element.open ) ) ) {
+		await patterns.locator( ':scope > summary' ).click();
+	}
+	const syncPanel = page.locator( '[data-flavor-agent-sync-panel]' );
+	if ( ! ( await syncPanel.evaluate( ( element ) => element.open ) ) ) {
+		await syncPanel.locator( ':scope > summary' ).click();
+	}
+	await page.locator( '#flavor-agent-sync-check-button' ).click();
+
+	const badge = page.locator( '[data-pattern-status-badge="panel"]' );
+	await expect( badge ).toHaveText( 'Retrying' );
+	await expect(
+		page.locator( '#flavor-agent-sync-notice .notice-warning' )
+	).toContainText( retryMessage );
+	await expect(
+		page.locator( '#flavor-agent-sync-notice .notice-error' )
+	).toHaveCount( 0 );
+
+	await expect( page.locator( '.flavor-agent-sync-panel' ) ).toHaveAttribute(
+		'data-pattern-sync-status',
+		'ready',
+		{ timeout: 15_000 }
+	);
+	await expect( badge ).toHaveText( 'Ready' );
+	expect( statusRequests ).toBe( 2 );
 } );
 
 function pendingPostEntry( canDecide ) {
