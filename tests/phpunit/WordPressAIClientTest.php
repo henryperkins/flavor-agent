@@ -319,6 +319,77 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( 16384, $meta['requestSummary']['maxOutputTokens'] ?? null );
 	}
 
+	public function test_chat_omits_unsupported_default_token_limit_for_selected_codex_model(): void {
+		self::register_ai_provider_connector( 'codex', 'Codex' );
+		WordPressTestState::$options                        = [
+			'wpai_feature_flavor-agent_field_developer' => [
+				'provider' => 'codex',
+				'model'    => 'gpt-6.1-sol',
+			],
+		];
+		WordPressTestState::$ai_client_provider_support     = [ 'codex' => true ];
+		WordPressTestState::$ai_client_feature_support      = [ 'max_tokens' => false ];
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
+
+		$result = WordPressAIClient::chat( 'System.', 'User.', null, 'medium' );
+
+		$this->assertSame( '{"explanation":"OK."}', $result );
+		$this->assertSame( 'codex', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
+		$this->assertSame( 'gpt-6.1-sol', WordPressTestState::$last_ai_client_prompt['model'] ?? null );
+		$this->assertArrayNotHasKey( 'maxTokens', WordPressTestState::$last_ai_client_prompt['model_config'] ?? [] );
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+		$this->assertArrayNotHasKey( 'maxOutputTokens', $meta['requestSummary'] ?? [] );
+	}
+
+	public function test_chat_omits_unsupported_default_token_limit_for_unpinned_runtime(): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_feature_support      = [ 'max_tokens' => false ];
+		WordPressTestState::$ai_client_generate_text_result = '{"explanation":"OK."}';
+
+		$this->assertSame( '{"explanation":"OK."}', WordPressAIClient::chat( 'System.', 'User.' ) );
+		$this->assertArrayNotHasKey( 'maxTokens', WordPressTestState::$last_ai_client_prompt['model_config'] ?? [] );
+		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
+	}
+
+	public function test_chat_does_not_discard_an_explicit_unsupported_token_limit(): void {
+		WordPressTestState::$ai_client_supported       = true;
+		WordPressTestState::$ai_client_feature_support = [ 'max_tokens' => false ];
+
+		$result = WordPressAIClient::chat( 'System.', 'User.', null, null, null, [ 'max_tokens' => 500 ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'missing_text_generation_provider', $result->get_error_code() );
+		$this->assertCount( 1, WordPressTestState::$ai_client_prompt_calls );
+		$this->assertSame( 500, WordPressTestState::$last_ai_client_prompt['model_config']['maxTokens'] ?? null );
+	}
+
+	public function test_schema_retry_does_not_restore_an_unsupported_default_token_limit(): void {
+		WordPressTestState::$ai_client_supported       = true;
+		WordPressTestState::$ai_client_feature_support = [ 'max_tokens' => false ];
+		$attempts                                      = [];
+		$capture_attempt                               = static function ( array $args ) use ( &$attempts ): array {
+			$attempts[] = WordPressTestState::$last_ai_client_prompt;
+			WordPressTestState::$ai_client_generate_text_result = 1 === count( $attempts )
+				? new \WP_Error( 'wp_ai_client_request_failed', 'The compiled grammar is too large, which would cause performance issues.' )
+				: '{"explanation":"OK."}';
+			return $args;
+		};
+		add_filter( 'http_request_args', $capture_attempt );
+		try {
+			$result = WordPressAIClient::chat( 'System.', 'User.', null, 'medium', ResponseSchema::get( 'block' ) );
+		} finally {
+			remove_filter( 'http_request_args', $capture_attempt );
+		}
+
+		$this->assertSame( '{"explanation":"OK."}', $result );
+		$this->assertCount( 2, $attempts );
+		foreach ( $attempts as $attempt ) {
+			$this->assertArrayNotHasKey( 'maxTokens', $attempt['model_config'] ?? [] );
+		}
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+		$this->assertArrayNotHasKey( 'maxOutputTokens', $meta['requestSummary'] ?? [] );
+	}
+
 	/**
 	 * @dataProvider incomplete_result_provider
 	 */

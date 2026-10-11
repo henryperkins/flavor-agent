@@ -311,6 +311,54 @@ test( 'AI Activity identifies a model response that exhausted its token budget',
 	).toBeVisible();
 } );
 
+test( 'AI Activity separates a failed Codex request from undo state', async ( {
+	page,
+} ) => {
+	const error =
+		'Configure a text-generation provider in Settings > Connectors to enable Flavor Agent recommendations.';
+	const entry = {
+		...ACTIVITY_ENTRIES[ 0 ],
+		id: 'activity-codex-unavailable',
+		type: 'request_diagnostic',
+		suggestion: 'Block request failed',
+		executionResult: 'review',
+		requestStatus: { state: 'failed', label: 'Request failed' },
+		undoState: { state: 'not_applicable', label: 'Undo not applicable' },
+		undo: { status: 'failed', canUndo: false, error },
+		request: {
+			error: { code: 'missing_text_generation_provider', message: error },
+			ai: { providerLabel: 'Codex', model: 'gpt-6.1-sol' },
+		},
+	};
+	await page.route(
+		'**/wp-json/flavor-agent/v1/activity**',
+		async ( route ) => {
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(
+					buildActivityResponse( route.request().url(), [ entry ], {
+						summary: { applied: 0, failed: 1 },
+					} )
+				),
+			} );
+		}
+	);
+	await page.goto(
+		'/wp-admin/options-general.php?page=flavor-agent-activity',
+		{ waitUntil: 'domcontentloaded' }
+	);
+	await waitForWordPressReady( page );
+	const sidebar = page.locator( '.flavor-agent-activity-log__sidebar' );
+	await expect( sidebar ).toContainText( 'Request failed' );
+	await expect( sidebar ).toContainText( 'Undo not applicable' );
+	await expect( sidebar ).not.toContainText( 'Undo failed' );
+	await expect( sidebar ).not.toContainText( 'Request status unknown' );
+	await sidebar.getByText( 'Provider diagnostics', { exact: true } ).click();
+	await expect( sidebar.getByText( error, { exact: true } ) ).toBeVisible();
+	await expect( sidebar.getByText( 'gpt-6.1-sol', { exact: true } ) ).toBeVisible();
+} );
+
 test( 'AI Activity linked-row mode clears the URL and keeps discovery badges visible', async ( {
 	page,
 } ) => {
@@ -978,4 +1026,13 @@ foreach ( $entries as $entry ) {
 	await expect(
 		page.locator( '.flavor-agent-activity-log__sidebar' )
 	).toContainText( 'Provider timeout.' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__sidebar' )
+	).toContainText( 'Request failed' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__sidebar' )
+	).toContainText( 'Undo not applicable' );
+	await expect(
+		page.locator( '.flavor-agent-activity-log__sidebar' )
+	).not.toContainText( 'Undo failed' );
 } );

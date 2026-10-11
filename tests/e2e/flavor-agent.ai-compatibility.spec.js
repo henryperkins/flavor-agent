@@ -1,6 +1,30 @@
 const { test, expect } = require( './test-fixtures' );
 const { getWp70HarnessConfig, runWpCli } = require( '../../scripts/wp70-e2e' );
 
+test( '@wp70-site-editor core AI Client accepts a Codex model without the optional token budget', async () => {
+	const result = runWpCli( getWp70HarnessConfig(), [
+		'eval',
+		"require '/var/www/html/wp-content/plugins/flavor-agent/tests/e2e/fixtures/codex-token-budget.php';",
+	] );
+	const state = JSON.parse( result.stdout.trim() );
+	expect( state ).toMatchObject( {
+		baselineSupported: true,
+		limitedSupported: false,
+		result: '{"explanation":"OK."}',
+		explicitError: 'missing_text_generation_provider',
+		requestSummary: {
+			resolvedProvider: 'codex',
+			resolvedModel: 'gpt-6.1-sol',
+		},
+	} );
+	expect( state.configs ).toHaveLength( 1 );
+	expect( state.configs[ 0 ] ).not.toHaveProperty( 'maxTokens' );
+	expect( state.configs[ 0 ].customOptions ).toMatchObject( {
+		reasoningEffort: 'medium',
+	} );
+	expect( state.requestSummary ).not.toHaveProperty( 'maxOutputTokens' );
+} );
+
 test( '@wp70-site-editor AI 1.4.0 enables native abilities without the retired master option', async () => {
 	const result = runWpCli( getWp70HarnessConfig(), [
 		'eval',

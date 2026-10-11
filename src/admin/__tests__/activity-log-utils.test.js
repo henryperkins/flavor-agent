@@ -586,8 +586,38 @@ describe( 'activity log utils', () => {
 			status: 'failed',
 			statusLabel: 'Request failed',
 			undoStatusLabel: 'Undo not applicable',
-			undoReason: 'Missing draft context.',
+			undoReason: 'No mutation has been applied.',
+			transportError: 'Missing draft context.',
 			entity: 'Content',
+		} );
+	} );
+
+	test( 'request errors appear in diagnostics without becoming undo errors', () => {
+		const [ entry ] = normalizeActivityEntries( [
+			createEntry( {
+				type: 'request_diagnostic',
+				executionResult: 'review',
+				requestStatus: { state: 'failed', label: 'Request failed' },
+				undoState: {
+					state: 'not_applicable',
+					label: 'Undo not applicable',
+				},
+				undo: { status: 'failed', error: 'Provider unavailable.' },
+				request: {
+					error: {
+						code: 'missing_text_generation_provider',
+						message: 'Provider unavailable.',
+					},
+				},
+			} ),
+		] );
+
+		expect( entry ).toMatchObject( {
+			statusLabel: 'Request failed',
+			undoStatusLabel: 'Undo not applicable',
+			undoError: 'Not recorded',
+			undoReason: 'No mutation has been applied.',
+			transportError: 'Provider unavailable.',
 		} );
 	} );
 

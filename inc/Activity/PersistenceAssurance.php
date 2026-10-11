@@ -260,7 +260,16 @@ final class PersistenceAssurance {
 					'label' => __( 'Save requested', 'flavor-agent' ),
 				];
 		}
-		$state  = (string) ( $entry['apply']['status'] ?? $entry['request']['apply']['status'] ?? $entry['executionResult'] ?? 'unknown' );
+		$state = (string) ( $entry['apply']['status'] ?? $entry['request']['apply']['status'] ?? $entry['executionResult'] ?? 'unknown' );
+		if ( 'request_diagnostic' === ( $entry['type'] ?? '' ) ) {
+			// Older diagnostics encoded request failures in the undo field.
+			$state = ! empty( $entry['request']['error']['code'] )
+				|| ! empty( $entry['request']['error']['message'] )
+				|| 'failed' === ( $entry['undo']['status'] ?? '' )
+				|| 'failed' === $state
+				? 'failed'
+				: 'diagnostic';
+		}
 		$labels = [
 			'applied'    => 'editor-state' === ( $entry['applyLane'] ?? '' ) ? __( 'Changed in editor', 'flavor-agent' ) : __( 'Applied', 'flavor-agent' ),
 			'pending'    => __( 'Awaiting approval', 'flavor-agent' ),
@@ -278,7 +287,9 @@ final class PersistenceAssurance {
 	}
 
 	private static function undo_state( array $entry ): array {
-		$state  = (string) ( $entry['undo']['status'] ?? 'not_applicable' );
+		$state  = 'request_diagnostic' === ( $entry['type'] ?? '' )
+			? 'not_applicable'
+			: (string) ( $entry['undo']['status'] ?? 'not_applicable' );
 		$labels = [
 			'undone'         => __( 'Undone in editor', 'flavor-agent' ),
 			'available'      => __( 'Not undone', 'flavor-agent' ),

@@ -57,6 +57,8 @@ The advisory transient review claim above is distinct from the internal decision
 
 `review` is not an executable undo state for apply actions. It is only used by scoped read-only `request_diagnostic` audit rows, which the admin page renders as review-only or failed request records instead of as undoable activity. `not_applicable` is used by `recommendation_outcome` diagnostics, which are hidden from normal inline feeds by default and never participate in undo. Pending/rejected/expired/approval-failed external-apply rows also use `not_applicable` — they never executed.
 
+The derived assurance fields classify `request_diagnostic` rows independently of their stored undo field. A request error (or a legacy `undo.status: failed` marker) produces `requestStatus: failed`; other request diagnostics produce `requestStatus: diagnostic`. Every request diagnostic has `undoState: not_applicable` and is ineligible for save verification because it did not apply a change. AI Activity displays the request error in provider diagnostics, while undo guidance says that no mutation was applied. Stored legacy rows are not rewritten.
+
 ## Valid Transitions
 
 ```text

@@ -154,11 +154,12 @@ final class WordPressAIClient {
 			);
 		}
 
-		$selection         = self::resolve_provider_model_selection( $provider );
-		$resolved_provider = $selection['provider'];
-		$model_options     = WordPressAIPolicy::sanitize_text_generation_options( $model_options ?? [] );
-		$model_options    += [ 'max_tokens' => self::DEFAULT_MAX_OUTPUT_TOKENS ];
-		$system_prompt     = WordPressAIPolicy::system_instruction(
+		$selection                = self::resolve_provider_model_selection( $provider );
+		$resolved_provider        = $selection['provider'];
+		$model_options            = WordPressAIPolicy::sanitize_text_generation_options( $model_options ?? [] );
+		$has_explicit_token_limit = isset( $model_options['max_tokens'] );
+		$model_options           += [ 'max_tokens' => self::DEFAULT_MAX_OUTPUT_TOKENS ];
+		$system_prompt            = WordPressAIPolicy::system_instruction(
 			$system_prompt,
 			$ability_name,
 			[
@@ -176,7 +177,7 @@ final class WordPressAIClient {
 		$build_prompt = static function () use (
 			$user_prompt,
 			$system_prompt,
-			$model_options,
+			&$model_options,
 			// By reference: apply_provider_model_selection() records the model
 			// resolution status back onto $selection, and build_request_diagnostics()
 			// reports it.
@@ -218,6 +219,18 @@ final class WordPressAIClient {
 
 		$prompt = $build_prompt();
 
+		if (
+			! $has_explicit_token_limit
+			&& is_wp_error( $prompt )
+			&& 'missing_text_generation_provider' === $prompt->get_error_code()
+		) {
+			// A default budget must not exclude a configured connector (e.g. Codex)
+			// that does not advertise maxTokens. Rebuild without that optional
+			// default; explicit caller limits and all other options remain required.
+			unset( $model_options['max_tokens'] );
+			$prompt = $build_prompt();
+		}
+
 		if ( is_wp_error( $prompt ) ) {
 			return $prompt;
 		}
@@ -243,7 +256,7 @@ final class WordPressAIClient {
 			$schema,
 			$request_timeout_seconds,
 			$selection,
-			$model_options['max_tokens']
+			$model_options['max_tokens'] ?? null
 		);
 		$trace_consumed          = RequestTrace::is_consumed();
 		$owns_trace              = $trace_consumed && ! RequestTrace::is_active();
@@ -337,7 +350,7 @@ final class WordPressAIClient {
 							$schema,
 							$request_timeout_seconds,
 							$selection,
-							$model_options['max_tokens']
+							$model_options['max_tokens'] ?? null
 						);
 						$request_diagnostics['requestSummary']['outputSchemaFallback'] = $fallback_reason;
 						$result = self::call_prompt_method_with_request_timeout(
@@ -1920,15 +1933,17 @@ final class WordPressAIClient {
 		?array $schema,
 		int $timeout_seconds,
 		array $selection,
-		int $max_output_tokens
+		?int $max_output_tokens
 	): array {
-		$provider         = is_string( $provider ) ? sanitize_key( $provider ) : '';
-		$request_payload  = [
+		$provider        = is_string( $provider ) ? sanitize_key( $provider ) : '';
+		$request_payload = [
 			'provider'     => $provider,
 			'instructions' => $system_prompt,
 			'input'        => $user_prompt,
-			'max_tokens'   => $max_output_tokens,
 		];
+		if ( null !== $max_output_tokens ) {
+			$request_payload['max_tokens'] = $max_output_tokens;
+		}
 		$reasoning_effort = self::normalize_reasoning_effort_value( $reasoning_effort );
 		$resolved_model   = trim( (string) ( $selection['model'] ?? '' ) );
 		$resolution_error = trim( (string) ( $selection['modelResolutionError'] ?? '' ) );

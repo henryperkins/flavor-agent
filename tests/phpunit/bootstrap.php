@@ -309,6 +309,13 @@ namespace FlavorAgent\Tests\Support {
 		public static function ai_client_prompt_supports_text_generation(array $prompt_state): bool
 		{
 			if (
+				false === (self::$ai_client_feature_support['max_tokens'] ?? true)
+				&& isset($prompt_state['model_config']['maxTokens'])
+			) {
+				return false;
+			}
+
+			if (
 				array_key_exists('reasoning', self::$ai_client_feature_support)
 				&& ! self::$ai_client_feature_support['reasoning']
 				&& isset($prompt_state['reasoning'])

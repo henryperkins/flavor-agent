@@ -1290,6 +1290,7 @@ function getRequestDiagnostics( request = {}, admin = {} ) {
 	const transportError = getFirstString( request, [
 		[ 'ai', 'errorSummary', 'wrappedMessage' ],
 		[ 'errorSummary', 'wrappedMessage' ],
+		[ 'error', 'message' ],
 	] );
 
 	let tokenUsageLabel = EMPTY_VALUE;
@@ -1400,6 +1401,10 @@ function getAiRequestLogMetadata(
 }
 
 function getUndoReason( status, resolvedUndo = null, entry = null ) {
+	if ( entry?.type === 'request_diagnostic' ) {
+		return __( 'No mutation has been applied.', 'flavor-agent' );
+	}
+
 	if (
 		entry?.apply &&
 		[ 'pending', 'rejected', 'expired' ].includes( status )
@@ -3590,6 +3595,15 @@ function normalizeActivityEntry(
 	const admin = getAdminMetadata( entry );
 	const { postType, entityId } = getDocumentContext( entry );
 	const diagnostics = getRequestDiagnostics( request, admin );
+	if (
+		entry?.type === 'request_diagnostic' &&
+		diagnostics.transportError === EMPTY_VALUE &&
+		typeof entry?.undo?.error === 'string' &&
+		entry.undo.error.trim()
+	) {
+		// Legacy request rows kept their failure message in the undo field.
+		diagnostics.transportError = entry.undo.error.trim();
+	}
 	const aiRequestLog = getAiRequestLogMetadata(
 		request,
 		admin,
@@ -3648,7 +3662,11 @@ function normalizeActivityEntry(
 		);
 	}
 
-	if ( typeof entry?.undo?.error === 'string' && entry.undo.error.trim() ) {
+	if (
+		entry?.type !== 'request_diagnostic' &&
+		typeof entry?.undo?.error === 'string' &&
+		entry.undo.error.trim()
+	) {
 		undoError = entry.undo.error.trim();
 	} else if (
 		status === 'blocked' &&

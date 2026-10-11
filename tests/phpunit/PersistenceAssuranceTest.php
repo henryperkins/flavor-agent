@@ -34,6 +34,76 @@ final class PersistenceAssuranceTest extends TestCase {
 		}
 	}
 
+	public function test_failed_recommendation_request_has_no_undo_or_save_verification(): void {
+		$entry = PersistenceAssurance::enrich(
+			[
+				[
+					'type'            => 'request_diagnostic',
+					'executionResult' => 'review',
+					'request'         => [
+						'error' => [
+							'code'    => 'missing_text_generation_provider',
+							'message' => 'Provider unavailable.',
+						],
+					],
+					'undo'            => [
+						'status' => 'failed',
+						'error'  => 'Provider unavailable.',
+					],
+				],
+			]
+		)[0];
+
+		$this->assertSame(
+			[
+				'state' => 'failed',
+				'label' => 'Request failed',
+			],
+			$entry['requestStatus']
+		);
+		$this->assertSame(
+			[
+				'state' => 'not_applicable',
+				'label' => 'Undo not applicable',
+			],
+			$entry['undoState']
+		);
+		$this->assertFalse( $entry['verificationCoverage']['eligible'] );
+	}
+
+	public function test_legacy_failed_request_is_not_an_undo_failure(): void {
+		$entry = PersistenceAssurance::enrich(
+			[
+				[
+					'type'            => 'request_diagnostic',
+					'executionResult' => 'review',
+					'undo'            => [
+						'status' => 'failed',
+						'error'  => 'Request timed out.',
+					],
+				],
+			]
+		)[0];
+
+		$this->assertSame( 'failed', $entry['requestStatus']['state'] );
+		$this->assertSame( 'not_applicable', $entry['undoState']['state'] );
+	}
+
+	public function test_successful_request_diagnostic_reports_no_undo(): void {
+		$entry = PersistenceAssurance::enrich(
+			[
+				[
+					'type'            => 'request_diagnostic',
+					'executionResult' => 'review',
+					'undo'            => [ 'status' => 'review' ],
+				],
+			]
+		)[0];
+
+		$this->assertSame( 'diagnostic', $entry['requestStatus']['state'] );
+		$this->assertSame( 'not_applicable', $entry['undoState']['state'] );
+	}
+
 	public function test_capture_without_comparison_is_not_verified_and_excluded_from_persistence_rates(): void {
 		$apply = $this->apply( 'queued' );
 		$this->capture( 'save-queued' );
