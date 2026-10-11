@@ -7,7 +7,7 @@ namespace FlavorAgent\Abilities;
 use FlavorAgent\Activity\Repository as ActivityRepository;
 use FlavorAgent\Activity\RequestLoggingBridge;
 use FlavorAgent\Activity\Serializer;
-use FlavorAgent\Admin\Settings\Config;
+use FlavorAgent\Cloudflare\PatternSearchClient;
 use FlavorAgent\Guidelines;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\Retrieval\PatternRetrievalBackendFactory;
@@ -598,28 +598,21 @@ final class RecommendationAbilityExecution {
 	private static function append_pattern_request_meta( array $request_meta ): array {
 		$backend = PatternRetrievalBackendFactory::selected_backend();
 
-		$request_meta['pattern_backend'] = $backend;
-		$request_meta['patternBackend']  = [
+		$request_meta['pattern_backend']    = $backend;
+		$request_meta['patternBackend']     = [
 			'id'    => $backend,
-			'label' => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $backend
-				? 'Cloudflare AI Search'
-				: 'Qdrant',
+			'label' => 'Cloudflare AI Search',
 		];
-
-		if ( Config::PATTERN_BACKEND_QDRANT === $backend ) {
-			$request_meta['embedding_provider'] = Provider::active_embedding_request_meta();
-		} else {
-			$request_meta['embedding_provider'] = [
-				'provider'      => 'cloudflare_ai_search',
-				'providerLabel' => 'Cloudflare AI Search managed embeddings',
-				'backendLabel'  => 'Cloudflare AI Search',
-				'model'         => 'managed by Cloudflare AI Search',
-				'configured'    => true,
-				'owner'         => 'cloudflare_ai_search',
-				'ownerLabel'    => 'Settings > Flavor Agent',
-				'pathLabel'     => 'Cloudflare AI Search private pattern index',
-			];
-		}
+		$request_meta['embedding_provider'] = [
+			'provider'      => 'cloudflare_ai_search',
+			'providerLabel' => 'Cloudflare AI Search managed embeddings',
+			'backendLabel'  => 'Cloudflare AI Search',
+			'model'         => 'managed by Cloudflare AI Search',
+			'configured'    => PatternSearchClient::is_configured(),
+			'owner'         => 'cloudflare_ai_search',
+			'ownerLabel'    => 'Settings > Flavor Agent',
+			'pathLabel'     => 'Cloudflare AI Search private pattern index',
+		];
 
 		return $request_meta;
 	}

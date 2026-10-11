@@ -1227,7 +1227,7 @@ describe( 'PatternRecommender', () => {
 
 		expect( mockFetchPatternRecommendations ).not.toHaveBeenCalled();
 		expect( document.body.textContent ).toContain(
-			'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage'
+			'Pattern recommendations need Cloudflare AI Search Pattern Storage'
 		);
 		expect( document.body.textContent ).toContain(
 			'Settings > Flavor Agent'
@@ -3636,7 +3636,7 @@ describe( 'PatternRecommender', () => {
 				reason: 'Recommended hero pattern.',
 				categories: [ 'hero' ],
 				ranking: {
-					sourceSignals: [ 'qdrant_semantic', 'llm_ranker' ],
+					sourceSignals: [ 'cloudflare_ai_search', 'llm_ranker' ],
 					rankingHint: {
 						matchesNearbyBlock: true,
 					},
@@ -3658,7 +3658,7 @@ describe( 'PatternRecommender', () => {
 		expect( document.body.textContent ).toContain(
 			'2 synced patterns were skipped because current WordPress permissions do not allow read access.'
 		);
-		expect( document.body.textContent ).toContain( 'Semantic match' );
+		expect( document.body.textContent ).toContain( 'AI Search match' );
 		expect( document.body.textContent ).toContain( 'Model ranked' );
 		expect( document.body.textContent ).toContain( 'Category: hero' );
 		expect( document.body.textContent ).toContain( 'Allowed here' );

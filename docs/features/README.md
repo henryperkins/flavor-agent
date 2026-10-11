@@ -21,7 +21,7 @@ These docs should stay feature-facing. Keep exact request/response payloads, rou
 5. `docs/reference/shared-internals.md` - cross-cutting store utilities, shared UI components, and context helpers referenced by multiple surfaces
 6. `docs/reference/recommendation-ui-consistency.md` - shared surface taxonomy, interaction-model split, and intentional UI exceptions
 7. `docs/reference/cross-surface-validation-gates.md` - additive release gates and required evidence for multi-surface or shared-subsystem changes
-8. `docs/reference/pattern-recommendation-debugging.md` - operator runbook for sync, Qdrant collection health, raw retrieval, and reranking triage
+8. `docs/reference/pattern-recommendation-debugging.md` - operator runbook for managed Cloudflare AI Search sync, item processing, scoped retrieval, and reranking triage
 
 ## First-Party Editor And Admin Surfaces
 

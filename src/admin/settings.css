@@ -595,6 +595,16 @@
 	text-transform: uppercase;
 }
 
+.flavor-agent-guidelines .flavor-agent-guidelines__field-error {
+	margin: 0;
+	color: var(--wpds-color-foreground-content-error-weak, var(--wpds-color-fg-content-error-weak, #cc1818));
+}
+
+.flavor-agent-guidelines [data-guidelines-block-cancel][hidden],
+.flavor-agent-guidelines__field-error[hidden] {
+	display: none;
+}
+
 .flavor-agent-guidelines__block-actions {
 	display: flex;
 	flex-wrap: wrap;

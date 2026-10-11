@@ -557,12 +557,38 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 		$this->assertFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
 	}
 
-	public function test_process_managed_instance_provisioning_returns_when_backend_changes_before_callback(): void {
+	/** @dataProvider selectors_without_explicit_cloudflare_save */
+	public function test_old_provisioning_callback_does_not_create_resources_without_explicit_cloudflare_save( ?string $selector ): void {
+		$signature                   = $this->provisioning_signature();
+		WordPressTestState::$options = $this->provisioning_options( $signature );
+		if ( null === $selector ) {
+			unset( WordPressTestState::$options[ Config::OPTION_PATTERN_RETRIEVAL_BACKEND ] );
+		} else {
+			WordPressTestState::$options[ Config::OPTION_PATTERN_RETRIEVAL_BACKEND ] = $selector;
+		}
+
+		$before = WordPressTestState::$options;
+		PatternSearchInstanceManager::process_managed_instance_provisioning();
+		$this->assertSame( $before, WordPressTestState::$options );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
+	}
+
+	public static function selectors_without_explicit_cloudflare_save(): array {
+		return [
+			'absent' => [ null ],
+			'empty'  => [ '' ],
+			'legacy' => [ 'qdrant' ],
+		];
+	}
+
+	public function test_process_managed_instance_provisioning_blocks_unknown_backend_before_callback(): void {
 		$signature                   = $this->provisioning_signature();
 		WordPressTestState::$options = $this->provisioning_options(
 			$signature,
 			[
-				Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_QDRANT,
+				Config::OPTION_PATTERN_RETRIEVAL_BACKEND => 'unsupported_backend',
 				Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => 'existing-signature',
 			]
 		);
@@ -1013,8 +1039,12 @@ final class CloudflarePatternSearchInstanceManagerTest extends TestCase {
 			array_merge(
 				PatternIndex::get_state(),
 				[
-					'status'         => 'ready',
-					'last_synced_at' => gmdate( 'c' ),
+					'status'                         => 'ready',
+					'last_synced_at'                 => gmdate( 'c' ),
+					'pattern_backend'                => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+					'cloudflare_ai_search_namespace' => PatternSearchInstanceManager::managed_namespace(),
+					'cloudflare_ai_search_instance'  => PatternSearchInstanceManager::managed_instance_id(),
+					'cloudflare_ai_search_signature' => $this->provisioning_signature(),
 				]
 			)
 		);

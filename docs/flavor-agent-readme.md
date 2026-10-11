@@ -7,7 +7,7 @@ This document is the editor-flow reference. For overall doc ownership and readin
 It currently has eight primary editor experiences:
 
 - Block recommendations in the native Inspector, powered by the WordPress AI Client and `Settings > Connectors`.
-- Pattern recommendations in the native inserter, powered by a selected pattern retrieval backend (Qdrant with plugin-owned embeddings, or private Cloudflare AI Search) and Connectors-owned chat for reranking.
+- Pattern recommendations in the native inserter, powered by private managed Cloudflare AI Search as the sole pattern store and Connectors-owned chat for reranking.
 - Content recommendations in the post/page document sidebar for draft, edit, and critique passes.
 - Navigation recommendations in the native Inspector for selected `core/navigation` blocks, powered by Connectors-owned chat and scoped as advisory guidance today.
 - Template recommendations in the Site Editor, powered by Connectors-owned chat with validated template-part and pattern operations.
@@ -43,7 +43,7 @@ flavor-agent/
 │   ├── Activity/                 # Server-backed AI activity repository, permissions, and serialization
 │   ├── Admin/                    # Settings page and AI Activity admin page registration/assets
 │   ├── AzureOpenAI/              # Legacy chat Responses facade for Connectors-owned text generation
-│   ├── Embeddings/               # Workers AI embedding client, signatures, shared HTTP helpers, and Qdrant client
+│   ├── Embeddings/               # Workers AI embedding client, signatures, and shared HTTP helpers
 │   ├── Cloudflare/               # AI Search docs grounding, Workers AI config, and private pattern AI Search client
 │   ├── Context/                  # Server-side block/theme/pattern/template/navigation collectors
 │   ├── Guidelines/               # Core-first and legacy guideline storage adapters
@@ -115,7 +115,7 @@ Pattern recommendations are exposed through the `flavor-agent/recommend-patterns
 
 The client behavior is:
 
-- Passive fetch on editor load when the selected pattern backend and Connectors chat are configured.
+- Rank only after the inserter opens with nonempty visible-pattern scope and managed Cloudflare AI Search storage plus Connectors chat are configured; editor load does not request model-backed ranking.
 - Search-triggered refresh when the inserter search box changes.
 - A local inserter shelf that only renders ranked patterns currently exposed by Gutenberg's allowed-pattern selector for the active insertion root.
 - A toolbar badge that shows recommendation count, loading state, or error state next to the inserter toggle.
@@ -123,7 +123,7 @@ The client behavior is:
 The server behavior is:
 
 - Check persisted pattern index runtime state.
-- Retrieve candidates from the selected pattern backend: Qdrant embeds the query with the active plugin-owned embeddings configuration and searches semantic/structural passes; Cloudflare AI Search searches a private pattern instance with `visiblePatternNames` as a filter.
+- Retrieve candidates from the private managed Cloudflare AI Search instance with `visiblePatternNames` as a metadata filter, then rerank through Connectors-owned chat. Pattern indexing and retrieval use managed embeddings.
 - Rank candidates with the active Connectors-owned chat runtime.
 - Rehydrate synced/user candidates from the current published readable `wp_block` before ranking or response output.
 
@@ -202,7 +202,7 @@ Applied block, template, template-part, Global Styles, and Style Book suggestion
 
 The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
-Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Cloudflare Workers AI fields on this screen configure the Flavor Agent embedding model for semantic features; they do not provide a direct plugin-managed chat fallback and saved provider values from older settings screens are ignored. Qdrant Pattern Storage uses the configured embedding model plus Qdrant. The Cloudflare AI Search pattern backend reuses the Embedding Model account/token to create or adopt a managed private AI Search pattern index in Cloudflare's `default` namespace, then uploads sanitized public-safe registered and published user pattern markdown.
+Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Cloudflare Workers AI fields on this screen configure Cloudflare setup and the Workers AI settings-validation probe; they do not provide a direct plugin-managed chat fallback and saved provider values from older settings screens are ignored. Cloudflare AI Search is the sole pattern store and uses managed embeddings. This pattern service reuses the Embedding Model account/token to create or adopt a managed private AI Search pattern index in Cloudflare's `default` namespace, then uploads sanitized public-safe registered and published user pattern markdown.
 
 External Developer Docs grounding is temporarily disabled by default in v0.1.3. Recommendations skip cached and live docs, retain Guidelines and apply/undo safeguards, and show an intentional disabled notice. The retained built-in public path needs no site-owner credentials when explicitly enabled for controlled development or a separately qualified restoration.
 
@@ -213,10 +213,6 @@ Configured options:
 - `flavor_agent_cloudflare_workers_ai_account_id`
 - `flavor_agent_cloudflare_workers_ai_api_token`
 - `flavor_agent_cloudflare_workers_ai_embedding_model`
-- `flavor_agent_pattern_retrieval_backend`
-- `flavor_agent_qdrant_url`
-- `flavor_agent_qdrant_key`
-- `flavor_agent_pattern_recommendation_threshold`
 - `flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search`
 - `flavor_agent_pattern_max_recommendations`
 - `flavor_agent_cloudflare_pattern_ai_search_instance_id`
@@ -276,10 +272,10 @@ Pattern indexing is managed by `FlavorAgent\Patterns\PatternIndex`.
 
 Current lifecycle behavior:
 
-- Activation marks the catalog dirty and schedules a sync when the selected pattern backend is configured.
+- Activation marks the catalog dirty and schedules a sync when managed Cloudflare AI Search pattern storage is configured.
 - Theme switches, plugin activation/deactivation, upgrades, and relevant settings changes mark the index dirty and schedule a background refresh.
 - Deactivation clears the scheduled reindex hook and any active sync lock.
-- Uninstall removes plugin-owned provider, embedding, Qdrant, Cloudflare AI Search, docs grounding/runtime, pattern sync, activity, guideline, and experiment option state, drops the activity table, and clears Flavor Agent scheduled hooks plus the static sync/core-roadmap transient keys. Dynamic docs grounding cache transients are not bulk-deleted by the uninstall handler.
+- Uninstall removes plugin-owned provider, embedding, Cloudflare AI Search, docs grounding/runtime, pattern sync, activity, guideline, and experiment option state plus residual legacy Qdrant URL/key/cosine-threshold options, drops the activity table, and clears Flavor Agent scheduled hooks plus the static sync/core-roadmap transient keys. Dynamic docs grounding cache transients are not bulk-deleted by the uninstall handler.
 
 ## Development
 

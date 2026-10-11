@@ -6,14 +6,11 @@ namespace FlavorAgent\Tests;
 
 use FlavorAgent\Abilities\PatternAbilities;
 use FlavorAgent\Admin\Settings\Config;
-use FlavorAgent\Embeddings\EmbeddingClient;
-use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\LLM\ResponseSchema;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
-use FlavorAgent\Patterns\Retrieval\QdrantPatternRetrievalBackend;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
@@ -382,13 +379,9 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 'missing_credentials', $result->get_error_code() );
 	}
 
-	public function test_pattern_recommendation_threshold_option_keys_are_config_constants(): void {
+	public function test_managed_pattern_recommendation_threshold_option_key_is_a_config_constant(): void {
 		$constants = new \ReflectionClass( Config::class );
 
-		$this->assertSame(
-			'flavor_agent_pattern_recommendation_threshold',
-			$constants->getConstant( 'OPTION_PATTERN_RECOMMENDATION_THRESHOLD_QDRANT' )
-		);
 		$this->assertSame(
 			'flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search',
 			$constants->getConstant( 'OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH' )
@@ -497,6 +490,7 @@ final class PatternAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_patterns_returns_pattern_runtime_signature_for_signature_only_runtime_state(): void {
+		$this->configure_backends();
 		$this->save_index_state(
 			[
 				'fingerprint'          => 'catalog-fingerprint-runtime-a',
@@ -635,44 +629,64 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 	}
 
-	public function test_recommend_patterns_qdrant_backend_uses_embeddings_and_qdrant(): void {
+	public function test_recommend_patterns_does_not_reuse_legacy_ready_index_or_schedule_managed_writes(): void {
 		$this->configure_backends();
-		WordPressTestState::$options[ Config::OPTION_PATTERN_RETRIEVAL_BACKEND ] = Config::PATTERN_BACKEND_QDRANT;
-		$this->save_index_state();
-
-		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
-				[
-					$this->pattern_point( 'theme/hero', 0.81 ),
-				]
-			),
-			$this->ranking_response(
-				wp_json_encode(
-					[
-						'recommendations' => [
-							[
-								'name'   => 'theme/hero',
-								'score'  => 0.9,
-								'reason' => 'Matches the current context.',
-							],
-						],
-					]
-				)
-			),
+		WordPressTestState::$options[ Config::OPTION_PATTERN_RETRIEVAL_BACKEND ] = 'qdrant';
+		WordPressTestState::$options[ PatternIndex::STATE_OPTION ]               = [
+			'status'            => 'ready',
+			'pattern_backend'   => 'qdrant',
+			'qdrant_url'        => 'https://legacy.example.test',
+			'qdrant_collection' => 'legacy-patterns',
+			'last_synced_at'    => '2026-03-24T00:00:00+00:00',
+			'indexed_count'     => 100,
 		];
 
-		$result = $this->recommend_patterns(
+		$result = $this->recommend_patterns( [ 'postType' => 'page' ], [ 'theme/hero' ] );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'index_unavailable', $result->get_error_code() );
+		$this->assertStringContainsString( 'configure Cloudflare AI Search and run Sync Pattern Catalog', $result->get_error_message() );
+		$this->assertStringNotContainsString( 'building', $result->get_error_message() );
+		$this->assertSame( 503, $result->get_error_data()['status'] ?? null );
+		$this->assertSame( '', PatternAbilities::current_pattern_runtime_signature() );
+		$this->assertFalse( PatternIndex::has_usable_index( PatternIndex::get_runtime_state() ) );
+		$this->assertSame( 0, PatternIndex::get_state()['indexed_count'] );
+		$this->assertArrayNotHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$signature_only = PatternAbilities::recommend_patterns(
 			[
-				'postType' => 'page',
-			],
-			[ 'theme/hero' ]
+				'postType'             => 'page',
+				'visiblePatternNames'  => [ 'theme/hero' ],
+				'resolveSignatureOnly' => true,
+			]
 		);
 
-		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
-		$this->assertStringContainsString( '/v1/embeddings', WordPressTestState::$remote_post_calls[0]['url'] ?? '' );
-		$this->assertStringContainsString( '/points/query', WordPressTestState::$remote_post_calls[1]['url'] ?? '' );
-		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
+		$this->assertIsArray( $signature_only );
+		$this->assertSame( [], $signature_only['recommendations'] ?? null );
+		$this->assertArrayNotHasKey( 'patternRuntimeSignature', $signature_only );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertSame( [], WordPressTestState::$last_http_request_args );
+		$this->assertSame( [], WordPressTestState::$ai_service_calls );
+		$this->assertArrayNotHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
+	}
+
+	public function test_corrupt_store_selector_requires_settings_recovery_without_claiming_a_rebuild_or_requesting_inference(): void {
+		$this->configure_backends();
+		$this->save_index_state();
+		WordPressTestState::$options[ Config::OPTION_PATTERN_RETRIEVAL_BACKEND ] = 'unsupported_backend';
+
+		$result = $this->recommend_patterns( [ 'postType' => 'page' ], [ 'theme/hero' ] );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'unsupported_pattern_retrieval_backend', $result->get_error_code() );
+		$this->assertSame( 400, $result->get_error_data()['status'] );
+		$this->assertStringContainsString( 'Save Cloudflare AI Search settings', $result->get_error_message() );
+		$this->assertStringNotContainsString( 'rebuilding', $result->get_error_message() );
+		$this->assertFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertSame( [], WordPressTestState::$ai_service_calls );
 	}
 
 	public function test_recommend_patterns_cloudflare_ai_search_backend_does_not_call_embeddings_or_qdrant(): void {
@@ -760,10 +774,9 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point(
+					$this->pattern_chunk(
 						'theme/header-fit',
 						0.72,
 						[
@@ -824,10 +837,9 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point(
+					$this->pattern_chunk(
 						'theme/header-fit',
 						0.72,
 						[
@@ -1312,16 +1324,17 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$remote_get_calls );
 	}
 
-	public function test_recommend_patterns_does_not_use_a_stale_index_when_collection_compatibility_changed(): void {
+	public function test_recommend_patterns_does_not_use_a_stale_index_when_managed_store_compatibility_changed(): void {
 		$this->configure_backends();
 		WordPressTestState::$capabilities = [ 'manage_options' => true ];
 
 		$this->save_index_state(
 			[
-				'status'         => 'stale',
-				'last_synced_at' => '2026-03-24T00:00:00+00:00',
-				'stale_reason'   => 'collection_name_changed',
-				'stale_reasons'  => [ 'collection_name_changed' ],
+				'status'                         => 'stale',
+				'last_synced_at'                 => '2026-03-24T00:00:00+00:00',
+				'stale_reason'                   => 'cloudflare_ai_search_signature_changed',
+				'stale_reasons'                  => [ 'cloudflare_ai_search_signature_changed' ],
+				'cloudflare_ai_search_signature' => 'previous-credential-signature',
 			]
 		);
 
@@ -1343,10 +1356,11 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$this->save_index_state(
 			[
-				'status'         => 'stale',
-				'last_synced_at' => '2026-03-24T00:00:00+00:00',
-				'stale_reason'   => 'collection_name_changed',
-				'stale_reasons'  => [ 'collection_name_changed' ],
+				'status'                         => 'stale',
+				'last_synced_at'                 => '2026-03-24T00:00:00+00:00',
+				'stale_reason'                   => 'cloudflare_ai_search_signature_changed',
+				'stale_reasons'                  => [ 'cloudflare_ai_search_signature_changed' ],
+				'cloudflare_ai_search_signature' => 'previous-credential-signature',
 			]
 		);
 
@@ -1363,33 +1377,7 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 	}
 
-	public function test_recommend_patterns_does_not_use_a_stale_index_when_only_the_embedding_endpoint_changed(): void {
-		$this->configure_backends();
-		WordPressTestState::$capabilities = [ 'manage_options' => true ];
-
-		$this->save_index_state(
-			[
-				'status'         => 'stale',
-				'last_synced_at' => '2026-03-24T00:00:00+00:00',
-				'stale_reason'   => 'openai_endpoint_changed',
-				'stale_reasons'  => [ 'openai_endpoint_changed' ],
-			]
-		);
-
-		$result = $this->recommend_patterns(
-			[
-				'postType' => 'page',
-			],
-			[ 'theme/hero' ]
-		);
-
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'index_warming', $result->get_error_code() );
-		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
-		$this->assertSame( [], WordPressTestState::$remote_post_calls );
-	}
-
-	public function test_recommend_patterns_uses_stale_usable_index_builds_structural_query_and_filters_candidates(): void {
+	public function test_recommend_patterns_uses_stale_usable_index_builds_context_query_and_filters_candidates(): void {
 		$this->configure_backends();
 		WordPressTestState::$capabilities = [ 'manage_options' => true ];
 
@@ -1401,19 +1389,14 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point( 'theme/hero', 0.41 ),
-					$this->pattern_point( 'theme/header-utility', 0.83 ),
-					$this->pattern_point( 'theme/invisible-pattern', 0.95 ),
-				]
-			),
-			$this->qdrant_points_response(
-				[
-					$this->pattern_point( 'theme/hero', 0.77 ),
-					$this->pattern_point( 'theme/footer-callout', 0.65 ),
-					$this->pattern_point( 'theme/invisible-pattern', 0.99 ),
+					$this->pattern_chunk( 'theme/hero', 0.41 ),
+					$this->pattern_chunk( 'theme/header-utility', 0.83 ),
+					$this->pattern_chunk( 'theme/invisible-pattern', 0.95 ),
+					$this->pattern_chunk( 'theme/hero', 0.77 ),
+					$this->pattern_chunk( 'theme/footer-callout', 0.65 ),
+					$this->pattern_chunk( 'theme/invisible-pattern', 0.99 ),
 				]
 			),
 			$this->ranking_response(
@@ -1468,64 +1451,39 @@ final class PatternAbilitiesTest extends TestCase {
 			array_column( $result['recommendations'], 'reason' )
 		);
 		$this->assertSame(
-			[ 'qdrant_semantic', 'llm_ranker', 'qdrant_structural', 'component_ranking_v1', 'contextual_ranking_v1' ],
+			[ 'cloudflare_ai_search', 'llm_ranker', 'component_ranking_v1', 'contextual_ranking_v1' ],
 			$result['recommendations'][0]['ranking']['sourceSignals'] ?? null
 		);
 		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
 
-		$embedding_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[0] );
+		$search_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[0] );
 		$this->assertStringContainsString(
 			'[POST TYPE]' . "\n" . 'page',
-			(string) ( $embedding_request['input'][0] ?? '' )
+			(string) ( $search_request['messages'][0]['content'] ?? '' )
 		);
 		$this->assertStringContainsString(
 			'[BLOCK CONTEXT]' . "\n" . 'core/template-part/header',
-			(string) ( $embedding_request['input'][0] ?? '' )
+			(string) ( $search_request['messages'][0]['content'] ?? '' )
 		);
 		$this->assertStringContainsString(
 			'[TEMPLATE TYPE]' . "\n" . 'home',
-			(string) ( $embedding_request['input'][0] ?? '' )
+			(string) ( $search_request['messages'][0]['content'] ?? '' )
 		);
 		$this->assertStringContainsString(
 			'[USER INSTRUCTION]' . "\n" . 'Make the intro more editorial.',
-			(string) ( $embedding_request['input'][0] ?? '' )
+			(string) ( $search_request['messages'][0]['content'] ?? '' )
 		);
 
-		$semantic_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[1] );
-		$this->assertSame( 24, $semantic_request['limit'] ?? null );
-		$visible_name_filter = [
-			[
-				'key'   => 'name',
-				'match' => [
-					'any' => [ 'theme/hero', 'theme/footer-callout' ],
-				],
-			],
-		];
+		$this->assertSame( 24, $search_request['ai_search_options']['retrieval']['max_num_results'] ?? null );
 		$this->assertSame(
 			[
-				'must' => $visible_name_filter,
+				'pattern_name' => [ '$in' => [ 'theme/hero', 'theme/footer-callout' ] ],
 			],
-			$semantic_request['filter'] ?? null
+			$search_request['ai_search_options']['retrieval']['filters'] ?? null
 		);
+		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
 
-		$structural_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
-		$this->assertSame( 18, $structural_request['limit'] ?? null );
-		$this->assertSame( $visible_name_filter, $structural_request['filter']['must'] ?? null );
-		$this->assertSame(
-			[
-				[
-					'key'   => 'templateTypes',
-					'match' => [ 'value' => 'home' ],
-				],
-				[
-					'key'   => 'blockTypes',
-					'match' => [ 'value' => 'core/template-part/header' ],
-				],
-			],
-			$structural_request['filter']['should'] ?? null
-		);
-
-		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[1] );
 		$this->assertStringContainsString( 'theme/hero', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'theme/footer-callout', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'patternOverrides', (string) ( $ranking_request['input'] ?? '' ) );
@@ -1536,154 +1494,14 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 'medium', $ranking_request['reasoning']['effort'] ?? null );
 	}
 
-	public function test_recommend_patterns_rejects_live_search_when_query_vector_signature_changes(): void {
-		$this->configure_backends();
-		WordPressTestState::$capabilities = [ 'manage_options' => true ];
-		$this->save_index_state();
-
-		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34, 0.56 ] ),
-		];
-
-		$result = $this->recommend_patterns(
-			[
-				'postType' => 'page',
-			],
-			[ 'theme/hero' ]
-		);
-
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'index_warming', $result->get_error_code() );
-		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
-
-		$state = PatternIndex::get_state();
-		$this->assertSame( 'stale', $state['status'] );
-		$this->assertContains( 'embedding_signature_changed', $state['stale_reasons'] );
-	}
-
-	public function test_recommend_patterns_rejects_live_search_when_query_vector_signature_changes_for_non_admins_and_schedules_sync(): void {
-		$this->configure_backends();
-		$this->save_index_state();
-
-		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34, 0.56 ] ),
-		];
-
-		$result = $this->recommend_patterns(
-			[
-				'postType' => 'page',
-			],
-			[ 'theme/hero' ]
-		);
-
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'index_warming', $result->get_error_code() );
-		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
-
-		$state = PatternIndex::get_state();
-		$this->assertSame( 'stale', $state['status'] );
-		$this->assertContains( 'embedding_signature_changed', $state['stale_reasons'] );
-	}
-
-	public function test_qdrant_backend_returns_index_warming_before_embedding_when_stored_signature_is_stale(): void {
-		$this->configure_backends();
-		$this->save_index_state(
-			[
-				'embedding_signature' => 'stale-signature',
-			]
-		);
-
-		$backend = new QdrantPatternRetrievalBackend();
-		$result  = $backend->search(
-			'Recommend a hero pattern.',
-			[ 'theme/hero' ],
-			PatternIndex::get_state(),
-			[]
-		);
-
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'index_warming', $result->get_error_code() );
-		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
-		$this->assertSame( [], WordPressTestState::$remote_post_calls );
-		$this->assertSame( [], WordPressTestState::$remote_get_calls );
-
-		$state = PatternIndex::get_state();
-		$this->assertSame( 'stale', $state['status'] );
-		$this->assertContains( 'embedding_signature_changed', $state['stale_reasons'] );
-	}
-
-	public function test_recommend_patterns_marks_index_stale_and_rebuilds_when_collection_is_missing_before_search(): void {
-		$this->configure_backends();
-		$this->save_index_state();
-
-		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-		];
-		WordPressTestState::$remote_get_response   = [
-			'response' => [ 'code' => 404 ],
-			'body'     => wp_json_encode(
-				[
-					'status' => [
-						'error' => 'Collection not found',
-					],
-				]
-			),
-		];
-
-		$result = $this->recommend_patterns(
-			[
-				'postType' => 'page',
-			],
-			[ 'theme/hero' ]
-		);
-
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'index_warming', $result->get_error_code() );
-		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
-		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
-		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
-
-		$state = PatternIndex::get_state();
-		$this->assertSame( 'stale', $state['status'] );
-		$this->assertContains( 'collection_missing', $state['stale_reasons'] );
-	}
-
-	public function test_recommend_patterns_marks_index_stale_and_rebuilds_when_collection_size_mismatches_before_search(): void {
-		$this->configure_backends();
-		$this->save_index_state();
-
-		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-		];
-		WordPressTestState::$remote_get_response   = $this->qdrant_collection_response( 3 );
-
-		$result = $this->recommend_patterns(
-			[
-				'postType' => 'page',
-			],
-			[ 'theme/hero' ]
-		);
-
-		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'index_warming', $result->get_error_code() );
-		$this->assertArrayHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
-		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
-		$this->assertCount( 1, WordPressTestState::$remote_get_calls );
-
-		$state = PatternIndex::get_state();
-		$this->assertSame( 'stale', $state['status'] );
-		$this->assertContains( 'collection_size_mismatch', $state['stale_reasons'] );
-	}
-
 	public function test_recommend_patterns_returns_parse_error_for_malformed_ranking_json(): void {
 		$this->configure_backends();
 		$this->save_index_state();
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point( 'theme/hero', 0.71 ),
+					$this->pattern_chunk( 'theme/hero', 0.71 ),
 				]
 			),
 			$this->ranking_response( 'not-json' ),
@@ -1708,10 +1526,9 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->save_index_state();
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point( 'theme/hero', 0.71 ),
+					$this->pattern_chunk( 'theme/hero', 0.71 ),
 				]
 			),
 			$this->ranking_response(
@@ -1751,8 +1568,7 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->save_index_state();
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response( [] ),
+			$this->cloudflare_ai_search_chunks_response( [] ),
 		];
 
 		$result = $this->recommend_patterns(
@@ -1787,15 +1603,10 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point( 'theme/hero', 0.71 ),
-				]
-			),
-			$this->qdrant_points_response(
-				[
-					$this->pattern_point( 'theme/hero', 0.79 ),
+					$this->pattern_chunk( 'theme/hero', 0.71 ),
+					$this->pattern_chunk( 'theme/hero', 0.79 ),
 				]
 			),
 			$this->ranking_response(
@@ -1827,7 +1638,7 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
 
-		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[1] );
 		$this->assertStringContainsString( '## WordPress Developer Guidance', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'Cover block reference', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'overlay styling, and inner content layout controls', (string) ( $ranking_request['input'] ?? '' ) );
@@ -1851,10 +1662,9 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point( 'theme/hero', 0.71 ),
+					$this->pattern_chunk( 'theme/hero', 0.71 ),
 				]
 			),
 			$this->ranking_response(
@@ -1889,33 +1699,28 @@ final class PatternAbilitiesTest extends TestCase {
 			)
 		);
 		$this->assertCount( 1, $docs_calls, 'cache miss performs exactly one best-effort docs search' );
-		$this->assertCount( 4, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
 		$this->assertArrayNotHasKey( 'flavor_agent_warm_docs_context', WordPressTestState::$scheduled_events );
 
-		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
 		$this->assertStringContainsString( 'Block Editor Handbook', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
-	public function test_recommend_patterns_adds_trait_should_clauses_from_insertion_context(): void {
+	public function test_recommend_patterns_passes_insertion_context_to_managed_search_and_ranker(): void {
 		$this->configure_backends();
 		$this->save_index_state();
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point(
+					$this->pattern_chunk(
 						'theme/header-utility',
 						0.71,
 						[
 							'traits' => [ 'simple', 'site-chrome' ],
 						]
 					),
-				]
-			),
-			$this->qdrant_points_response(
-				[
-					$this->pattern_point(
+					$this->pattern_chunk(
 						'theme/header-utility',
 						0.79,
 						[
@@ -1956,40 +1761,21 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$this->assertSame( [ 'theme/header-utility' ], array_column( $result['recommendations'], 'name' ) );
 
-		$embedding_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[0] );
+		$search_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[0] );
 		$this->assertStringContainsString(
 			'Template-part area: header',
-			(string) ( $embedding_request['input'][0] ?? '' )
+			(string) ( $search_request['messages'][0]['content'] ?? '' )
 		);
 		$this->assertStringContainsString(
 			'Template-part slug: site-header',
-			(string) ( $embedding_request['input'][0] ?? '' )
+			(string) ( $search_request['messages'][0]['content'] ?? '' )
 		);
 		$this->assertStringContainsString(
 			'Container layout: flex',
-			(string) ( $embedding_request['input'][0] ?? '' )
+			(string) ( $search_request['messages'][0]['content'] ?? '' )
 		);
 
-		$structural_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
-		$this->assertSame(
-			[
-				[
-					'key'   => 'blockTypes',
-					'match' => [ 'value' => 'core/group' ],
-				],
-				[
-					'key'   => 'traits',
-					'match' => [ 'value' => 'simple' ],
-				],
-				[
-					'key'   => 'traits',
-					'match' => [ 'value' => 'site-chrome' ],
-				],
-			],
-			$structural_request['filter']['should'] ?? null
-		);
-
-		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[1] );
 		$this->assertStringContainsString( 'Template-part area: header', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'Template-part slug: site-header', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'Container layout: flex', (string) ( $ranking_request['input'] ?? '' ) );
@@ -1998,15 +1784,14 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertStringContainsString( 'contentBlockCount', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
-	public function test_recommend_patterns_uses_root_level_structural_fallbacks_when_only_insertion_context_is_present(): void {
+	public function test_recommend_patterns_passes_root_level_context_to_managed_search_and_ranker(): void {
 		$this->configure_backends();
 		$this->save_index_state();
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point(
+					$this->pattern_chunk(
 						'theme/root-section',
 						0.73,
 						[
@@ -2014,11 +1799,7 @@ final class PatternAbilitiesTest extends TestCase {
 							'traits'        => [ 'moderate-complexity' ],
 						]
 					),
-				]
-			),
-			$this->qdrant_points_response(
-				[
-					$this->pattern_point(
+					$this->pattern_chunk(
 						'theme/root-section',
 						0.81,
 						[
@@ -2053,37 +1834,21 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$this->assertSame( [ 'theme/root-section' ], array_column( $result['recommendations'], 'name' ) );
 
-		$embedding_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[0] );
-		$this->assertStringContainsString( 'Area type: root-level', (string) ( $embedding_request['input'][0] ?? '' ) );
+		$search_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[0] );
+		$this->assertStringContainsString( 'Area type: root-level', (string) ( $search_request['messages'][0]['content'] ?? '' ) );
 
-		$structural_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
-		$this->assertSame(
-			[
-				[
-					'key'   => 'templateTypes',
-					'match' => [ 'value' => 'page' ],
-				],
-				[
-					'key'   => 'traits',
-					'match' => [ 'value' => 'moderate-complexity' ],
-				],
-			],
-			$structural_request['filter']['should'] ?? null
-		);
-
-		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[1] );
 		$this->assertStringContainsString( 'Area type: root-level', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
-	public function test_recommend_patterns_uses_single_and_singular_root_level_hints_for_post_contexts(): void {
+	public function test_recommend_patterns_preserves_post_context_and_current_singular_pattern_metadata(): void {
 		$this->configure_backends();
 		$this->save_index_state();
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point(
+					$this->pattern_chunk(
 						'theme/post-feature',
 						0.73,
 						[
@@ -2091,11 +1856,7 @@ final class PatternAbilitiesTest extends TestCase {
 							'traits'        => [ 'moderate-complexity' ],
 						]
 					),
-				]
-			),
-			$this->qdrant_points_response(
-				[
-					$this->pattern_point(
+					$this->pattern_chunk(
 						'theme/post-feature',
 						0.81,
 						[
@@ -2130,46 +1891,33 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$this->assertSame( [ 'theme/post-feature' ], array_column( $result['recommendations'], 'name' ) );
 
-		$structural_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+			$search_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[0] );
+		$this->assertStringContainsString( '[POST TYPE]' . "\n" . 'post', (string) ( $search_request['messages'][0]['content'] ?? '' ) );
+		$this->assertStringContainsString( 'Area type: root-level', (string) ( $search_request['messages'][0]['content'] ?? '' ) );
 		$this->assertSame(
-			[
-				[
-					'key'   => 'templateTypes',
-					'match' => [ 'value' => 'single' ],
-				],
-				[
-					'key'   => 'templateTypes',
-					'match' => [ 'value' => 'singular' ],
-				],
-				[
-					'key'   => 'traits',
-					'match' => [ 'value' => 'moderate-complexity' ],
-				],
-			],
-			$structural_request['filter']['should'] ?? null
+			[ 'pattern_name' => [ '$in' => [ 'theme/post-feature' ] ] ],
+			$search_request['ai_search_options']['retrieval']['filters'] ?? null
 		);
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[1] );
+		$this->assertStringContainsString( 'Area type: root-level', (string) ( $ranking_request['input'] ?? '' ) );
+		$this->assertStringContainsString( '"templateTypes":["singular"]', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
-	public function test_recommend_patterns_skips_singular_root_level_hints_for_internal_post_types(): void {
+	public function test_recommend_patterns_keeps_internal_post_type_context_without_inventing_template_filters(): void {
 		$this->configure_backends();
 		$this->save_index_state();
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point(
+					$this->pattern_chunk(
 						'theme/template-part-shell',
 						0.73,
 						[
 							'traits' => [ 'moderate-complexity' ],
 						]
 					),
-				]
-			),
-			$this->qdrant_points_response(
-				[
-					$this->pattern_point(
+					$this->pattern_chunk(
 						'theme/template-part-shell',
 						0.81,
 						[
@@ -2203,16 +1951,15 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$this->assertSame( [ 'theme/template-part-shell' ], array_column( $result['recommendations'], 'name' ) );
 
-		$structural_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+			$search_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[0] );
+		$this->assertStringContainsString( '[POST TYPE]' . "\n" . 'wp_template_part', (string) ( $search_request['messages'][0]['content'] ?? '' ) );
+		$this->assertStringContainsString( 'Area type: root-level', (string) ( $search_request['messages'][0]['content'] ?? '' ) );
 		$this->assertSame(
-			[
-				[
-					'key'   => 'traits',
-					'match' => [ 'value' => 'moderate-complexity' ],
-				],
-			],
-			$structural_request['filter']['should'] ?? null
+			[ 'pattern_name' => [ '$in' => [ 'theme/template-part-shell' ] ] ],
+			$search_request['ai_search_options']['retrieval']['filters'] ?? null
 		);
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[1] );
+		$this->assertStringContainsString( 'Area type: root-level', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
 	public function test_recommend_patterns_exposes_core_override_overlap_and_deduped_sibling_counts(): void {
@@ -2224,10 +1971,9 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->register_block_type( 'core/paragraph' );
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point(
+					$this->pattern_chunk(
 						'theme/override-ready',
 						0.81,
 						[
@@ -2252,12 +1998,8 @@ final class PatternAbilitiesTest extends TestCase {
 							],
 						]
 					),
-					$this->pattern_point( 'theme/plain-pattern', 0.82 ),
-				]
-			),
-			$this->qdrant_points_response(
-				[
-					$this->pattern_point(
+					$this->pattern_chunk( 'theme/plain-pattern', 0.82 ),
+					$this->pattern_chunk(
 						'theme/override-ready',
 						0.83,
 						[
@@ -2321,12 +2063,12 @@ final class PatternAbilitiesTest extends TestCase {
 
 		$this->assertSame( [ 'theme/override-ready' ], array_column( $result['recommendations'], 'name' ) );
 		$this->assertStringContainsString(
-			'Supports Pattern Overrides for core/image (url, alt).',
+			'Supports Pattern Overrides for core/image (id, url, title, alt).',
 			(string) ( $result['recommendations'][0]['reason'] ?? '' )
 		);
 		$this->assertTrue( (bool) ( $result['recommendations'][0]['overrideCapabilities']['matchesNearbyBlock'] ?? false ) );
 		$this->assertSame(
-			[ 'url', 'alt' ],
+			[ 'id', 'url', 'title', 'alt' ],
 			$result['recommendations'][0]['overrideCapabilities']['nearbyBlockOverlapAttrs'] ?? null
 		);
 		$this->assertSame(
@@ -2334,7 +2076,7 @@ final class PatternAbilitiesTest extends TestCase {
 			$result['recommendations'][0]['overrideCapabilities']['siblingOverrideCount'] ?? null
 		);
 
-		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[1] );
 		$this->assertStringContainsString( 'matchesNearbyBlock', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'nearbyBlockOverlapAttrs', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( '"siblingOverrideCount":4', (string) ( $ranking_request['input'] ?? '' ) );
@@ -2345,10 +2087,9 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->save_index_state();
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point(
+					$this->pattern_chunk(
 						'theme/custom-block-generic',
 						0.78,
 						[
@@ -2363,12 +2104,8 @@ final class PatternAbilitiesTest extends TestCase {
 							],
 						]
 					),
-					$this->pattern_point( 'theme/plain-pattern', 0.79 ),
-				]
-			),
-			$this->qdrant_points_response(
-				[
-					$this->pattern_point(
+					$this->pattern_chunk( 'theme/plain-pattern', 0.79 ),
+					$this->pattern_chunk(
 						'theme/custom-block-generic',
 						0.81,
 						[
@@ -2418,16 +2155,16 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 		$this->assertTrue( (bool) ( $result['recommendations'][0]['patternOverrides']['hasOverrides'] ?? false ) );
 
-		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[3] );
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[1] );
 		$this->assertStringContainsString( 'Custom block context: plugin/card', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'Supports Pattern Overrides for plugin/card.', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'matchesNearbyCustomBlock', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
-	public function test_recommend_patterns_skips_unreadable_synced_qdrant_candidates_before_ranking(): void {
+	public function test_recommend_patterns_skips_unreadable_synced_cloudflare_candidates_before_ranking(): void {
 		$this->configure_backends();
 		$this->save_index_state();
-		$payload_json                     = wp_json_encode( [ $this->synced_pattern_point( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ) ] );
+		$payload_json                     = wp_json_encode( [ $this->synced_pattern_chunk( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ) ] );
 		WordPressTestState::$capabilities = [
 			'read_post:91' => false,
 		];
@@ -2436,10 +2173,9 @@ final class PatternAbilitiesTest extends TestCase {
 		];
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->synced_pattern_point( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
+					$this->synced_pattern_chunk( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
 				]
 			),
 		];
@@ -2458,7 +2194,7 @@ final class PatternAbilitiesTest extends TestCase {
 			$result['diagnostics']['filteredCandidates']['unreadableSyncedPatterns'] ?? null
 		);
 		$this->assertStringNotContainsString( 'Private launch copy', wp_json_encode( $result ) );
-		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 		$this->assertStringNotContainsString(
 			'Private Launch Banner',
 			(string) ( WordPressTestState::$remote_post_calls[1]['args']['body'] ?? '' )
@@ -2481,10 +2217,9 @@ final class PatternAbilitiesTest extends TestCase {
 		];
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->synced_pattern_point( 92, 0.96, 'Published Shared Banner', 'Published shared copy' ),
+					$this->synced_pattern_chunk( 92, 0.96, 'Published Shared Banner', 'Published shared copy' ),
 				]
 			),
 		];
@@ -2502,7 +2237,7 @@ final class PatternAbilitiesTest extends TestCase {
 			1,
 			$result['diagnostics']['filteredCandidates']['unreadableSyncedPatterns'] ?? null
 		);
-		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_recommend_patterns_skips_draft_synced_candidate_even_when_read_post_is_allowed(): void {
@@ -2516,10 +2251,9 @@ final class PatternAbilitiesTest extends TestCase {
 		];
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->synced_pattern_point( 96, 0.96, 'Draft Shared Banner', 'Draft shared copy' ),
+					$this->synced_pattern_chunk( 96, 0.96, 'Draft Shared Banner', 'Draft shared copy' ),
 				]
 			),
 		];
@@ -2545,7 +2279,7 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->save_index_state();
 		$payload_json                     = wp_json_encode(
 			[
-				$this->pattern_point(
+				$this->pattern_chunk(
 					'core/block/93',
 					0.96,
 					[
@@ -2564,10 +2298,9 @@ final class PatternAbilitiesTest extends TestCase {
 		];
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point(
+					$this->pattern_chunk(
 						'core/block/93',
 						0.96,
 						[
@@ -2598,7 +2331,7 @@ final class PatternAbilitiesTest extends TestCase {
 			'Legacy Private Banner',
 			(string) ( WordPressTestState::$remote_post_calls[1]['args']['body'] ?? '' )
 		);
-		$this->assertStringContainsString( 'Legacy Private Banner', (string) $payload_json );
+		$this->assertStringContainsString( 'Legacy private copy', (string) $payload_json );
 	}
 
 	public function test_recommend_patterns_rehydrates_readable_synced_candidates_before_ranking(): void {
@@ -2612,10 +2345,9 @@ final class PatternAbilitiesTest extends TestCase {
 		];
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->synced_pattern_point( 94, 0.96, 'Stale Shared Banner', 'Stale shared copy' ),
+					$this->synced_pattern_chunk( 94, 0.96, 'Stale Shared Banner', 'Stale shared copy' ),
 				]
 			),
 			$this->ranking_response(
@@ -2645,7 +2377,7 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 'Current Shared Banner', $result['recommendations'][0]['title'] ?? '' );
 		$this->assertStringContainsString( 'Current shared copy', $result['recommendations'][0]['content'] ?? '' );
 
-		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[1] );
 		$this->assertStringContainsString( 'Current Shared Banner', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringContainsString( 'Current shared copy', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringNotContainsString( 'Stale Shared Banner', (string) ( $ranking_request['input'] ?? '' ) );
@@ -2665,11 +2397,10 @@ final class PatternAbilitiesTest extends TestCase {
 		];
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->synced_pattern_point( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
-					$this->synced_pattern_point( 94, 0.94, 'Stale Shared Banner', 'Stale shared copy' ),
+					$this->synced_pattern_chunk( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
+					$this->synced_pattern_chunk( 94, 0.94, 'Stale Shared Banner', 'Stale shared copy' ),
 				]
 			),
 			$this->ranking_response(
@@ -2716,11 +2447,10 @@ final class PatternAbilitiesTest extends TestCase {
 		];
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->synced_pattern_point( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
-					$this->synced_pattern_point( 94, 0.94, 'Stale Shared Banner', 'Stale shared copy' ),
+					$this->synced_pattern_chunk( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
+					$this->synced_pattern_chunk( 94, 0.94, 'Stale Shared Banner', 'Stale shared copy' ),
 				]
 			),
 			$this->ranking_response(
@@ -2753,13 +2483,14 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 		$this->assertStringNotContainsString( 'Private launch copy', wp_json_encode( $result ) );
 
-		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[1] );
 		$this->assertStringNotContainsString( 'Private Launch Banner', (string) ( $ranking_request['input'] ?? '' ) );
 		$this->assertStringNotContainsString( 'Private launch copy', (string) ( $ranking_request['input'] ?? '' ) );
 	}
 
 	public function test_recommend_patterns_reports_privacy_safe_pipeline_trace(): void {
 		$this->configure_backends();
+		WordPressTestState::$options[ Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH ] = 0.35;
 		$this->save_index_state();
 		WordPressTestState::$capabilities = [
 			'read_post:91' => false,
@@ -2769,13 +2500,12 @@ final class PatternAbilitiesTest extends TestCase {
 		];
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point( 'theme/hero', 0.91 ),
-					$this->pattern_point( 'theme/hidden', 0.99 ),
-					$this->synced_pattern_point( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
-					$this->pattern_point( 'theme/weak', 0.05 ),
+					$this->pattern_chunk( 'theme/hero', 0.91 ),
+					$this->pattern_chunk( 'theme/hidden', 0.99 ),
+					$this->synced_pattern_chunk( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
+					$this->pattern_chunk( 'theme/weak', 0.05 ),
 				]
 			),
 			$this->ranking_response(
@@ -2813,8 +2543,8 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( [ 'theme/hero' ], array_column( $result['recommendations'], 'name' ) );
 		$this->assertSame(
 			[
-				'backendRetrieved'        => 4,
-				'visibleScopeDropped'     => 1,
+				'backendRetrieved'        => 3,
+				'visibleScopeDropped'     => 0,
 				'rehydrationDropped'      => 1,
 				'candidatePool'           => 2,
 				'diversityDropped'        => 0,
@@ -2829,7 +2559,6 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 		$this->assertSame(
 			[
-				'visible_scope'             => 1,
 				'synced_rehydration_failed' => 1,
 				'llm_name_mismatch'         => 1,
 				'below_threshold'           => 1,
@@ -2838,9 +2567,9 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 		$this->assertStringNotContainsString( 'Private launch copy', wp_json_encode( $result ) );
 
-		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[2] );
+		$ranking_request = $this->decode_request_body( WordPressTestState::$remote_post_calls[1] );
 		$this->assertStringContainsString(
-			'Unique retrieved candidates before visibility filtering: 4',
+			'Unique retrieved candidates before visibility filtering: 3',
 			(string) ( $ranking_request['input'] ?? '' )
 		);
 	}
@@ -2856,15 +2585,10 @@ final class PatternAbilitiesTest extends TestCase {
 		];
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->synced_pattern_point( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
-				]
-			),
-			$this->qdrant_points_response(
-				[
-					$this->synced_pattern_point( 91, 0.94, 'Private Launch Banner', 'Private launch copy' ),
+					$this->synced_pattern_chunk( 91, 0.96, 'Private Launch Banner', 'Private launch copy' ),
+					$this->synced_pattern_chunk( 91, 0.94, 'Private Launch Banner', 'Private launch copy' ),
 				]
 			),
 		];
@@ -2887,21 +2611,20 @@ final class PatternAbilitiesTest extends TestCase {
 			$result['diagnostics']['filteredCandidates']['unreadableSyncedPatterns'] ?? null
 		);
 		$this->assertStringNotContainsString( 'Private launch copy', wp_json_encode( $result ) );
-		$this->assertCount( 3, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 	}
 
-	public function test_recommend_patterns_uses_generic_chat_with_workers_ai_embeddings(): void {
+	public function test_recommend_patterns_uses_generic_chat_with_managed_pattern_search(): void {
 		WordPressTestState::$options = [
 			Provider::OPTION_NAME                          => 'cloudflare_workers_ai',
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
-			'flavor_agent_qdrant_url'                      => 'https://example.cloud.qdrant.io:6333',
-			'flavor_agent_qdrant_key'                      => 'qdrant-key',
 		];
 
 		WordPressTestState::$ai_client_supported = true;
 		$this->prime_default_docs_grounding();
+		$this->configure_managed_pattern_store();
 
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
 			[
@@ -2928,10 +2651,9 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->save_index_state();
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point( 'theme/hero', 0.71 ),
+					$this->pattern_chunk( 'theme/hero', 0.71 ),
 				]
 			),
 		];
@@ -2947,11 +2669,11 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->assertSame( 'Matches the current context.', $result['recommendations'][0]['ranking']['reason'] ?? null );
 		$this->assertSame( 'validated', $result['recommendations'][0]['ranking']['safetyMode'] ?? null );
 		$this->assertSame(
-			[ 'qdrant_semantic', 'llm_ranker', 'component_ranking_v1', 'contextual_ranking_v1' ],
+			[ 'cloudflare_ai_search', 'llm_ranker', 'component_ranking_v1', 'contextual_ranking_v1' ],
 			$result['recommendations'][0]['ranking']['sourceSignals'] ?? null
 		);
 		$this->assertSame( 0.82, $result['recommendations'][0]['ranking']['modelScore'] ?? null );
-		$this->assertSame( 0.71, $result['recommendations'][0]['ranking']['deterministicScore'] ?? null );
+		$this->assertSame( 0.722, $result['recommendations'][0]['ranking']['deterministicScore'] ?? null );
 		$this->assertIsFloat( $result['recommendations'][0]['ranking']['contextScore'] ?? null );
 		$this->assertIsFloat( $result['recommendations'][0]['ranking']['blendedScore'] ?? null );
 		$this->assertSame(
@@ -2969,7 +2691,7 @@ final class PatternAbilitiesTest extends TestCase {
 			$result['recommendations'][0]['score'] ?? null
 		);
 		$this->assertArrayNotHasKey( 'provider', WordPressTestState::$last_ai_client_prompt );
-		$this->assertCount( 2, WordPressTestState::$remote_post_calls );
+		$this->assertCount( 1, WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_recommend_patterns_caps_and_sorts_recommendations(): void {
@@ -2981,7 +2703,7 @@ final class PatternAbilitiesTest extends TestCase {
 
 		for ( $i = 1; $i <= 9; $i++ ) {
 			$name              = "theme/pattern-{$i}";
-			$points[]          = $this->pattern_point( $name, 0.99 - ( $i * 0.01 ) );
+			$points[]          = $this->pattern_chunk( $name, 0.99 - ( $i * 0.01 ) );
 			$ranked_patterns[] = [
 				'name'   => $name,
 				'score'  => 0.40 + ( $i * 0.05 ),
@@ -2990,8 +2712,7 @@ final class PatternAbilitiesTest extends TestCase {
 		}
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response( $points ),
+			$this->cloudflare_ai_search_chunks_response( $points ),
 			$this->ranking_response(
 				wp_json_encode(
 					[
@@ -3032,10 +2753,9 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->save_index_state();
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point( 'theme/hero', 0.91 ),
+					$this->pattern_chunk( 'theme/hero', 0.91 ),
 				]
 			),
 			$this->ranking_response(
@@ -3082,11 +2802,10 @@ final class PatternAbilitiesTest extends TestCase {
 		$this->save_index_state();
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point( 'theme/hero', 0.91 ),
-					$this->pattern_point( 'theme/sidebar', 0.80 ),
+					$this->pattern_chunk( 'theme/hero', 0.91 ),
+					$this->pattern_chunk( 'theme/sidebar', 0.80 ),
 				]
 			),
 			$this->ranking_response(
@@ -3146,14 +2865,13 @@ final class PatternAbilitiesTest extends TestCase {
 	public function test_recommend_patterns_applies_threshold_to_blended_scores(): void {
 		$this->configure_backends();
 		$this->save_index_state();
-		WordPressTestState::$options['flavor_agent_pattern_recommendation_threshold'] = 0.5;
+		WordPressTestState::$options[ Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH ] = 0.5;
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point( 'theme/model-favored', 0.10 ),
-					$this->pattern_point( 'theme/context-favored', 0.99 ),
+					$this->pattern_chunk( 'theme/model-favored', 0.10 ),
+					$this->pattern_chunk( 'theme/context-favored', 0.99 ),
 				]
 			),
 			$this->ranking_response(
@@ -3193,19 +2911,18 @@ final class PatternAbilitiesTest extends TestCase {
 		);
 	}
 
-	public function test_recommend_patterns_respects_configured_score_threshold(): void {
+	public function test_recommend_patterns_respects_managed_threshold_and_ignores_legacy_cosine_threshold(): void {
 		$this->configure_backends();
 		$this->save_index_state();
-		WordPressTestState::$options['flavor_agent_pattern_recommendation_threshold']                        = 0.75;
-		WordPressTestState::$options[ Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH ] = 0;
+		WordPressTestState::$options['flavor_agent_pattern_recommendation_threshold']                        = 0.99;
+		WordPressTestState::$options[ Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH ] = 0.75;
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point( 'theme/pattern-a', 0.91 ),
-					$this->pattern_point( 'theme/pattern-b', 0.89 ),
-					$this->pattern_point( 'theme/pattern-c', 0.10 ),
+					$this->pattern_chunk( 'theme/pattern-a', 0.91 ),
+					$this->pattern_chunk( 'theme/pattern-b', 0.89 ),
+					$this->pattern_chunk( 'theme/pattern-c', 0.10 ),
 				]
 			),
 			$this->ranking_response(
@@ -3252,12 +2969,11 @@ final class PatternAbilitiesTest extends TestCase {
 		WordPressTestState::$options['flavor_agent_pattern_max_recommendations'] = 2;
 
 		WordPressTestState::$remote_post_responses = [
-			$this->embedding_response( [ 0.12, 0.34 ] ),
-			$this->qdrant_points_response(
+			$this->cloudflare_ai_search_chunks_response(
 				[
-					$this->pattern_point( 'theme/pattern-a', 0.91 ),
-					$this->pattern_point( 'theme/pattern-b', 0.89 ),
-					$this->pattern_point( 'theme/pattern-c', 0.88 ),
+					$this->pattern_chunk( 'theme/pattern-a', 0.91 ),
+					$this->pattern_chunk( 'theme/pattern-b', 0.89 ),
+					$this->pattern_chunk( 'theme/pattern-c', 0.88 ),
 				]
 			),
 			$this->ranking_response(
@@ -3313,17 +3029,15 @@ final class PatternAbilitiesTest extends TestCase {
 				],
 			]
 		);
-			WordPressTestState::$options                = array_merge(
-				WordPressTestState::$options,
-				[
-					Provider::OPTION_NAME     => 'cloudflare_workers_ai',
-					'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
-					'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
-					'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
-					'flavor_agent_qdrant_url' => 'https://example.cloud.qdrant.io:6333',
-					'flavor_agent_qdrant_key' => 'qdrant-key',
-				]
-			);
+		WordPressTestState::$options                    = array_merge(
+			WordPressTestState::$options,
+			[
+				Provider::OPTION_NAME => 'cloudflare_workers_ai',
+				'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
+				'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
+				'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
+			]
+		);
 		WordPressTestState::$ai_client_supported        = true;
 		WordPressTestState::$ai_client_provider_support = array_merge(
 			WordPressTestState::$ai_client_provider_support,
@@ -3332,11 +3046,14 @@ final class PatternAbilitiesTest extends TestCase {
 			]
 		);
 		$this->prime_default_docs_grounding();
+		$this->configure_managed_pattern_store();
 	}
 
 	private function configure_cloudflare_ai_search_backends(): void {
 		$this->configure_backends();
+	}
 
+	private function configure_managed_pattern_store(): void {
 		WordPressTestState::$options = array_merge(
 			WordPressTestState::$options,
 			[
@@ -3437,41 +3154,7 @@ final class PatternAbilitiesTest extends TestCase {
 	}
 
 	private function save_index_state( array $overrides = [] ): void {
-		$embedding_config    = Provider::embedding_configuration();
-		$embedding_signature = EmbeddingClient::build_signature_for_dimension( 2, $embedding_config );
-
-		PatternIndex::save_state(
-			array_merge(
-				PatternIndex::get_state(),
-				[
-					'status'                 => 'ready',
-					'fingerprint'            => 'fingerprint-123',
-					'qdrant_url'             => (string) get_option( 'flavor_agent_qdrant_url', '' ),
-					'qdrant_collection'      => QdrantClient::get_collection_name( $embedding_signature ),
-					'openai_provider'        => $embedding_config['provider'],
-					'openai_endpoint'        => $embedding_config['endpoint'],
-					'embedding_model'        => $embedding_config['model'],
-					'embedding_dimension'    => 2,
-					'embedding_signature'    => $embedding_signature['signature_hash'],
-					'last_synced_at'         => '2026-03-24T00:00:00+00:00',
-					'last_attempt_at'        => '2000-01-01T00:00:00+00:00',
-					'indexed_count'          => 3,
-					'last_error'             => null,
-					'last_error_code'        => '',
-					'last_error_status'      => 0,
-					'last_error_retryable'   => false,
-					'last_error_retry_after' => null,
-					'stale_reason'           => '',
-					'stale_reasons'          => [],
-					'pattern_fingerprints'   => [],
-				],
-				$overrides
-			)
-		);
-
-		if ( [] === WordPressTestState::$remote_get_responses ) {
-			WordPressTestState::$remote_get_response = $this->qdrant_collection_response( 2 );
-		}
+		$this->save_cloudflare_ai_search_index_state( $overrides );
 	}
 
 	private function save_cloudflare_ai_search_index_state( array $overrides = [] ): void {
@@ -3482,16 +3165,9 @@ final class PatternAbilitiesTest extends TestCase {
 					'status'                         => 'ready',
 					'pattern_backend'                => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 					'fingerprint'                    => 'cloudflare-fingerprint-123',
-					'qdrant_url'                     => '',
-					'qdrant_collection'              => '',
 					'cloudflare_ai_search_namespace' => 'default',
 					'cloudflare_ai_search_instance'  => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ),
 					'cloudflare_ai_search_signature' => $this->expected_cloudflare_ai_search_signature(),
-					'openai_provider'                => '',
-					'openai_endpoint'                => '',
-					'embedding_model'                => '',
-					'embedding_dimension'            => 0,
-					'embedding_signature'            => '',
 					'last_synced_at'                 => '2026-03-24T00:00:00+00:00',
 					'last_attempt_at'                => '2000-01-01T00:00:00+00:00',
 					'indexed_count'                  => 3,
@@ -3523,67 +3199,6 @@ final class PatternAbilitiesTest extends TestCase {
 
 	private function register_block_type( string $name, array $settings = [] ): void {
 		\WP_Block_Type_Registry::get_instance()->register( $name, $settings );
-	}
-
-	/**
-	 * @param float[] $vector
-	 * @return array<string, mixed>
-	 */
-	private function embedding_response( array $vector ): array {
-		return [
-			'response' => [ 'code' => 200 ],
-			'body'     => wp_json_encode(
-				[
-					'data' => [
-						[
-							'embedding' => $vector,
-						],
-					],
-				]
-			),
-		];
-	}
-
-	/**
-	 * @param array<int, array<string, mixed>> $points
-	 * @return array<string, mixed>
-	 */
-	private function qdrant_points_response( array $points ): array {
-		return [
-			'response' => [ 'code' => 200 ],
-			'body'     => wp_json_encode(
-				[
-					'status' => 'ok',
-					'result' => [
-						'points' => $points,
-					],
-				]
-			),
-		];
-	}
-
-	/**
-	 * @return array<string, mixed>
-	 */
-	private function qdrant_collection_response( int $dimension ): array {
-		return [
-			'response' => [ 'code' => 200 ],
-			'body'     => wp_json_encode(
-				[
-					'status' => 'ok',
-					'result' => [
-						'config' => [
-							'params' => [
-								'vectors' => [
-									'size'     => $dimension,
-									'distance' => 'Cosine',
-								],
-							],
-						],
-					],
-				]
-			),
-		];
 	}
 
 	/**
@@ -3645,9 +3260,9 @@ final class PatternAbilitiesTest extends TestCase {
 	}
 
 	/**
-	 * @return array{score: float, payload: array<string, mixed>}
+	 * @return array<string, mixed>
 	 */
-	private function pattern_point( string $name, float $score, array $overrides = [] ): array {
+	private function pattern_chunk( string $name, float $score, array $overrides = [] ): array {
 		$payload = [
 			'name'             => $name,
 			'title'            => ucwords( str_replace( [ 'theme/', '-' ], [ '', ' ' ], $name ) ),
@@ -3667,10 +3282,41 @@ final class PatternAbilitiesTest extends TestCase {
 			'content'          => "<!-- wp:paragraph --><p>{$name}</p><!-- /wp:paragraph -->",
 		];
 
-		return [
-			'score'   => $score,
-			'payload' => array_replace_recursive( $payload, $overrides ),
-		];
+		$pattern = array_replace_recursive( $payload, $overrides );
+
+		if ( ! array_key_exists( 'content', $overrides ) && ! empty( $pattern['patternOverrides']['hasOverrides'] ) ) {
+			$pattern['content'] = '';
+
+			foreach ( $pattern['patternOverrides']['blockNames'] as $block_name ) {
+				$bindings = [];
+
+				foreach ( $pattern['patternOverrides']['overrideAttributes'][ $block_name ] ?? [] as $attribute ) {
+					$bindings[ $attribute ] = [ 'source' => 'core/pattern-overrides' ];
+				}
+
+				if ( ! empty( $pattern['patternOverrides']['usesDefaultBinding'] ) ) {
+					$bindings['__default'] = [ 'source' => 'core/pattern-overrides' ];
+				}
+
+				$attributes          = [ 'metadata' => [ 'bindings' => $bindings ] ];
+				$pattern['content'] .= '<!-- wp:' . $block_name . ' ' . wp_json_encode( $attributes ) . ' /-->';
+			}
+		}
+
+		if ( 'user' !== ( $pattern['type'] ?? '' ) && 'synced' !== ( $pattern['source'] ?? '' ) && ! str_starts_with( $name, 'core/block/' ) ) {
+			$this->register_pattern( $name, $pattern );
+		}
+
+		return $this->cloudflare_ai_search_chunk(
+			$name,
+			$score,
+			'# ' . (string) $pattern['title'] . "\n" . (string) $pattern['content'],
+			[
+				'candidate_type' => (string) ( $pattern['type'] ?? 'pattern' ),
+				'source'         => (string) ( $pattern['source'] ?? 'registered' ),
+				'synced_id'      => (string) ( $pattern['syncedPatternId'] ?? '' ),
+			]
+		);
 	}
 
 	private function synced_pattern_post( int $id, string $title, string $copy, string $status = 'publish' ): object {
@@ -3688,10 +3334,10 @@ final class PatternAbilitiesTest extends TestCase {
 	}
 
 	/**
-	 * @return array{score: float, payload: array<string, mixed>}
+	 * @return array<string, mixed>
 	 */
-	private function synced_pattern_point( int $id, float $score, string $title, string $copy ): array {
-		return $this->pattern_point(
+	private function synced_pattern_chunk( int $id, float $score, string $title, string $copy ): array {
+		return $this->pattern_chunk(
 			'core/block/' . $id,
 			$score,
 			[

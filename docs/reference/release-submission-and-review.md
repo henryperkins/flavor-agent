@@ -33,7 +33,7 @@ Snapshot of work that must stay true before the plugin can credibly enter the re
 - `readme.txt` now exists as a reviewer-facing artifact with setup, FAQ, external-service disclosure language, and the current `0.1.0` changelog.
 - `readme.txt` now includes the maintained source-code/build-tooling location required when the release zip ships compiled JS assets without the full `src/` tree.
 - `lint-plugin` must run against a representative WordPress 7.0 environment for release evidence. Any skipped Plugin Check run is a recorded blocker or waiver, not a green release signal.
-- The external-service disclosure inventory lives at `docs/reference/external-service-disclosure.md`. It enumerates outbound call sites (OpenAI, Cloudflare Workers AI, connector-backed chat providers such as Anthropic, Qdrant, Cloudflare AI Search, GitHub) with trigger, data sent, and setup/explicit-action gates, and must stay 1:1 with the disclosure block in `readme.txt`.
+- The external-service disclosure inventory lives at `docs/reference/external-service-disclosure.md`. It enumerates outbound call sites (OpenAI, Cloudflare Workers AI, connector-backed chat providers such as Anthropic, Cloudflare AI Search, GitHub) with trigger, data sent, and setup/explicit-action gates, and must stay 1:1 with the disclosure block in `readme.txt`.
 - Cron-driven outbound calls (`flavor_agent_reindex_patterns`, `flavor_agent_warm_core_roadmap_guidance`) are audited in `docs/reference/external-service-disclosure.md`. The legacy docs warm crons (`flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`) are no longer registered, and deactivation clears them by name for upgrading sites. External docs grounding is disabled by default in v0.1.3; explicitly enabled development retains per-request best-effort search. Keep tests and docs aligned so nothing can phone home on activation before the corresponding backend is configured or explicitly enabled.
 - No banner, icon, or screenshot assets exist yet for the WordPress.org listing. They are not required in the first review zip; after approval they should be committed to the WordPress.org SVN `assets/` directory before the public listing is polished.
 
@@ -67,7 +67,7 @@ Header constraints specific to this plugin:
 
 Description requirements specific to this plugin:
 
-- An explicit "uses external services" disclosure block listing OpenAI, Cloudflare Workers AI, connector-backed chat providers such as Anthropic, Qdrant, Cloudflare AI Search, and GitHub; what data is sent to each; when (only after the user configures or explicitly enables the corresponding backend); and a link to each provider's terms of service and privacy policy.
+- An explicit "uses external services" disclosure block listing OpenAI, Cloudflare Workers AI, connector-backed chat providers such as Anthropic, Cloudflare AI Search, and GitHub; what data is sent to each; when (only after the user configures or explicitly enables the corresponding backend); and a link to each provider's terms of service and privacy policy.
 - A clear governance-layer framing: AI proposes, WordPress approves, operations are bounded, applies are recorded server-side, and undo is drift-safe. Do not over-claim accuracy, safety, accessibility, design quality, or compliance.
 - Setup steps that make the external dependencies obvious before installation, not buried in an Installation section the reviewer has to dig for.
 
@@ -134,7 +134,7 @@ Audit procedure:
 
 Cron events are functionally indistinguishable from "the plugin phones home periodically" if they fire before user setup. Specific events to audit:
 
-- `flavor_agent_reindex_patterns` (calls Qdrant)
+- `flavor_agent_reindex_patterns` (calls the configured managed Cloudflare AI Search pattern instance)
 - `flavor_agent_warm_core_roadmap_guidance` (calls GitHub when explicitly enabled)
 
 The legacy docs warm crons (`flavor_agent_prewarm_docs`, `flavor_agent_warm_docs_context`) are no longer registered. External docs grounding is disabled by default in v0.1.3, including cached and direct lookup. Explicitly enabled development retains one cache-first best-effort search per recommendation. Deactivation still clears the legacy hook names so upgrading sites do not strand schedules. Restoring release grounding requires separate approval and full desired-corpus settlement followed by unchanged public/managed/MCP freshness; see the corpus runbook.
@@ -170,7 +170,7 @@ Reviewer scrutiny on AI plugins has tightened. The relevant rules for this plugi
 
 - "Flavor Agent" must not collide with another reserved slug or registered trademark.
 - Plugin name and description cannot use "WordPress" in a way that implies official endorsement.
-- Cannot use OpenAI, Azure, Anthropic, Cloudflare, GitHub, or Qdrant logos in the listing or in-plugin promotional artifacts.
+- Cannot use OpenAI, Azure, Anthropic, Cloudflare or GitHub logos in the listing or in-plugin promotional artifacts.
 - "AI" can appear descriptively, not in a way that implies official AI partnership or certification.
 
 ### Promotional And Premium Behavior

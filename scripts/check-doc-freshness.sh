@@ -28,6 +28,7 @@ live_docs=(
 	"${repo_root}/docs/reference/abilities-and-routes.md"
 	"${repo_root}/docs/reference/cross-surface-validation-gates.md"
 	"${repo_root}/docs/reference/governance-layer.md"
+	"${repo_root}/docs/reference/pattern-storage-migration.md"
 )
 
 missing_live_docs=()
@@ -415,6 +416,39 @@ check_present_in_each_fixed \
 	"${repo_root}/.github/copilot-instructions.md" \
 	"${repo_root}/docs/reference/abilities-and-routes.md" \
 	"${repo_root}/docs/reference/wordpress-ai-roadmap-tracking.md"
+
+# Supported plugin storage is Cloudflare AI Search only. Dated release evidence,
+# migration/legacy-uninstall notes, and the dev-only code-search index may still
+# name the retired service; active runtime class references may not.
+check_absent \
+	'retired Qdrant runtime client still appears in supported-product guidance' \
+	'QdrantClient' \
+	"${repo_root}/README.md" \
+	"${repo_root}/readme.txt" \
+	"${repo_root}/docs/SOURCE_OF_TRUTH.md" \
+	"${repo_root}/docs/features/pattern-recommendations.md" \
+	"${repo_root}/docs/features/settings-backends-and-sync.md" \
+	"${repo_root}/docs/reference/provider-precedence.md" \
+	"${repo_root}/docs/reference/external-service-disclosure.md" \
+	"${repo_root}/docs/reference/pattern-recommendation-debugging.md"
+
+check_present_in_each_fixed \
+	'sole supported pattern-store contract drifted between current docs' \
+	'Cloudflare AI Search is the sole supported pattern store' \
+	"${repo_root}/README.md" \
+	"${repo_root}/docs/features/settings-backends-and-sync.md" \
+	"${repo_root}/docs/reference/provider-precedence.md" \
+	"${repo_root}/docs/reference/pattern-storage-migration.md"
+
+check_present_fixed \
+	'legacy storage migration must remain local and require explicit setup' \
+	'Migration changes local compatibility state only.' \
+	"${repo_root}/docs/reference/pattern-storage-migration.md"
+
+check_present_fixed \
+	'legacy cosine threshold must not be reused for managed AI Search' \
+	'The former cosine threshold is not copied, converted, or reused' \
+	"${repo_root}/docs/reference/pattern-storage-migration.md"
 
 if (( failed > 0 )); then
 	echo >&2

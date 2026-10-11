@@ -82,7 +82,6 @@ register_activation_hook(
 		FlavorAgent\Activity\PersistenceOccurrenceRepository::schedule();
 		FlavorAgent\Attestation\Repository::install();
 		add_option( 'flavor_agent_cloudflare_workers_ai_api_token', '', '', false );
-		add_option( 'flavor_agent_qdrant_key', '', '', false );
 		FlavorAgent\Activity\Repository::ensure_prune_schedule();
 		FlavorAgent\Patterns\PatternIndex::activate();
 		FlavorAgent\Support\CoreRoadmapGuidance::schedule_warm();
@@ -172,8 +171,6 @@ foreach (
 		'flavor_agent_cloudflare_workers_ai_embedding_model',
 		'flavor_agent_pattern_retrieval_backend',
 		'flavor_agent_cloudflare_pattern_ai_search_instance_id',
-		'flavor_agent_qdrant_url',
-		'flavor_agent_qdrant_key',
 		'home',
 	] as $flavor_agent_option_name
 ) {

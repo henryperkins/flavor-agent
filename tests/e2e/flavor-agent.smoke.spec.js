@@ -3649,7 +3649,7 @@ test( 'block and pattern surfaces explain unavailable providers in native UI', a
 			data.capabilities.surfaces.pattern.reason =
 				'pattern_backend_unconfigured';
 			data.capabilities.surfaces.pattern.message =
-				'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.';
+				'Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.';
 		}
 
 		window.wp?.data
@@ -3691,14 +3691,14 @@ test( 'block and pattern surfaces explain unavailable providers in native UI', a
 		.locator( '.flavor-agent-capability-notice' )
 		.filter( {
 			hasText:
-				'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage',
+				'Pattern recommendations need Cloudflare AI Search Pattern Storage',
 		} )
 		.first();
 
 	await expect( patternCapabilityNotice ).toBeVisible();
 	await expect(
 		patternCapabilityNotice.getByText(
-			'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage'
+			'Pattern recommendations need Cloudflare AI Search Pattern Storage'
 		)
 	).toBeVisible();
 	await expect(
@@ -3845,7 +3845,7 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 							categories: [ 'hero' ],
 							ranking: {
 								sourceSignals: [
-									'qdrant_semantic',
+									'cloudflare_ai_search',
 									'llm_ranker',
 								],
 								rankingHint: {
@@ -3930,7 +3930,7 @@ test( 'pattern surface smoke uses the inserter search to fetch recommendations',
 	await expect(
 		page.getByLabel( '2 pattern recommendations available' )
 	).toBeVisible();
-	await expect( page.getByText( 'Semantic match' ).first() ).toBeVisible();
+	await expect( page.getByText( 'AI Search match' ).first() ).toBeVisible();
 	await expect( page.getByText( 'Model ranked' ).first() ).toBeVisible();
 	await expect( page.getByText( 'Allowed here' ).first() ).toBeVisible();
 

@@ -198,7 +198,7 @@ final class SyncedPatternRepository {
 
 	/**
 	 * Normalize a current synced-pattern post snapshot into the recommendation
-	 * payload shape used by Qdrant and request-time rehydration.
+	 * payload shape used by Cloudflare AI Search and request-time rehydration.
 	 *
 	 * @return array<string, mixed>
 	 */

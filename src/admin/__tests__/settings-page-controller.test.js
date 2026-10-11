@@ -17,6 +17,14 @@ const TOKENS_CSS = fs.readFileSync(
 	'utf8'
 );
 
+const CONFIRMED_CATALOG = {
+	pattern_backend: 'cloudflare_ai_search',
+	cloudflare_ai_search_namespace: 'mock-namespace',
+	cloudflare_ai_search_instance: 'mock-index',
+	cloudflare_ai_search_signature: 'mock-signature',
+	last_synced_at: '2026-04-07T12:00:00Z',
+};
+
 function createStorage( initialValues = {} ) {
 	const values = new Map( Object.entries( initialValues ) );
 
@@ -41,7 +49,6 @@ function renderSettingsPage( {
 	attentionSection = '',
 	defaultSection = 'chat',
 	forceSection = '',
-	includePatternBackendPreview = false,
 	prerequisiteMessage = '',
 	prerequisitesReady = '1',
 	syncStatus = 'uninitialized',
@@ -85,45 +92,6 @@ function renderSettingsPage( {
 				</details>
 			</section>
 
-			${
-				includePatternBackendPreview
-					? `
-						<fieldset
-							data-flavor-agent-pattern-backend-segments
-							data-saved-backend="qdrant"
-						>
-							<label class="flavor-agent-pattern-backend-segment">
-								<input
-									type="radio"
-									name="flavor_agent_pattern_retrieval_backend"
-									value="qdrant"
-									checked
-								/>
-								Qdrant
-								<span data-pattern-backend-active-pill>Active</span>
-							</label>
-							<label class="flavor-agent-pattern-backend-segment">
-								<input
-									type="radio"
-									name="flavor_agent_pattern_retrieval_backend"
-									value="cloudflare_ai_search"
-								/>
-								Cloudflare AI Search
-							</label>
-						</fieldset>
-						<p id="flavor-agent-pattern-backend-preview-hint" data-pattern-backend-preview-hint hidden>
-							Save Changes to switch pattern storage.
-						</p>
-						<div class="flavor-agent-pattern-backend-block" data-pattern-backend="qdrant">
-							Qdrant fields
-						</div>
-						<div class="flavor-agent-pattern-backend-block" data-pattern-backend="cloudflare_ai_search" hidden>
-							Cloudflare fields
-						</div>
-					`
-					: ''
-			}
-
 			<a
 				data-pattern-overview-status="true"
 				class="flavor-agent-settings__glance-item flavor-agent-settings__glance-item--warning"
@@ -152,7 +120,7 @@ function renderSettingsPage( {
 						data-pattern-prerequisites-ready="${ prerequisitesReady }"
 						data-pattern-prerequisite-message="${ prerequisiteMessage }"
 						data-pattern-sync-status="${ syncStatus }"
-						data-pattern-backend-preview-matches-saved="1"
+
 					>
 					<p id="flavor-agent-sync-summary" class="flavor-agent-sync-panel__summary">
 						Pattern recommendations are not available until you sync the catalog.
@@ -178,12 +146,6 @@ function renderSettingsPage( {
 						<div class="flavor-agent-sync-panel__metric is-hidden" data-pattern-metric="last_error" hidden>
 							<p class="flavor-agent-sync-panel__metric-value" data-pattern-metric-value="last_error"></p>
 						</div>
-						<div class="flavor-agent-sync-panel__metric" data-pattern-metric="qdrant_collection">
-							<p class="flavor-agent-sync-panel__metric-value" data-pattern-metric-value="qdrant_collection">initial-collection</p>
-						</div>
-						<div class="flavor-agent-sync-panel__metric" data-pattern-metric="embedding_dimension">
-							<p class="flavor-agent-sync-panel__metric-value" data-pattern-metric-value="embedding_dimension">0</p>
-						</div>
 					</div>
 					<div class="flavor-agent-sync-panel__actions">
 						<button type="button" id="flavor-agent-sync-button">Sync Pattern Catalog</button>
@@ -203,6 +165,7 @@ function renderSettingsPage( {
 function renderGuidelinesSettingsPage( {
 	categories = {},
 	blockGuidelines = {},
+	fallbackInactive = false,
 	blockOptions = [
 		{
 			value: 'core/image',
@@ -226,6 +189,7 @@ function renderGuidelinesSettingsPage( {
 			data-force-section=""
 			data-open-section-storage-key="flavor-agent-settings-open-section"
 		>
+			${ fallbackInactive ? '<details data-guidelines-fallback>' : '' }
 			<div class="flavor-agent-guidelines" data-flavor-agent-guidelines-root>
 				<div class="flavor-agent-guidelines__notice" data-guidelines-notice aria-live="polite"></div>
 				<textarea id="flavor_agent_guideline_site">${ categories.site || '' }</textarea>
@@ -250,6 +214,7 @@ function renderGuidelinesSettingsPage( {
 				<button type="button" data-guidelines-export-button>Export JSON</button>
 				<input type="file" data-guidelines-file-input hidden />
 			</div>
+			${ fallbackInactive ? '</details>' : '' }
 		</div>
 	`;
 
@@ -259,6 +224,7 @@ function renderGuidelinesSettingsPage( {
 describe( 'settings page controller', () => {
 	beforeEach( () => {
 		jest.clearAllMocks();
+		window.history.replaceState( null, '', '/' );
 		document.body.innerHTML = '';
 		window.flavorAgentAdmin = {
 			nonce: 'test-nonce',
@@ -269,6 +235,7 @@ describe( 'settings page controller', () => {
 	afterEach( () => {
 		delete window.flavorAgentAdmin;
 		document.body.innerHTML = '';
+		window.history.replaceState( null, '', '/' );
 	} );
 
 	test( 'declares tone styles for server-rendered settings status blocks', () => {
@@ -452,6 +419,106 @@ describe( 'settings page controller', () => {
 		);
 	} );
 
+	test( 'a section hash opens and focuses its summary while preserving validation errors', () => {
+		window.history.replaceState( null, '', '#flavor-agent-section-docs' );
+		const root = renderSettingsPage( {
+			forceSection: 'patterns',
+			validationErrorSections: [ 'patterns' ],
+		} );
+		const storage = createStorage();
+
+		initializeSettingsPage( {
+			root,
+			fetchImpl: jest.fn(),
+			storage,
+		} );
+
+		const docs = root.querySelector( '[data-flavor-agent-section="docs"]' );
+		expect( docs.open ).toBe( true );
+		expect( document.activeElement ).toBe(
+			docs.querySelector( 'summary' )
+		);
+		expect(
+			root.querySelector( '[data-flavor-agent-section="patterns"]' ).open
+		).toBe( true );
+		expect( storage.getItem( 'flavor-agent-settings-open-section' ) ).toBe(
+			'docs'
+		);
+	} );
+
+	test( 'status link activation opens and focuses the destination even when its hash is unchanged', () => {
+		const root = renderSettingsPage();
+		const link = document.createElement( 'a' );
+		link.href = '#flavor-agent-section-docs';
+		link.textContent = 'Docs status';
+		root.prepend( link );
+		initializeSettingsPage( {
+			root,
+			fetchImpl: jest.fn(),
+			storage: createStorage(),
+		} );
+
+		const docs = root.querySelector( '[data-flavor-agent-section="docs"]' );
+		link.focus();
+		link.click();
+		expect( docs.open ).toBe( true );
+		expect( window.location.hash ).toBe( '#flavor-agent-section-docs' );
+		expect( document.activeElement ).toBe(
+			docs.querySelector( 'summary' )
+		);
+
+		docs.open = false;
+		link.focus();
+		link.click();
+		expect( docs.open ).toBe( true );
+		expect( document.activeElement ).toBe(
+			docs.querySelector( 'summary' )
+		);
+	} );
+
+	test( 'hash navigation expands the matching section without intercepting unrelated links', () => {
+		const root = renderSettingsPage();
+		initializeSettingsPage( {
+			root,
+			fetchImpl: jest.fn(),
+			storage: createStorage(),
+		} );
+		window.history.replaceState(
+			null,
+			'',
+			'#flavor-agent-section-patterns'
+		);
+		window.dispatchEvent( new Event( 'hashchange' ) );
+		const patterns = root.querySelector(
+			'[data-flavor-agent-section="patterns"]'
+		);
+		expect( patterns.open ).toBe( true );
+		expect( document.activeElement ).toBe(
+			patterns.querySelector( 'summary' )
+		);
+
+		const otherScreen = document.createElement( 'a' );
+		otherScreen.href = '/other-screen#flavor-agent-section-docs';
+		root.appendChild( otherScreen );
+		const click = new window.MouseEvent( 'click', {
+			bubbles: true,
+			cancelable: true,
+			button: 0,
+		} );
+		let intercepted;
+		root.addEventListener(
+			'click',
+			( event ) => {
+				intercepted = event.defaultPrevented;
+				event.preventDefault();
+			},
+			{ once: true }
+		);
+		otherScreen.dispatchEvent( click );
+		expect( intercepted ).toBe( false );
+		expect( patterns.open ).toBe( true );
+	} );
+
 	test( 'sync success updates the live panel state from runtimeState', async () => {
 		const root = renderSettingsPage();
 		const fetchImpl = jest.fn().mockResolvedValue( {
@@ -461,13 +528,12 @@ describe( 'settings page controller', () => {
 					indexed: 3,
 					removed: 1,
 					runtimeState: {
+						...CONFIRMED_CATALOG,
 						status: 'ready',
 						indexed_count: 12,
 						last_synced_at: '2026-04-07T12:00:00Z',
 						stale_reason: '',
 						last_error: '',
-						qdrant_collection: 'flavor-agent-patterns-test',
-						embedding_dimension: 1536,
 					},
 					status: 'ready',
 				} ),
@@ -511,16 +577,6 @@ describe( 'settings page controller', () => {
 				.textContent
 		).toBe( '2026-04-07T12:00:00Z' );
 		expect(
-			root.querySelector(
-				'[data-pattern-metric-value="qdrant_collection"]'
-			).textContent
-		).toBe( 'flavor-agent-patterns-test' );
-		expect(
-			root.querySelector(
-				'[data-pattern-metric-value="embedding_dimension"]'
-			).textContent
-		).toBe( '1536' );
-		expect(
 			root.querySelector( '#flavor-agent-sync-notice' ).textContent
 		).toContain( 'Synced 3 patterns, removed 1. Status: Ready.' );
 		expect( i18n.sprintf ).toHaveBeenCalled();
@@ -549,6 +605,7 @@ describe( 'settings page controller', () => {
 				text: async () =>
 					JSON.stringify( {
 						runtimeState: {
+							...CONFIRMED_CATALOG,
 							status: 'ready',
 							indexed_count: 12,
 							last_synced_at: '2026-04-07T12:00:00Z',
@@ -587,7 +644,7 @@ describe( 'settings page controller', () => {
 		).toBe( 'Ready' );
 		expect(
 			root.querySelector( '#flavor-agent-sync-notice' ).textContent
-		).toContain( 'Pattern catalog sync queued. Status: Syncing.' );
+		).toContain( 'Pattern catalog status updated: Ready.' );
 		expect(
 			root.querySelector( '#flavor-agent-sync-button' ).disabled
 		).toBe( false );
@@ -650,8 +707,10 @@ describe( 'settings page controller', () => {
 		const root = renderSettingsPage();
 		const fetchImpl = jest.fn().mockResolvedValue( {
 			ok: false,
+			status: 500,
 			text: async () =>
 				JSON.stringify( {
+					code: 'pattern_sync_schedule_failed',
 					message: 'Sync failed hard.',
 				} ),
 		} );
@@ -687,7 +746,7 @@ describe( 'settings page controller', () => {
 		expect(
 			root.querySelector( '.flavor-agent-sync-panel' ).dataset
 				.patternSyncStatus
-		).toBe( 'error' );
+		).toBe( 'rejected' );
 	} );
 
 	test( 'disabled sync button references the prerequisite guidance', () => {
@@ -759,7 +818,11 @@ describe( 'settings page controller', () => {
 			ok: true,
 			text: async () =>
 				JSON.stringify( {
-					runtimeState: { status: 'ready', indexed_count: 12 },
+					runtimeState: {
+						...CONFIRMED_CATALOG,
+						status: 'ready',
+						indexed_count: 12,
+					},
 				} ),
 		} );
 
@@ -801,58 +864,194 @@ describe( 'settings page controller', () => {
 		);
 	} );
 
-	test( 'restored pattern backend radio state controls the visible backend and sync availability on load', () => {
-		const root = renderSettingsPage( {
-			includePatternBackendPreview: true,
-			prerequisitesReady: '1',
-			prerequisiteMessage: '',
-		} );
-		const qdrantRadio = root.querySelector( 'input[value="qdrant"]' );
-		const cloudflareRadio = root.querySelector(
-			'input[value="cloudflare_ai_search"]'
+	test( 'block guideline validation identifies and focuses the invalid field, preserving helper associations', () => {
+		const root = renderGuidelinesSettingsPage();
+		const blockSelect = root.querySelector(
+			'[data-guidelines-block-select]'
 		);
-
-		qdrantRadio.checked = false;
-		cloudflareRadio.checked = true;
-
+		const blockText = root.querySelector( '[data-guidelines-block-text]' );
+		const helper = document.createElement( 'p' );
+		helper.id = 'block-select-helper';
+		helper.textContent = 'Select the block to guide.';
+		blockSelect.insertAdjacentElement( 'beforebegin', helper );
+		blockSelect.setAttribute( 'aria-describedby', helper.id );
 		initializeSettingsPage( {
 			root,
 			fetchImpl: jest.fn(),
 			storage: createStorage(),
 		} );
 
-		const qdrantBlock = root.querySelector(
-			'[data-pattern-backend="qdrant"]'
+		const save = root.querySelector( '[data-guidelines-block-save]' );
+		save.focus();
+		save.click();
+		const selectError = root.querySelector(
+			'#flavor-agent-block-select-error'
 		);
-		const cloudflareBlock = root.querySelector(
-			'[data-pattern-backend="cloudflare_ai_search"]'
+		expect( document.activeElement ).toBe( blockSelect );
+		expect( blockSelect.getAttribute( 'aria-invalid' ) ).toBe( 'true' );
+		expect( blockSelect.getAttribute( 'aria-describedby' ) ).toBe(
+			'block-select-helper flavor-agent-block-select-error'
 		);
-		const hint = root.querySelector(
-			'[data-pattern-backend-preview-hint]'
+		expect( selectError.hidden ).toBe( false );
+		expect( selectError.textContent ).toBe(
+			'Choose a block before saving a block guideline.'
 		);
-		const syncBody = root.querySelector( '.flavor-agent-sync-panel' );
-		const button = root.querySelector( '#flavor-agent-sync-button' );
-		const qdrantSegment = qdrantRadio.closest(
-			'.flavor-agent-pattern-backend-segment'
-		);
-		const cloudflareSegment = cloudflareRadio.closest(
-			'.flavor-agent-pattern-backend-segment'
-		);
+		expect(
+			root.querySelector( '.flavor-agent-guidelines__blocks-panel' ).open
+		).toBe( true );
+		expect(
+			root.querySelector( '[data-guidelines-notice]' ).textContent
+		).toBe( selectError.textContent );
 
-		expect( qdrantBlock.hidden ).toBe( true );
-		expect( cloudflareBlock.hidden ).toBe( false );
-		expect( hint.hidden ).toBe( false );
-		expect( syncBody.dataset.patternBackendPreviewMatchesSaved ).toBe(
-			'0'
+		blockSelect.value = 'core/paragraph';
+		blockSelect.dispatchEvent( new Event( 'change' ) );
+		expect( blockSelect.hasAttribute( 'aria-invalid' ) ).toBe( false );
+		expect( blockSelect.getAttribute( 'aria-describedby' ) ).toBe(
+			helper.id
 		);
-		expect( button.disabled ).toBe( true );
-		expect( button.getAttribute( 'aria-describedby' ) ).toBe( hint.id );
-		expect( qdrantSegment.classList ).not.toContain(
-			'is-preview-selected'
+		expect( selectError.hidden ).toBe( true );
+		expect(
+			root.querySelector( '[data-guidelines-notice]' ).textContent
+		).toBe( '' );
+		save.click();
+		const textError = root.querySelector(
+			'#flavor-agent-block-text-error'
 		);
-		expect( cloudflareSegment.classList ).toContain(
-			'is-preview-selected'
+		expect( document.activeElement ).toBe( blockText );
+		expect( blockText.getAttribute( 'aria-invalid' ) ).toBe( 'true' );
+		expect( blockText.getAttribute( 'aria-describedby' ) ).toBe(
+			textError.id
 		);
+		expect( textError.hidden ).toBe( false );
+
+		blockText.value = 'Use short paragraphs.';
+		blockText.dispatchEvent( new Event( 'input' ) );
+		expect( blockText.hasAttribute( 'aria-invalid' ) ).toBe( false );
+		expect( blockText.hasAttribute( 'aria-describedby' ) ).toBe( false );
+		expect( textError.hidden ).toBe( true );
+		expect(
+			root.querySelector( '[data-guidelines-notice]' ).textContent
+		).toBe( '' );
+		save.click();
+		expect( document.activeElement ).toBe( blockSelect );
+	} );
+
+	test( 'hidden Cancel remains absent under wp-admin button styles and focus returns to Block after cancellation', () => {
+		const root = renderGuidelinesSettingsPage( {
+			blockGuidelines: { 'core/image': 'Include alternative text.' },
+		} );
+		root.classList.add( 'wp-core-ui' );
+		const style = document.createElement( 'style' );
+		style.textContent = `.wp-core-ui .button { display: inline-block; }\n${ SETTINGS_CSS }`;
+		root.prepend( style );
+		const cancel = root.querySelector( '[data-guidelines-block-cancel]' );
+		cancel.classList.add( 'button' );
+		initializeSettingsPage( {
+			root,
+			fetchImpl: jest.fn(),
+			storage: createStorage(),
+		} );
+		expect( cancel.hidden ).toBe( true );
+		expect( window.getComputedStyle( cancel ).display ).toBe( 'none' );
+		root.querySelector(
+			'.flavor-agent-guidelines__item-actions .button-secondary'
+		).click();
+		expect( cancel.hidden ).toBe( false );
+		expect( window.getComputedStyle( cancel ).display ).toBe(
+			'inline-block'
+		);
+		cancel.focus();
+		cancel.click();
+		expect( window.getComputedStyle( cancel ).display ).toBe( 'none' );
+		expect( document.activeElement ).toBe(
+			root.querySelector( '[data-guidelines-block-select]' )
+		);
+	} );
+
+	test( 'block actions identify their target and removal moves focus to the next, previous, or add control', () => {
+		const root = renderGuidelinesSettingsPage( {
+			blockGuidelines: {
+				'core/image': 'Include alternative text.',
+				'core/paragraph': 'Keep paragraphs concise.',
+				'core/quote': 'Attribute quoted speech.',
+			},
+			blockOptions: [
+				{ value: 'core/image', label: 'Image' },
+				{ value: 'core/paragraph', label: 'Paragraph' },
+				{ value: 'core/quote', label: 'Quote' },
+			],
+		} );
+		const confirm = jest.spyOn( window, 'confirm' ).mockReturnValue( true );
+		try {
+			initializeSettingsPage( {
+				root,
+				fetchImpl: jest.fn(),
+				storage: createStorage(),
+			} );
+			const remove = ( name ) =>
+				Array.from(
+					root.querySelectorAll( '[data-guidelines-block-remove]' )
+				).find(
+					( button ) => button.dataset.guidelinesBlockRemove === name
+				);
+			expect(
+				root
+					.querySelector(
+						'.flavor-agent-guidelines__item-actions .button-secondary'
+					)
+					.getAttribute( 'aria-label' )
+			).toBe( 'Edit guideline for Image' );
+			expect( remove( 'core/image' ).getAttribute( 'aria-label' ) ).toBe(
+				'Remove guideline for Image'
+			);
+			remove( 'core/paragraph' ).focus();
+			remove( 'core/paragraph' ).click();
+			expect( document.activeElement ).toBe( remove( 'core/quote' ) );
+			remove( 'core/quote' ).click();
+			expect( document.activeElement ).toBe( remove( 'core/image' ) );
+			remove( 'core/image' ).click();
+			expect( document.activeElement ).toBe(
+				root.querySelector( '[data-guidelines-block-select]' )
+			);
+		} finally {
+			confirm.mockRestore();
+		}
+	} );
+
+	test( 'inactive fallback validation opens its ancestors and successful mutations name the inactive destination', () => {
+		const root = renderGuidelinesSettingsPage( { fallbackInactive: true } );
+		initializeSettingsPage( {
+			root,
+			fetchImpl: jest.fn(),
+			storage: createStorage(),
+		} );
+		const fallback = root.querySelector( '[data-guidelines-fallback]' );
+		const select = root.querySelector( '[data-guidelines-block-select]' );
+		const text = root.querySelector( '[data-guidelines-block-text]' );
+		const save = root.querySelector( '[data-guidelines-block-save]' );
+		expect( fallback.open ).toBe( false );
+		save.click();
+		expect( fallback.open ).toBe( true );
+		expect( document.activeElement ).toBe( select );
+		select.value = 'core/image';
+		text.value = 'Provide alternative text.';
+		save.click();
+		expect(
+			root.querySelector( '[data-guidelines-notice]' ).textContent
+		).toBe(
+			'Fallback block guideline ready. Save Changes to persist the inactive fallback.'
+		);
+		const confirm = jest.spyOn( window, 'confirm' ).mockReturnValue( true );
+		try {
+			root.querySelector( '[data-guidelines-block-remove]' ).click();
+			expect(
+				root.querySelector( '[data-guidelines-notice]' ).textContent
+			).toBe(
+				'Fallback block guideline removed. Save Changes to persist the inactive fallback.'
+			);
+		} finally {
+			confirm.mockRestore();
+		}
 	} );
 
 	test( 'guidelines manager adds, edits, and removes block guidelines in the hidden field', () => {
@@ -920,158 +1119,181 @@ describe( 'settings page controller', () => {
 		}
 	} );
 
-	test( 'guidelines manager imports Gutenberg-compatible JSON into the form', async () => {
-		const root = renderGuidelinesSettingsPage();
+	test.each( [ false, true ] )(
+		'guidelines manager imports JSON and identifies whether the fallback is inactive (%s)',
+		async ( fallbackInactive ) => {
+			const root = renderGuidelinesSettingsPage( { fallbackInactive } );
 
-		initializeSettingsPage( {
-			root,
-			fetchImpl: jest.fn(),
-			storage: createStorage(),
-		} );
-
-		const fileInput = root.querySelector( '[data-guidelines-file-input]' );
-		const file = {
-			text: jest.fn().mockResolvedValue(
-				JSON.stringify( {
-					guideline_categories: {
-						site: {
-							guidelines: 'Studio website for enterprise buyers.',
-						},
-						copy: {
-							guidelines: 'Use direct, plain language.',
-						},
-						images: {
-							guidelines: 'Prefer documentary photography.',
-						},
-						additional: {
-							guidelines: 'Avoid mentioning discounts.',
-						},
-						blocks: {
-							'Core/Image': {
-								guidelines:
-									'All images need meaningful alt text.',
-							},
-							'invalid block': {
-								guidelines: 'Ignore this entry.',
-							},
-						},
-					},
-				} )
-			),
-		};
-
-		Object.defineProperty( fileInput, 'files', {
-			value: [ file ],
-			configurable: true,
-		} );
-		fileInput.dispatchEvent( new Event( 'change' ) );
-
-		await flushPromises();
-		await flushPromises();
-
-		expect(
-			root.querySelector( '#flavor_agent_guideline_site' ).value
-		).toBe( 'Studio website for enterprise buyers.' );
-		expect(
-			root.querySelector( '#flavor_agent_guideline_copy' ).value
-		).toBe( 'Use direct, plain language.' );
-		expect(
-			root.querySelector( '#flavor_agent_guideline_images' ).value
-		).toBe( 'Prefer documentary photography.' );
-		expect(
-			root.querySelector( '#flavor_agent_guideline_additional' ).value
-		).toBe( 'Avoid mentioning discounts.' );
-		expect(
-			JSON.parse(
-				root.querySelector( '[data-guidelines-block-input]' ).value
-			)
-		).toEqual( {
-			'core/image': 'All images need meaningful alt text.',
-		} );
-		expect(
-			root.querySelector( '.flavor-agent-guidelines__blocks-panel' ).open
-		).toBe( true );
-		expect(
-			root.querySelector( '[data-guidelines-notice]' ).textContent
-		).toContain(
-			'Guidelines imported into the form. Save Changes to persist.'
-		);
-	} );
-
-	test( 'guidelines manager exports the current form as Gutenberg-compatible JSON', async () => {
-		const root = renderGuidelinesSettingsPage( {
-			categories: {
-				site: 'Publisher site',
-				copy: 'Use confident editorial language.',
-				images: 'Favor authentic reporting images.',
-				additional: 'Do not mention subscriber counts.',
-			},
-			blockGuidelines: {
-				'core/paragraph': 'Lead paragraphs should stay concise.',
-			},
-		} );
-		const clickSpy = jest
-			.spyOn( window.HTMLAnchorElement.prototype, 'click' )
-			.mockImplementation( () => {} );
-		const originalBlob = global.Blob;
-		const originalCreateObjectURL = URL.createObjectURL;
-		const originalRevokeObjectURL = URL.revokeObjectURL;
-
-		global.Blob = jest
-			.fn()
-			.mockImplementation( ( parts, options = {} ) => ( {
-				parts,
-				type: options.type,
-			} ) );
-		URL.createObjectURL = jest.fn( () => 'blob:flavor-agent-guidelines' );
-		URL.revokeObjectURL = jest.fn();
-
-		try {
 			initializeSettingsPage( {
 				root,
 				fetchImpl: jest.fn(),
 				storage: createStorage(),
 			} );
 
-			root.querySelector( '[data-guidelines-export-button]' ).click();
-
-			expect( URL.createObjectURL ).toHaveBeenCalledTimes( 1 );
-
-			const [ blob ] = URL.createObjectURL.mock.calls[ 0 ];
-			const payload = JSON.parse( blob.parts.join( '' ) );
-
-			expect( payload ).toEqual( {
-				guideline_categories: {
-					site: {
-						guidelines: 'Publisher site',
-					},
-					copy: {
-						guidelines: 'Use confident editorial language.',
-					},
-					images: {
-						guidelines: 'Favor authentic reporting images.',
-					},
-					additional: {
-						guidelines: 'Do not mention subscriber counts.',
-					},
-					blocks: {
-						'core/paragraph': {
-							guidelines: 'Lead paragraphs should stay concise.',
-						},
-					},
-				},
-			} );
-			expect( URL.revokeObjectURL ).toHaveBeenCalledWith(
-				'blob:flavor-agent-guidelines'
+			const fileInput = root.querySelector(
+				'[data-guidelines-file-input]'
 			);
+			const file = {
+				text: jest.fn().mockResolvedValue(
+					JSON.stringify( {
+						guideline_categories: {
+							site: {
+								guidelines:
+									'Studio website for enterprise buyers.',
+							},
+							copy: {
+								guidelines: 'Use direct, plain language.',
+							},
+							images: {
+								guidelines: 'Prefer documentary photography.',
+							},
+							additional: {
+								guidelines: 'Avoid mentioning discounts.',
+							},
+							blocks: {
+								'Core/Image': {
+									guidelines:
+										'All images need meaningful alt text.',
+								},
+								'invalid block': {
+									guidelines: 'Ignore this entry.',
+								},
+							},
+						},
+					} )
+				),
+			};
+
+			Object.defineProperty( fileInput, 'files', {
+				value: [ file ],
+				configurable: true,
+			} );
+			fileInput.dispatchEvent( new Event( 'change' ) );
+
+			await flushPromises();
+			await flushPromises();
+
+			expect(
+				root.querySelector( '#flavor_agent_guideline_site' ).value
+			).toBe( 'Studio website for enterprise buyers.' );
+			expect(
+				root.querySelector( '#flavor_agent_guideline_copy' ).value
+			).toBe( 'Use direct, plain language.' );
+			expect(
+				root.querySelector( '#flavor_agent_guideline_images' ).value
+			).toBe( 'Prefer documentary photography.' );
+			expect(
+				root.querySelector( '#flavor_agent_guideline_additional' ).value
+			).toBe( 'Avoid mentioning discounts.' );
+			expect(
+				JSON.parse(
+					root.querySelector( '[data-guidelines-block-input]' ).value
+				)
+			).toEqual( {
+				'core/image': 'All images need meaningful alt text.',
+			} );
+			expect(
+				root.querySelector( '.flavor-agent-guidelines__blocks-panel' )
+					.open
+			).toBe( true );
 			expect(
 				root.querySelector( '[data-guidelines-notice]' ).textContent
-			).toContain( 'Guidelines exported.' );
-		} finally {
-			clickSpy.mockRestore();
-			global.Blob = originalBlob;
-			URL.createObjectURL = originalCreateObjectURL;
-			URL.revokeObjectURL = originalRevokeObjectURL;
+			).toContain(
+				fallbackInactive
+					? 'Fallback guidelines imported into the form. Save Changes to persist the inactive fallback.'
+					: 'Guidelines imported into the form. Save Changes to persist.'
+			);
+			expect( document.activeElement ).toBe(
+				root.querySelector( '[data-guidelines-import-button]' )
+			);
 		}
-	} );
+	);
+
+	test.each( [ false, true ] )(
+		'guidelines manager exports the current form and identifies whether the fallback is inactive (%s)',
+		async ( fallbackInactive ) => {
+			const root = renderGuidelinesSettingsPage( {
+				fallbackInactive,
+				categories: {
+					site: 'Publisher site',
+					copy: 'Use confident editorial language.',
+					images: 'Favor authentic reporting images.',
+					additional: 'Do not mention subscriber counts.',
+				},
+				blockGuidelines: {
+					'core/paragraph': 'Lead paragraphs should stay concise.',
+				},
+			} );
+			const clickSpy = jest
+				.spyOn( window.HTMLAnchorElement.prototype, 'click' )
+				.mockImplementation( () => {} );
+			const originalBlob = global.Blob;
+			const originalCreateObjectURL = URL.createObjectURL;
+			const originalRevokeObjectURL = URL.revokeObjectURL;
+
+			global.Blob = jest
+				.fn()
+				.mockImplementation( ( parts, options = {} ) => ( {
+					parts,
+					type: options.type,
+				} ) );
+			URL.createObjectURL = jest.fn(
+				() => 'blob:flavor-agent-guidelines'
+			);
+			URL.revokeObjectURL = jest.fn();
+
+			try {
+				initializeSettingsPage( {
+					root,
+					fetchImpl: jest.fn(),
+					storage: createStorage(),
+				} );
+
+				root.querySelector( '[data-guidelines-export-button]' ).click();
+
+				expect( URL.createObjectURL ).toHaveBeenCalledTimes( 1 );
+
+				const [ blob ] = URL.createObjectURL.mock.calls[ 0 ];
+				const payload = JSON.parse( blob.parts.join( '' ) );
+
+				expect( payload ).toEqual( {
+					guideline_categories: {
+						site: {
+							guidelines: 'Publisher site',
+						},
+						copy: {
+							guidelines: 'Use confident editorial language.',
+						},
+						images: {
+							guidelines: 'Favor authentic reporting images.',
+						},
+						additional: {
+							guidelines: 'Do not mention subscriber counts.',
+						},
+						blocks: {
+							'core/paragraph': {
+								guidelines:
+									'Lead paragraphs should stay concise.',
+							},
+						},
+					},
+				} );
+				expect( URL.revokeObjectURL ).toHaveBeenCalledWith(
+					'blob:flavor-agent-guidelines'
+				);
+				expect(
+					root.querySelector( '[data-guidelines-notice]' ).textContent
+				).toContain(
+					fallbackInactive
+						? 'Fallback guidelines exported.'
+						: 'Guidelines exported.'
+				);
+			} finally {
+				clickSpy.mockRestore();
+				global.Blob = originalBlob;
+				URL.createObjectURL = originalCreateObjectURL;
+				URL.revokeObjectURL = originalRevokeObjectURL;
+			}
+		}
+	);
 } );

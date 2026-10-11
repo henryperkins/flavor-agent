@@ -33,8 +33,6 @@ export function buildRecommendedPatterns( recommendations, allowedPatterns ) {
 }
 
 const SOURCE_SIGNAL_LABELS = {
-	qdrant_semantic: __( 'Semantic match', 'flavor-agent' ),
-	qdrant_structural: __( 'Structural fit', 'flavor-agent' ),
 	cloudflare_ai_search: __( 'AI Search match', 'flavor-agent' ),
 	llm_ranker: __( 'Model ranked', 'flavor-agent' ),
 };

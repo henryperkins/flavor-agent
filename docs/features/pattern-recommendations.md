@@ -7,16 +7,15 @@ For production debugging and retrieval-backend inspection, also use `docs/refere
 
 - Primary surface: a Flavor Agent-owned recommendation shelf prepended inside the native block inserter
 - Secondary surface: the inserter-toggle badge rendered by `src/patterns/InserterBadge.js`
-- Unavailable state: when Pattern Storage or the Embedding Model is missing, the native inserter prepends a shared capability notice that explains which setup path is missing and links to `Settings > Flavor Agent` and `Settings > Connectors` when those actions are available
+- Unavailable state: when Pattern Storage or the shared Cloudflare setup is missing, the native inserter prepends a shared capability notice that explains which setup path is missing and links to `Settings > Flavor Agent` and `Settings > Connectors` when those actions are available
 - There is no separate Flavor Agent sidebar for this feature; the user stays inside Gutenberg's normal inserter workflow, and the surface intentionally remains an inserter ranking and guarded insertion assist instead of participating in the lane/review/apply/undo model
 - Pattern recommendations return `reviewContextSignature` and `resolvedContextSignature`; both `Insert original` and `Insert adapted` revalidate the server-resolved apply context through `resolveSignatureOnly` before dispatching core insertion, while the surface still avoids a separate Flavor Agent review/apply panel
 - Non-synced recommended patterns expose `Preview adapted` and `Insert original`; preview shows an original/adapted comparison when adjustments are ready, one original preview when no changes are needed, or diagnostics when adaptation is blocked. Synced/user `core/block` reference patterns keep a single unchanged `Insert` action and are not detached
 
 ## Surfacing Conditions
 
-- `window.flavorAgentData.canRecommendPatterns` must be true; that requires a usable text-generation provider in `Settings > Connectors` plus a selected Pattern Storage backend with a ready usable pattern index in `Settings > Flavor Agent`
-- Qdrant storage readiness requires the Cloudflare Workers AI Embedding Model plus Qdrant URL/key
-- Cloudflare AI Search backend readiness requires the Embedding Model Cloudflare account/token plus the normalized AI Search embedding model and a managed site-owned Cloudflare AI Search pattern instance validated against those values; it does not call plugin-owned embedding generation or Qdrant
+- `window.flavorAgentData.canRecommendPatterns` must be true; that requires a usable text-generation provider in `Settings > Connectors` plus Cloudflare AI Search Pattern Storage with a ready usable pattern index in `Settings > Flavor Agent`
+- Cloudflare AI Search readiness requires the Embedding Model Cloudflare account/token plus the normalized AI Search embedding model and a managed site-owned Cloudflare AI Search pattern instance validated against those values; it uses managed embeddings and does not call plugin-owned embedding generation
 - A post type must be available from `core/editor`
 - No model-backed ranking runs on editor load; the first real ranking is sent only after the block inserter opens with a non-empty visible-pattern scope
 - Active refresh runs when the inserter search input changes while the inserter is open
@@ -69,15 +68,14 @@ Recommendation outcome events added for this path are `adapted_preview_shown`, `
 3. The store executes the `flavor-agent/recommend-patterns` ability with the request input
 4. `FlavorAgent\Abilities\RecommendationAbilityExecution` adapts the ability input to `FlavorAgent\Abilities\PatternAbilities::recommend_patterns()`
 5. `PatternAbilities::recommend_patterns()` validates visible-pattern scope, backend configuration, and pattern-index runtime state, then computes review/apply signatures from the normalized request context, docs-grounding fingerprint, and stable pattern-catalog identity
-6. `PatternIndex::sync()` maintains the selected retrieval backend corpus made from registered block patterns plus public-safe published user `wp_block` patterns across sync states normalized to Gutenberg's user-pattern name format, `core/block/{id}`
-7. The backend builds a query string, pulls WordPress developer guidance through `AISearchClient::maybe_search_best_effort()` (via `CollectsDocsGuidance`) using the same bounded foreground grounding path as other recommendation surfaces, retrieves candidates through the selected pattern backend, rehydrates synced candidates from current published readable `wp_block` posts, records aggregate filtered-candidate diagnostics, reranks readable candidates through `ResponsesClient::rank()` with design metadata and component-score context, and filters out low-confidence results
-8. The Qdrant backend embeds the pattern query through Cloudflare Workers AI and retrieves semantic and structural candidates from Qdrant
-9. The Cloudflare AI Search backend sends the query and `visiblePatternNames` filter to the private pattern AI Search instance, using Cloudflare-managed indexing/search instead of `EmbeddingClient` or `QdrantClient`
-10. The store saves the recommendations plus the server `resolvedContextSignature`, and `PatternRecommender()` matches them against the current allowed-pattern selector result for the active inserter root
-11. If Pattern Storage or the Embedding Model is unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
-12. Otherwise `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
-13. For non-synced patterns, the shelf offers `Preview adapted` and `Insert original`. `Preview adapted` resolves the original pattern blocks, builds an adapted clone, reads a client-only nearby heading/alignment context, applies deterministic cosmetic mutations, and renders both trees in `PatternAdaptationPreview` with a deterministic change summary.
-14. The user inserts either the original blocks or a fresh clone of the previewed adapted tree from the Flavor Agent shelf. Before dispatching core block insertion, the click handler checks the client insertion-target signature, reruns `flavor-agent/recommend-patterns` with `resolveSignatureOnly: true`, and blocks insertion if the server `resolvedContextSignature` no longer matches. Adapted insertion also rechecks the local `adaptationSignature` so nearby heading/alignment drift cannot insert a stale preview. After dispatch, it verifies that Gutenberg reported the cloned blocks at the requested target; if Gutenberg inserts them elsewhere, Flavor Agent removes those cloned blocks and records a diagnostic failure instead of logging a successful insert.
+6. `PatternIndex::sync()` maintains the managed Cloudflare AI Search corpus made from registered block patterns plus public-safe published user `wp_block` patterns across sync states normalized to Gutenberg's user-pattern name format, `core/block/{id}`
+7. The backend builds a query string, pulls WordPress developer guidance through `AISearchClient::maybe_search_best_effort()` (via `CollectsDocsGuidance`) using the same bounded foreground grounding path as other recommendation surfaces, retrieves candidates through managed Cloudflare AI Search pattern storage, rehydrates synced candidates from current published readable `wp_block` posts, records aggregate filtered-candidate diagnostics, reranks readable candidates through `ResponsesClient::rank()` with design metadata and component-score context, and filters out low-confidence results
+8. Cloudflare AI Search sends the query and `visiblePatternNames` filter to the private managed pattern instance, using Cloudflare-managed embeddings/indexing/search rather than the plugin-owned embedding client
+9. The store saves the recommendations plus the server `resolvedContextSignature`, and `PatternRecommender()` matches them against the current allowed-pattern selector result for the active inserter root
+10. If managed Pattern Storage or the shared Cloudflare setup is unavailable, `PatternRecommender()` mounts the shared capability notice into the native inserter container instead of silently doing nothing
+11. Otherwise `InserterBadge()` derives badge state from store status and mounts the badge next to the native inserter toggle when an anchor exists
+12. For non-synced patterns, the shelf offers `Preview adapted` and `Insert original`. `Preview adapted` resolves the original pattern blocks, builds an adapted clone, reads a client-only nearby heading/alignment context, applies deterministic cosmetic mutations, and renders both trees in `PatternAdaptationPreview` with a deterministic change summary.
+13. The user inserts either the original blocks or a fresh clone of the previewed adapted tree from the Flavor Agent shelf. Before dispatching core block insertion, the click handler checks the client insertion-target signature, reruns `flavor-agent/recommend-patterns` with `resolveSignatureOnly: true`, and blocks insertion if the server `resolvedContextSignature` no longer matches. Adapted insertion also rechecks the local `adaptationSignature` so nearby heading/alignment drift cannot insert a stale preview. After dispatch, it verifies that Gutenberg reported the cloned blocks at the requested target; if Gutenberg inserts them elsewhere, Flavor Agent removes those cloned blocks and records a diagnostic failure instead of logging a successful insert.
 
 ## Contract Pointers
 
@@ -95,7 +93,7 @@ Recommendation outcome events added for this path are `adapted_preview_shown`, `
 - Re-run recommendations as the user changes the inserter search text
 - Scope results to the current insertion root instead of returning globally valid-but-unavailable patterns
 - Show inserter-level status as shelf, loading, empty, unavailable, catalog-unavailable, or error feedback
-- Explain missing embedding, Qdrant, private Cloudflare AI Search, or chat setup paths inside the native inserter before any recommendation request can succeed
+- Explain missing shared Cloudflare credentials, managed pattern index, or Connectors chat setup paths inside the native inserter before any recommendation request can succeed
 - Show compact "why this pattern" metadata in the inserter shelf using source signals, matched category, allowed inserter context, component scores, design metadata, and nearby-block fit where those fields are available.
 
 ## Guardrails And Failure Modes
@@ -104,7 +102,7 @@ Recommendation outcome events added for this path are `adapted_preview_shown`, `
 - Synced/user pattern candidates keep their `core/block/{id}` names through indexing and recommendation output so the frontend can match them to Gutenberg's allowed-pattern data before insertion
 - Synced/user recommendation payloads are rehydrated from the current published `wp_block` post and require `current_user_can( 'read_post', $id )` before ranking or response output, even though the indexed corpus is already limited to published user patterns
 - When synced/user candidates in the current visible-pattern scope are filtered because the current request cannot pass `read_post`, the response returns a de-duplicated aggregate unreadable-synced count only. The UI can explain partial or empty results without exposing pattern names, IDs, titles, or content.
-- If Pattern Storage or the Embedding Model is unavailable, Flavor Agent now shows a shared why-unavailable notice in the native inserter instead of silently degrading to an empty state
+- If managed Pattern Storage or the shared Cloudflare setup is unavailable, Flavor Agent now shows a shared why-unavailable notice in the native inserter instead of silently degrading to an empty state
 - If WordPress itself exposes no block patterns — core resolves `getBlockPatterns` once per page with no `shouldInvalidate`, so a failed or empty `/wp/v2/block-patterns/patterns` response otherwise persists for the editor's lifetime — the inserter shows a catalog-unavailable notice after core finishes or a 20-second fallback wait. Retry invalidates core's resolution and starts a fresh bounded wait instead of reusing the expired timer or requesting an empty-scope ranking
 - If the backend returns ranked names that Gutenberg is not currently exposing through the allowed-pattern selector, the inserter keeps the result local and explanatory instead of patching registry metadata
 - If the pattern index is uninitialized, stale without a usable snapshot, or failed without a usable snapshot, the backend returns an error and may schedule a sync for admins
@@ -135,12 +133,10 @@ Recommendation outcome events added for this path are `adapted_preview_shown`, `
 | Store request | `fetchPatternRecommendations()` in `src/store/index.js` | Sends the request and tracks request state, including the stored server apply signature |
 | Store revalidation | `resolvePatternRecommendationSignature()` in `src/store/index.js` | Reposts the current pattern input with `resolveSignatureOnly` before direct shelf insertion |
 | Ability wrapper | `RecommendationAbilityExecution::execute()` | Adapts the ability request to the backend handler and records request diagnostics |
-| Backend ability | `PatternAbilities::recommend_patterns()` | Runs validation, selected-backend retrieval, reranking, and filtering |
-| Pattern corpus | `PatternIndex::sync()` + `SyncedPatternRepository` | Indexes registered patterns plus public-safe published user `wp_block` patterns as `core/block/{id}` candidates in the selected backend |
-| Retrieval selector | `PatternRetrievalBackendFactory` | Chooses Qdrant or private Cloudflare AI Search retrieval from settings/runtime state |
+| Backend ability | `PatternAbilities::recommend_patterns()` | Runs validation, managed Cloudflare AI Search retrieval, reranking, and filtering |
+| Pattern corpus | `PatternIndex::sync()` + `SyncedPatternRepository` | Indexes registered patterns plus public-safe published user `wp_block` patterns as `core/block/{id}` candidates in the managed Cloudflare AI Search index |
+| Retrieval factory | `PatternRetrievalBackendFactory` | Resolves the sole supported private Cloudflare AI Search retrieval path |
 | Docs grounding | `AISearchClient::maybe_search_best_effort()` (via `CollectsDocsGuidance`) | Returns disabled diagnostics by default in v0.1.3; explicitly enabled development supplies cache-first best-effort WordPress developer guidance without async docs warming |
-| Qdrant embeddings | `EmbeddingClient::embed()` | Turns the query into a vector for the Qdrant backend only |
-| Qdrant vector search | `QdrantClient::search()` | Retrieves semantic and structural candidates for the Qdrant backend only |
 | Private AI Search | `PatternSearchClient::search_patterns()` | Retrieves filtered candidates from Cloudflare AI Search Pattern Storage |
 | Design metadata and component ranking | `PatternDesignMetadata` / `PatternComponentScorer` | Adds pattern-trait text to embedding/search payloads and exposes component scores through `ranking.rankingHint.componentScores` |
 | Ranking | `ResponsesClient::rank()` | Produces the final ordered recommendation set |

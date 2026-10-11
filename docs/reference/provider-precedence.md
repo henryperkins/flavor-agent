@@ -6,24 +6,24 @@ Use it when you need to answer:
 
 - which backend will serve a recommendation
 - what credential sources are checked and in what order
-- how chat is owned by Settings > Connectors and how embeddings stay plugin-owned
+- how Connectors owns chat, plugin settings own Cloudflare setup/validation, and managed AI Search owns catalog embeddings
 
 ## Ownership Split
 
 After Workstream C of the WP 7.0 overlap remediation, Flavor Agent has three distinct setup concerns:
 
 - **Chat runtime** is owned by Settings > Connectors via the WordPress AI Client. There is no plugin-managed chat endpoint, deployment, or chat model anymore.
-- **Embedding runtime** is plugin-owned because Settings > Connectors does not expose embeddings yet. Flavor Agent uses Cloudflare Workers AI as the single first-party embedding configuration for semantic features that need plugin-managed vectors. Previously saved OpenAI Native, Azure OpenAI, or connector-backed provider values are not rendered as embedding choices.
-- **Pattern Storage** is selected independently for pattern recommendations. Qdrant uses the configured Embedding Model plus Qdrant. Cloudflare AI Search uses a private site-owner AI Search pattern instance with Cloudflare-managed embeddings/indexing/search and does not use plugin-owned embeddings or Qdrant.
+- **Cloudflare setup and validation** are plugin-owned. The account/token/model settings feed a direct Workers AI embedding validation probe and managed AI Search setup; no current recommendation feature calls the direct embedding client. Previously saved OpenAI Native, Azure OpenAI, or connector-backed provider values are not rendered as embedding choices.
+- **Pattern Storage** uses Cloudflare AI Search as its sole supported store. A private site-owner AI Search instance uses managed embeddings/indexing/search and the saved shared Cloudflare account/token. Managed AI Search owns catalog embedding generation.
 
 The `flavor_agent_openai_provider` option still exists for migration compatibility and the hidden settings-field save path, but saved values no longer select chat or embeddings:
 
-| Saved value             | Effect on chat                                                                                 | Effect on embeddings                                             |
+| Saved value             | Effect on chat                                                                                 | Effect on Cloudflare setup/validation                                             |
 | ----------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `openai_native`         | Ignored; use the configured WordPress AI Client runtime without pinning a provider             | Ignored; runtime embeddings use Cloudflare Workers AI            |
-| `cloudflare_workers_ai` | Ignored; use the configured WordPress AI Client runtime without pinning Cloudflare             | Runtime embeddings use Cloudflare Workers AI regardless of value |
-| `azure_openai`          | Ignored; use the configured WordPress AI Client runtime without pinning Azure                  | Ignored; runtime embeddings use Cloudflare Workers AI            |
-| `<connector-id>`        | Ignored; use the configured WordPress AI Client runtime without pinning the saved connector ID | Ignored; runtime embeddings use Cloudflare Workers AI            |
+| `openai_native`         | Ignored; use the configured WordPress AI Client runtime without pinning a provider             | Ignored; setup/validation uses the saved Cloudflare fields            |
+| `cloudflare_workers_ai` | Ignored; use the configured WordPress AI Client runtime without pinning Cloudflare             | Setup/validation uses the saved Cloudflare fields regardless of value |
+| `azure_openai`          | Ignored; use the configured WordPress AI Client runtime without pinning Azure                  | Ignored; setup/validation uses the saved Cloudflare fields            |
+| `<connector-id>`        | Ignored; use the configured WordPress AI Client runtime without pinning the saved connector ID | Ignored; setup/validation uses the saved Cloudflare fields            |
 
 The admin Embedding Model section no longer renders this as a provider picker. It submits `cloudflare_workers_ai` as a hidden value on save and renders only the Cloudflare Workers AI embedding fields.
 
@@ -37,7 +37,7 @@ Flavor Agent chat requests enter through `ChatClient::chat()` for block/content 
 4. If no explicit provider and no AI-plugin per-feature selection exists, chat requests use the configured WordPress AI Client runtime without pinning a provider.
 5. When no WordPress AI Client text-generation runtime is available, `ChatClient::chat()` returns a `missing_text_generation_provider` `WP_Error` whose message is _"Configure a text-generation provider in Settings > Connectors to enable Flavor Agent recommendations."_
 
-`ChatClient::is_supported()` returns `true` when the WordPress AI Client has a configured text-generation runtime. This is the gate for every chat-dependent ability: `flavor-agent/recommend-block`, `recommend-content`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, `recommend-style`, and the pattern-ranking phase of `flavor-agent/recommend-patterns` for both pattern retrieval backends.
+`ChatClient::is_supported()` returns `true` when the WordPress AI Client has a configured text-generation runtime. This is the gate for every chat-dependent ability: `flavor-agent/recommend-block`, `recommend-content`, `recommend-template`, `recommend-template-part`, `recommend-navigation`, `recommend-style`, and the pattern-ranking phase of `flavor-agent/recommend-patterns` for the pattern retrieval path.
 
 `Provider::chat_configuration()` reports the unpinned WordPress AI Client chat runtime when that runtime is available. Per-request Activity Log metadata records the resolved runtime separately: `requestSummary.resolvedProvider`, `requestSummary.resolvedModel`, `requestSummary.modelSelectionSource`, and `requestSummary.modelResolutionStatus` show whether a request used an explicit provider, the AI plugin per-feature selection, or the default provider-managed runtime.
 
@@ -71,33 +71,31 @@ After a provider explicitly rejects numeric constraints in `output_format.schema
 
 `OUTPUT_SCHEMA_BYTE_LIMIT` (4096 bytes) is a local heuristic applied to every output schema — not a published Anthropic limit, and not specific to `recommend-block`.
 
-## Embedding Runtime Chain
+## Cloudflare Setup And Validation Chain
 
-`Provider::embedding_configuration()` resolves the active plugin-owned Embedding Model. These embeddings are used by Flavor Agent semantic features that need plugin-managed vectors. The Qdrant pattern storage backend uses this Embedding Model. The Cloudflare AI Search pattern backend uses Cloudflare AI Search managed embeddings/indexing for pattern sync and retrieval and does not call `EmbeddingClient` there. When Workers AI credentials change, the save flow validates them with `EmbeddingClient::validate_configuration()` before creating or adopting the managed AI Search instance; unchanged values may reuse the saved Workers AI configuration and validate the managed AI Search instance/signature instead of re-probing Workers AI.
+`Provider::embedding_configuration()` resolves Cloudflare account/token/model configuration metadata for setup and diagnostics. The only current first-party caller of the direct embedding client is settings validation, which sends a fixed probe. Cloudflare AI Search uses managed embeddings/indexing for pattern sync and retrieval and does not call `EmbeddingClient` there. When Workers AI credentials change, the save flow validates them with `EmbeddingClient::validate_configuration()` before creating or adopting the managed AI Search instance; unchanged values may reuse the saved Workers AI configuration and validate the managed AI Search instance/signature instead of re-probing Workers AI.
 
-1. Flavor Agent resolves runtime embeddings from the Cloudflare Workers AI account ID, API token, and effective embedding model. A blank or missing model falls back to `@cf/qwen/qwen3-embedding-0.6b`.
-2. Saved `openai_native`, `azure_openai`, or connector-backed provider values do not change the runtime embedding path.
-3. If Cloudflare Workers AI is incomplete, Embedding Model status is unavailable and Qdrant Pattern Storage is gated off.
+1. Flavor Agent resolves setup/validation configuration from the Cloudflare Workers AI account ID, API token, and effective embedding model. A blank or missing model falls back to `@cf/qwen/qwen3-embedding-0.6b`.
+2. Saved `openai_native`, `azure_openai`, or connector-backed provider values do not change the setup/validation configuration.
+3. If Cloudflare account/token settings are incomplete, configuration metadata reports them unavailable. Pattern storage also requires the shared Cloudflare account/token and a validated managed index.
 4. `EmbeddingClient::validate_configuration()` validates only the Cloudflare Workers AI account ID, API token, and effective embedding model.
-5. When validation sees a Workers AI dimension that differs from the saved Qdrant pattern index dimension, the settings screen warns that patterns must be re-synced before Qdrant-backed recommendations are reliable.
-6. The Cloudflare AI Search pattern backend can be ready when the Cloudflare Workers AI account ID, API token, normalized AI Search embedding model, and deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance are validated because pattern sync/retrieval uses managed embeddings/indexing/search instead of `EmbeddingClient`; save-time setup validates changed shared Workers AI credentials before creating or adopting that managed instance and can reuse unchanged saved values. Blank or unsupported Embedding Model values normalize to Cloudflare AI Search's supported default `@cf/qwen/qwen3-embedding-0.6b` for this private index path.
+5. The Cloudflare AI Search pattern backend can be ready when the Cloudflare Workers AI account ID, API token, normalized AI Search embedding model, and deterministic managed `flavor-agent-patterns-{site_hash}` AI Search pattern instance are validated because pattern sync/retrieval uses managed embeddings/indexing/search instead of `EmbeddingClient`; save-time setup validates changed shared Workers AI credentials before creating or adopting that managed instance and can reuse unchanged saved values. Blank or unsupported Embedding Model values normalize to Cloudflare AI Search's supported default `@cf/qwen/qwen3-embedding-0.6b` for this private index path.
 
 ## Pattern Storage Backend Chain
 
-`flavor_agent_pattern_retrieval_backend` selects the pattern retrieval backend. Settings reads and UI readiness normalize missing or invalid values to `qdrant`; the request-time retrieval factory still fails closed with `unsupported_pattern_retrieval_backend` for an unknown non-empty saved value so recommendations do not silently use the wrong backend after state corruption.
+Cloudflare AI Search is the sole supported pattern store. The retained `flavor_agent_pattern_retrieval_backend` compatibility value is canonicalized to `cloudflare_ai_search`; it is no longer a user-selectable provider option.
 
-| Value                  | Retrieval behavior                                                                                                                                                                                                                        | Required setup                                                                  |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `qdrant`               | Pattern sync embeds changed pattern text with the active Embedding Model, stores vectors and payloads in Qdrant, and recommendation requests query Qdrant before reranking through Connectors chat.                                       | Embedding Model; Qdrant URL/key; Connectors chat.                               |
-| `cloudflare_ai_search` | Pattern sync uploads public-safe pattern markdown items to a private Cloudflare AI Search instance, and recommendation requests send query text plus `visiblePatternNames` as a nested AI Search retrieval metadata filter before reranking through Connectors chat. | Cloudflare Workers AI account/token/normalized-AI-Search-model signature; validated managed `flavor-agent-patterns-{site_hash}` instance; Connectors chat. |
+Pattern sync uploads public-safe pattern markdown to the private managed `flavor-agent-patterns-{site_hash}` instance. Recommendation requests send query text plus `visiblePatternNames` as a nested AI Search metadata filter before reranking through Connectors chat. Readiness requires shared Cloudflare account/token, a normalized supported AI Search embedding model, a validated managed index, and a usable synced catalog. Chat is additionally required for recommendations.
 
-Cloudflare AI Search pattern retrieval is separate from the built-in public Cloudflare AI Search endpoint used for WordPress developer-doc grounding.
+Older Qdrant installations must configure Cloudflare AI Search and run a new sync. Local migration does not create a remote index, copy vectors or data, or start inference. Legacy cosine thresholds are not reused; the existing `flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search` option remains distinct. Old URL/key/threshold options are inactive database leftovers retained only for uninstall cleanup. See `pattern-storage-migration.md`.
+
+Private pattern retrieval is separate from the built-in public Cloudflare AI Search endpoint used for WordPress developer-doc grounding.
 
 ## Legacy Provider Options
 
 Azure OpenAI and OpenAI Native embedding settings are no longer first-party admin setup paths. The live settings UI, validation path, status abilities, and embedding client all use Cloudflare Workers AI. Older saved Native/Azure option values may remain in older databases and are cleaned up on uninstall, but they no longer have a runtime validation or credential-source path.
 
-## Cloudflare Workers AI (embeddings only)
+## Cloudflare Workers AI Settings Validation
 
 Requires a Cloudflare account ID and API token, plus an effective embedding model. If the model field is blank or absent, Flavor Agent uses `@cf/qwen/qwen3-embedding-0.6b`.
 
@@ -111,7 +109,7 @@ Authentication uses the `Authorization: Bearer` header against Cloudflare's Open
 
 ## Cloudflare AI Search Pattern Retrieval
 
-Requires the saved Cloudflare Workers AI account, API token, effective embedding model, and managed pattern AI Search instance option to be validated when `flavor_agent_pattern_retrieval_backend` is `cloudflare_ai_search`:
+Requires the saved Cloudflare account, API token, normalized supported AI Search embedding model, and managed pattern instance to be validated:
 
 | Option                                                  | Purpose                                      |
 | ------------------------------------------------------- | -------------------------------------------- |
@@ -123,20 +121,21 @@ Authentication uses the `Authorization: Bearer` header against Cloudflare's AI S
 
 ## Old Provider Values
 
-Older saved connector-backed, OpenAI Native, or Azure provider values do not select chat or embeddings. The settings screen writes `cloudflare_workers_ai` on save, runtime embeddings always use Cloudflare Workers AI, and chat uses the configured WordPress AI Client runtime.
+Older saved connector-backed, OpenAI Native, or Azure provider values do not select chat or embeddings. The settings screen writes `cloudflare_workers_ai` on save, the direct settings-validation probe uses Cloudflare Workers AI, and chat uses the configured WordPress AI Client runtime.
 
 ## Backend-to-Surface Map
 
-| Surface                       | Chat (Connectors) | Embeddings (plugin) | Qdrant              | Cloudflare AI Search             |
-| ----------------------------- | ----------------- | ------------------- | ------------------- | -------------------------------- |
-| Block recommendations         | Yes               | No                  | No                  | No                               |
-| Pattern recommendations       | Yes               | Qdrant backend only | Qdrant backend only | Optional private pattern backend |
-| Template recommendations      | Yes               | No                  | No                  | No                               |
-| Template-part recommendations | Yes               | No                  | No                  | No                               |
-| Navigation recommendations    | Yes               | No                  | No                  | No                               |
-| Global Styles recommendations | Yes               | No                  | No                  | No                               |
-| Style Book recommendations    | Yes               | No                  | No                  | No                               |
-| WordPress docs search         | No                | No                  | No                  | Disabled by default in v0.1.3     |
+| Surface | Chat (Connectors) | Direct Workers AI embedding call | Cloudflare AI Search |
+| --- | --- | --- | --- |
+| Block recommendations | Yes | No | No |
+| Pattern recommendations | Yes | No; shared account/token/model setup only | Required private managed pattern store |
+| Template recommendations | Yes | No | No |
+| Template-part recommendations | Yes | No | No |
+| Navigation recommendations | Yes | No | No |
+| Global Styles recommendations | Yes | No | No |
+| Style Book recommendations | Yes | No | No |
+| WordPress docs search | No | No | Disabled by default in v0.1.3 |
+| Cloudflare settings validation | No | Fixed validation probe on changed complete configuration | Managed-index setup and validation |
 
 ## Primary Source Files
 
@@ -145,7 +144,6 @@ Older saved connector-backed, OpenAI Native, or Azure provider values do not sel
 - `inc/LLM/WordPressAIClient.php`
 - `inc/AzureOpenAI/ResponsesClient.php` (Connectors facade)
 - `inc/Embeddings/EmbeddingClient.php`
-- `inc/Embeddings/QdrantClient.php`
 - `inc/Abilities/SurfaceCapabilities.php`
 - `inc/Patterns/Retrieval/PatternRetrievalBackendFactory.php`
 - `inc/Cloudflare/PatternSearchClient.php`

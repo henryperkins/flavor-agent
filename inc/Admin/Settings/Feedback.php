@@ -384,7 +384,6 @@ final class Feedback {
 
 		return match ( $settings_error_code ) {
 			'flavor_agent_cloudflare_workers_ai_validation' => __( 'Cloudflare Workers AI validation failed. Check the account ID, API token, and embedding model, then try again.', 'flavor-agent' ),
-			'flavor_agent_qdrant_validation' => __( 'Qdrant validation failed. Check the cluster URL and API key, then try again.', 'flavor-agent' ),
 			'flavor_agent_cloudflare_pattern_ai_search_validation' => __( 'Cloudflare AI Search Pattern Storage validation failed. Check the Cloudflare credentials from the Embedding Model section and managed pattern index, then try again.', 'flavor-agent' ),
 			default => __( 'Validation failed. Check the saved values and try again.', 'flavor-agent' ),
 		};
@@ -409,13 +408,9 @@ final class Feedback {
 			Config::OPTION_REASONING_EFFORT => [ Config::GROUP_CHAT ],
 			Provider::OPTION_NAME,
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => [ Config::GROUP_EMBEDDINGS ],
-			Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
 			Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH,
-			'flavor_agent_pattern_recommendation_threshold',
-			'flavor_agent_pattern_max_recommendations',
-			'flavor_agent_qdrant_url',
-			'flavor_agent_qdrant_key' => [ Config::GROUP_PATTERNS ],
+			'flavor_agent_pattern_max_recommendations' => [ Config::GROUP_PATTERNS ],
 			'flavor_agent_cloudflare_ai_search_max_results' => [ Config::GROUP_DOCS ],
 			Guidelines::OPTION_SITE,
 			Guidelines::OPTION_COPY,
@@ -447,7 +442,6 @@ final class Feedback {
 		return match ( $option_name ) {
 			Config::OPTION_REASONING_EFFORT => 'medium',
 			Config::OPTION_DUAL_LOG_REQUEST_DIAGNOSTICS => true,
-			Config::OPTION_PATTERN_RETRIEVAL_BACKEND => Config::PATTERN_BACKEND_QDRANT,
 			Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH => Config::PATTERN_AI_SEARCH_THRESHOLD_DEFAULT,
 			default => '',
 		};

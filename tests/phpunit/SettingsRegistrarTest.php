@@ -37,16 +37,10 @@ final class SettingsRegistrarTest extends TestCase {
 			],
 			$settings[ Provider::OPTION_NAME ]
 		);
-		$this->assertSame(
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [ Settings::class, 'sanitize_pattern_retrieval_backend' ],
-				'default'           => Config::PATTERN_BACKEND_QDRANT,
-				'option_group'      => Config::OPTION_GROUP,
-				'option_name'       => Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
-			],
-			$settings[ Config::OPTION_PATTERN_RETRIEVAL_BACKEND ]
-		);
+		$this->assertArrayNotHasKey( Config::OPTION_PATTERN_RETRIEVAL_BACKEND, $settings );
+		$this->assertArrayNotHasKey( 'flavor_agent_qdrant_url', $settings );
+		$this->assertArrayNotHasKey( 'flavor_agent_qdrant_key', $settings );
+		$this->assertArrayNotHasKey( 'flavor_agent_pattern_recommendation_threshold', $settings );
 		$this->assertSame( 'array', $settings[ Guidelines::OPTION_BLOCKS ]['type'] );
 		$this->assertSame(
 			[ Settings::class, 'sanitize_guideline_blocks' ],
@@ -81,8 +75,6 @@ final class SettingsRegistrarTest extends TestCase {
 		$this->assertSame(
 			[
 				'flavor_agent_cloudflare_workers_ai',
-				'flavor_agent_pattern_retrieval',
-				'flavor_agent_qdrant',
 				'flavor_agent_cloudflare_pattern_ai_search',
 				'flavor_agent_pattern_recommendations',
 				'flavor_agent_cloudflare',
@@ -92,17 +84,11 @@ final class SettingsRegistrarTest extends TestCase {
 			array_keys( $sections )
 		);
 		$this->assertArrayNotHasKey( 'flavor_agent_azure', $sections );
-		$this->assertSame( 'Pattern Storage', $sections['flavor_agent_pattern_retrieval']['title'] );
-		$this->assertArrayHasKey(
-			Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
-			$fields['flavor_agent_pattern_retrieval']
-		);
+		$this->assertArrayNotHasKey( 'flavor_agent_pattern_retrieval', $sections );
+		$this->assertArrayNotHasKey( 'flavor_agent_qdrant', $sections );
 		$this->assertSame(
-			[
-				Config::PATTERN_BACKEND_QDRANT => 'Qdrant vector storage',
-				Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH => 'Cloudflare AI Search managed index',
-			],
-			$fields['flavor_agent_pattern_retrieval'][ Config::OPTION_PATTERN_RETRIEVAL_BACKEND ]['args']['choices']
+			[ Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH, 'flavor_agent_pattern_max_recommendations' ],
+			array_keys( $fields['flavor_agent_pattern_recommendations'] )
 		);
 		$this->assertArrayNotHasKey(
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
@@ -146,7 +132,6 @@ final class SettingsRegistrarTest extends TestCase {
 		$settings       = $GLOBALS['wp_registered_settings'];
 		$secret_options = [
 			'flavor_agent_cloudflare_workers_ai_api_token',
-			'flavor_agent_qdrant_key',
 		];
 
 		foreach ( $secret_options as $option_name ) {

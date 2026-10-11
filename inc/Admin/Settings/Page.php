@@ -9,8 +9,8 @@ use FlavorAgent\AI\FeatureBootstrap;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
-use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\Guidelines;
+use FlavorAgent\Guidelines\LegacyGuidelinesRepository;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 
@@ -32,6 +32,10 @@ final class Page {
 		$attention_group      = State::determine_runtime_attention_group( $state );
 		$forced_group         = is_string( $feedback['focus_section'] ?? null ) ? $feedback['focus_section'] : '';
 		$chat_ready           = ! empty( $state['runtime_chat']['configured'] );
+		$editor_url           = State::get_editor_handoff_url();
+		$editor_runtime       = FeatureBootstrap::editor_runtime_available();
+		$feature_enabled      = FeatureBootstrap::recommendation_feature_enabled();
+		$ai_settings_url      = ! $editor_runtime || ! $feature_enabled ? State::get_ai_settings_url() : '';
 		$primary_url          = $chat_ready ? $activity_url : $connectors_url;
 		$primary_label        = $chat_ready ? __( 'Open Activity Log', 'flavor-agent' ) : __( 'Open Connectors', 'flavor-agent' );
 		$secondary_url        = $chat_ready ? $connectors_url : $activity_url;
@@ -58,13 +62,36 @@ final class Page {
 							<?php echo esc_html__( 'Configure setup, storage, docs, and guidance.', 'flavor-agent' ); ?>
 						</p>
 						<div class="flavor-agent-admin-hero__actions">
-							<a class="button button-primary" href="<?php echo esc_url( Utils::sanitize_url_value( $primary_url ) ); ?>">
+							<?php if ( '' !== $editor_url ) : ?>
+								<a class="button <?php echo $chat_ready ? 'button-primary' : 'button-secondary'; ?>" href="<?php echo esc_url( $editor_url ); ?>" aria-describedby="flavor-agent-editor-handoff">
+									<?php echo esc_html__( 'Open Post Editor', 'flavor-agent' ); ?>
+								</a>
+							<?php elseif ( '' !== $ai_settings_url ) : ?>
+								<a class="button <?php echo $chat_ready ? 'button-primary' : 'button-secondary'; ?>" href="<?php echo esc_url( $ai_settings_url ); ?>" aria-describedby="flavor-agent-editor-handoff">
+									<?php echo esc_html__( 'Open AI Settings', 'flavor-agent' ); ?>
+								</a>
+							<?php endif; ?>
+							<a class="button <?php echo $chat_ready && ( '' !== $editor_url || '' !== $ai_settings_url ) ? 'button-secondary' : 'button-primary'; ?>" href="<?php echo esc_url( Utils::sanitize_url_value( $primary_url ) ); ?>">
 								<?php echo esc_html( $primary_label ); ?>
 							</a>
 							<a class="button button-secondary" href="<?php echo esc_url( Utils::sanitize_url_value( $secondary_url ) ); ?>">
 								<?php echo esc_html( $secondary_label ); ?>
 							</a>
 						</div>
+						<p id="flavor-agent-editor-handoff" class="description">
+							<?php if ( ! $editor_runtime ) : ?>
+								<?php echo esc_html__( 'Flavor Agent editor recommendations are unavailable. Activate a compatible WordPress AI plugin and the Abilities API, then enable Flavor Agent in Settings > AI. Text generation also requires a configured provider in Connectors.', 'flavor-agent' ); ?>
+							<?php elseif ( ! $feature_enabled ) : ?>
+								<?php echo esc_html__( 'Flavor Agent editor recommendations are disabled. Enable Flavor Agent in Settings > AI, then configure a text-generation provider in Connectors. Opening AI settings does not enable the feature or request recommendations.', 'flavor-agent' ); ?>
+							<?php elseif ( '' !== $editor_url ) : ?>
+								<?php echo esc_html__( 'Create or open a post in the block editor, select a block, and open AI Recommendations in its settings. Flavor Agent must be enabled in Settings > AI. Text generation requires a configured provider in Connectors. Opening the editor does not request recommendations, apply changes, or publish content.', 'flavor-agent' ); ?>
+							<?php else : ?>
+								<?php echo esc_html__( 'Flavor Agent recommendations are available in the block editor. Ask an administrator for permission to create and edit posts and enable the block editor for posts. Text generation also requires a configured provider in Connectors.', 'flavor-agent' ); ?>
+							<?php endif; ?>
+							<?php if ( ( ! $editor_runtime || ! $feature_enabled ) && '' === $ai_settings_url ) : ?>
+								<?php echo esc_html__( 'No accessible AI settings screen is registered on this site. Ask the administrator responsible for the WordPress AI plugin to enable Flavor Agent.', 'flavor-agent' ); ?>
+							<?php endif; ?>
+						</p>
 					</div>
 				</header>
 
@@ -157,14 +184,6 @@ final class Page {
 		// Guidance now lives in the subsection heading to keep the page compact.
 	}
 
-	public static function render_pattern_retrieval_section(): void {
-		// Guidance now lives in the field description to keep the page focused on controls.
-	}
-
-	public static function render_qdrant_section(): void {
-		// Guidance now lives in the screen Help panel to keep the page focused on controls.
-	}
-
 	public static function render_cloudflare_pattern_ai_search_section(): void {
 		// Guidance now lives in the subsection heading to keep the page compact.
 	}
@@ -254,7 +273,9 @@ final class Page {
 			! empty( $changed_sections[ Config::GROUP_GUIDELINES ] ) &&
 			! Feedback::feedback_group_has_tone( $feedback, Config::GROUP_GUIDELINES, 'error' )
 		) {
-			$summary_lines[] = __( 'Guidelines saved.', 'flavor-agent' );
+			$summary_lines[] = 'legacy_options' === ( Guidelines::storage_status()['source'] ?? '' )
+				? __( 'Flavor Agent guidelines saved.', 'flavor-agent' )
+				: __( 'Legacy fallback guidelines saved. Active shared or provider guidelines are unchanged.', 'flavor-agent' );
 		}
 
 		if (
@@ -653,7 +674,7 @@ final class Page {
 	private static function render_cloudflare_workers_ai_direct_settings_fields(): void {
 		self::render_subsection_heading(
 			__( 'Cloudflare Workers AI', 'flavor-agent' ),
-			__( 'Used for embeddings.', 'flavor-agent' )
+			__( 'Used to validate Cloudflare pattern storage settings.', 'flavor-agent' )
 		);
 		self::render_registered_section_callback( 'flavor_agent_cloudflare_workers_ai' );
 		self::render_registered_fields_table(
@@ -672,9 +693,6 @@ final class Page {
 	private static function render_pattern_recommendations_group( array $state, array $feedback ): void {
 		self::render_section_status_blocks( Config::GROUP_PATTERNS, $state, $feedback );
 
-		$selected_backend   = (string) ( $state['selected_pattern_backend'] ?? Config::PATTERN_BACKEND_QDRANT );
-		$qdrant_active      = Config::PATTERN_BACKEND_QDRANT === $selected_backend;
-		$cloudflare_active  = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $selected_backend;
 		$has_feedback_error = Feedback::feedback_group_has_tone( $feedback, Config::GROUP_PATTERNS, 'error' );
 		$ranking_attributes = [
 			'class'                          => 'flavor-agent-settings-subpanel',
@@ -686,47 +704,16 @@ final class Page {
 		}
 		?>
 		<p class="description">
-			<?php echo esc_html__( 'Choose where the pattern catalog is stored.', 'flavor-agent' ); ?>
+			<?php echo esc_html__( 'Cloudflare AI Search stores the pattern catalog and manages its embeddings. Save Changes validates the Cloudflare credentials and creates or re-validates the managed index in the background. Then sync the catalog. Existing vectors from an older storage setup are not copied.', 'flavor-agent' ); ?>
 		</p>
 		<?php
-		self::render_registered_section_callback( 'flavor_agent_pattern_retrieval' );
-		self::render_pattern_backend_segmented_control( $selected_backend );
+		self::render_subsection_heading(
+			__( 'Cloudflare AI Search Pattern Storage', 'flavor-agent' ),
+			__( 'Managed pattern index using the saved Cloudflare credentials from the Embedding Model section.', 'flavor-agent' )
+		);
+		self::render_cloudflare_pattern_ai_search_status_panel( $state, $feedback );
+		self::render_registered_section_callback( 'flavor_agent_cloudflare_pattern_ai_search' );
 		?>
-		<div
-			class="flavor-agent-pattern-backend-block"
-			data-pattern-backend="<?php echo esc_attr( Config::PATTERN_BACKEND_QDRANT ); ?>"
-			<?php echo $qdrant_active ? '' : 'hidden'; ?>
-		>
-			<?php
-			self::render_subsection_heading(
-				__( 'Qdrant Pattern Storage', 'flavor-agent' ),
-				__( 'Vector storage for the pattern index.', 'flavor-agent' )
-			);
-			self::render_qdrant_pattern_storage_status_panel( $state );
-			self::render_registered_section_callback( 'flavor_agent_qdrant' );
-			self::render_registered_fields_table(
-				'flavor_agent_qdrant',
-				[
-					'flavor_agent_qdrant_url',
-					'flavor_agent_qdrant_key',
-				]
-			);
-			?>
-		</div>
-		<div
-			class="flavor-agent-pattern-backend-block"
-			data-pattern-backend="<?php echo esc_attr( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH ); ?>"
-			<?php echo $cloudflare_active ? '' : 'hidden'; ?>
-		>
-			<?php
-			self::render_subsection_heading(
-				__( 'Cloudflare AI Search Pattern Storage', 'flavor-agent' ),
-				__( 'Managed pattern index using the saved Cloudflare credentials from the Embedding Model section.', 'flavor-agent' )
-			);
-			self::render_cloudflare_pattern_ai_search_status_panel( $state, $feedback );
-			self::render_registered_section_callback( 'flavor_agent_cloudflare_pattern_ai_search' );
-			?>
-		</div>
 		<details<?php Utils::render_html_attributes( $ranking_attributes ); ?><?php echo $has_feedback_error ? ' open' : ''; ?>>
 			<summary class="flavor-agent-settings-subpanel__summary">
 				<?php echo esc_html__( 'Advanced Ranking', 'flavor-agent' ); ?>
@@ -737,7 +724,6 @@ final class Page {
 				self::render_registered_fields_table(
 					'flavor_agent_pattern_recommendations',
 					[
-						'flavor_agent_pattern_recommendation_threshold',
 						Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH,
 						'flavor_agent_pattern_max_recommendations',
 					]
@@ -829,16 +815,44 @@ final class Page {
 		self::render_section_status_blocks( Config::GROUP_GUIDELINES, $state, $feedback );
 		self::render_registered_section_callback( 'flavor_agent_guidelines' );
 		$has_feedback_error = Feedback::feedback_group_has_tone( $feedback, Config::GROUP_GUIDELINES, 'error' );
+		$source             = (string) ( $state['guidelines_storage']['source'] ?? 'legacy_options' );
+		$legacy_active      = 'legacy_options' === $source;
+		$shared_source      = in_array( $source, [ 'core', 'gutenberg_experiment' ], true );
+		$fallback_inactive  = ! $legacy_active && ( ! $shared_source || ! empty( $state['guidelines_enabled'] ) );
+		$shared_url         = $shared_source || ( $legacy_active && ! empty( $state['guidelines_storage']['core_available'] ) )
+			? State::get_shared_guidelines_url()
+			: '';
 		?>
-		<div class="flavor-agent-guidelines" data-flavor-agent-guidelines-root>
-			<div class="flavor-agent-guidelines__notice" data-guidelines-notice aria-live="polite"></div>
-			<?php if ( ! empty( $state['guidelines_storage']['core_available'] ) ) : ?>
-				<div class="flavor-agent-settings-status flavor-agent-settings-status--accent">
-					<p>
-						<?php echo esc_html__( 'Core Guidelines connected.', 'flavor-agent' ); ?>
-					</p>
-				</div>
+		<div class="flavor-agent-settings-status flavor-agent-settings-status--accent" data-guidelines-ownership>
+			<p>
+				<?php if ( $legacy_active ) : ?>
+					<?php echo esc_html__( 'Flavor Agent guidelines are active. Edit and save the fields below to change the guidance used by Flavor Agent.', 'flavor-agent' ); ?>
+					<?php if ( ! empty( $state['guidelines_storage']['core_available'] ) ) : ?>
+						<?php echo esc_html__( 'Shared Guidelines are available but empty. These fallback guidelines remain active until shared Guidelines contain content.', 'flavor-agent' ); ?>
+					<?php endif; ?>
+				<?php elseif ( $shared_source && ! $fallback_inactive ) : ?>
+					<?php echo esc_html__( 'Shared Guidelines are available but empty. Add fallback guidance below and save it to use it in Flavor Agent until shared Guidelines contain content.', 'flavor-agent' ); ?>
+				<?php elseif ( $shared_source ) : ?>
+					<?php echo esc_html__( 'Shared Guidelines are active and managed by WordPress. The active guidance is shown below. Saving this page does not change shared Guidelines.', 'flavor-agent' ); ?>
+				<?php else : ?>
+					<?php echo esc_html__( 'A custom Guidelines provider is active. The active guidance is shown below. Saving this page changes only the legacy fallback, not the provider’s guidance.', 'flavor-agent' ); ?>
+				<?php endif; ?>
+			</p>
+			<?php if ( '' !== $shared_url ) : ?>
+				<p><a class="button button-secondary" href="<?php echo esc_url( $shared_url ); ?>"><?php echo esc_html__( 'Manage Shared Guidelines', 'flavor-agent' ); ?></a></p>
+			<?php elseif ( $shared_source ) : ?>
+				<p><?php echo esc_html__( 'No accessible shared Guidelines management screen is registered on this site. Ask the administrator responsible for the WordPress Guidelines provider to update the active guidance.', 'flavor-agent' ); ?></p>
 			<?php endif; ?>
+		</div>
+		<?php if ( $fallback_inactive ) : ?>
+			<?php self::render_active_guidelines_preview(); ?>
+			<details class="flavor-agent-settings-subpanel" data-guidelines-fallback<?php echo $has_feedback_error ? ' open' : ''; ?>>
+				<summary class="flavor-agent-settings-subpanel__summary"><?php echo esc_html__( 'Legacy fallback guidelines (inactive)', 'flavor-agent' ); ?></summary>
+				<div class="flavor-agent-settings-subpanel__body">
+					<p class="description"><?php echo esc_html__( 'These stored fallback values are inactive while shared or provider guidelines are selected. Editing, importing, exporting, or saving them does not change the active guidance.', 'flavor-agent' ); ?></p>
+		<?php endif; ?>
+		<div class="flavor-agent-guidelines" data-flavor-agent-guidelines-root data-guidelines-storage="legacy_options">
+			<div class="flavor-agent-guidelines__notice" data-guidelines-notice aria-live="polite"></div>
 			<?php
 			self::render_registered_fields_table(
 				'flavor_agent_guidelines',
@@ -850,8 +864,43 @@ final class Page {
 				]
 			);
 			self::render_guidelines_blocks_panel( $has_feedback_error );
-			self::render_guidelines_actions_panel();
+			self::render_guidelines_actions_panel( $fallback_inactive );
 			?>
+		</div>
+		<?php if ( $fallback_inactive ) : ?>
+				</div>
+			</details>
+		<?php endif; ?>
+		<?php
+	}
+
+	private static function render_active_guidelines_preview(): void {
+		$guidelines = Guidelines::get_all();
+		$labels     = [
+			'site'       => __( 'Site context', 'flavor-agent' ),
+			'copy'       => __( 'Copy Guidelines', 'flavor-agent' ),
+			'images'     => __( 'Image Guidelines', 'flavor-agent' ),
+			'additional' => __( 'Additional Guidelines', 'flavor-agent' ),
+		];
+		?>
+		<div data-guidelines-active-preview>
+			<h3><?php echo esc_html__( 'Active guidelines', 'flavor-agent' ); ?></h3>
+			<?php if ( ! Guidelines::has_any() ) : ?>
+				<p><?php echo esc_html__( 'The active Guidelines source has no guidance yet.', 'flavor-agent' ); ?></p>
+			<?php else : ?>
+				<dl>
+					<?php foreach ( $labels as $category => $label ) : ?>
+						<?php if ( '' !== (string) ( $guidelines[ $category ] ?? '' ) ) : ?>
+							<dt><strong><?php echo esc_html( $label ); ?></strong></dt>
+							<dd><?php echo wp_kses_post( nl2br( esc_html( (string) $guidelines[ $category ] ) ) ); ?></dd>
+						<?php endif; ?>
+					<?php endforeach; ?>
+					<?php foreach ( (array) ( $guidelines['blocks'] ?? [] ) as $block_name => $guideline ) : ?>
+						<dt><strong><?php echo esc_html( (string) $block_name ); ?></strong></dt>
+						<dd><?php echo wp_kses_post( nl2br( esc_html( (string) $guideline ) ) ); ?></dd>
+					<?php endforeach; ?>
+				</dl>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
@@ -871,7 +920,7 @@ final class Page {
 	}
 
 	private static function render_guidelines_blocks_panel( bool $has_feedback_error = false ): void {
-		$block_guidelines = Guidelines::get_block_guidelines();
+		$block_guidelines = ( new LegacyGuidelinesRepository() )->get_all()['blocks'];
 		$guidelines_json  = Utils::encode_json_payload( $block_guidelines );
 		$panel_attributes = [
 			'class'                          => 'flavor-agent-settings-subpanel flavor-agent-guidelines__blocks-panel',
@@ -910,6 +959,7 @@ final class Page {
 								class="flavor-agent-settings-field"
 								data-guidelines-block-select
 							></select>
+							<p id="flavor-agent-block-select-error" class="description flavor-agent-guidelines__field-error" data-guidelines-block-select-error hidden></p>
 						</div>
 						<div class="flavor-agent-guidelines__field flavor-agent-guidelines__field--wide">
 							<label class="flavor-agent-guidelines__field-label" for="flavor-agent-guidelines-block-text">
@@ -922,6 +972,7 @@ final class Page {
 								placeholder="<?php echo esc_attr__( 'Enter guidelines for how this block should be used...', 'flavor-agent' ); ?>"
 								data-guidelines-block-text
 							></textarea>
+							<p id="flavor-agent-block-text-error" class="description flavor-agent-guidelines__field-error" data-guidelines-block-text-error hidden></p>
 						</div>
 					</div>
 					<div class="flavor-agent-guidelines__block-actions">
@@ -938,20 +989,20 @@ final class Page {
 		<?php
 	}
 
-	private static function render_guidelines_actions_panel(): void {
+	private static function render_guidelines_actions_panel( bool $inactive = false ): void {
 		?>
 		<div class="flavor-agent-guidelines__actions-panel">
 			<div class="flavor-agent-guidelines__actions-row">
 				<button type="button" class="button button-secondary" data-guidelines-import-button>
-					<?php echo esc_html__( 'Import JSON', 'flavor-agent' ); ?>
+					<?php echo esc_html( $inactive ? __( 'Import Fallback JSON', 'flavor-agent' ) : __( 'Import JSON', 'flavor-agent' ) ); ?>
 				</button>
 				<button type="button" class="button button-secondary" data-guidelines-export-button>
-					<?php echo esc_html__( 'Export JSON', 'flavor-agent' ); ?>
+					<?php echo esc_html( $inactive ? __( 'Export Fallback JSON', 'flavor-agent' ) : __( 'Export JSON', 'flavor-agent' ) ); ?>
 				</button>
 				<input type="file" accept=".json,application/json" data-guidelines-file-input hidden />
 			</div>
 			<p class="description">
-				<?php echo esc_html__( 'Import fills the form. Save Changes to persist.', 'flavor-agent' ); ?>
+				<?php echo esc_html( $inactive ? __( 'Import fills only the legacy fallback form. Save Changes persists that fallback. Export includes these fallback form values, including unsaved edits.', 'flavor-agent' ) : __( 'Import fills the form. Save Changes to persist.', 'flavor-agent' ) ); ?>
 			</p>
 		</div>
 		<?php
@@ -987,76 +1038,9 @@ final class Page {
 		}
 	}
 
-	private static function render_pattern_backend_segmented_control( string $saved_backend ): void {
-		$option  = Config::OPTION_PATTERN_RETRIEVAL_BACKEND;
-		$hint_id = $option . '-preview-hint';
-		$choices = [
-			Config::PATTERN_BACKEND_QDRANT               => __( 'Qdrant', 'flavor-agent' ),
-			Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH => __( 'Cloudflare AI Search', 'flavor-agent' ),
-		];
-		?>
-		<fieldset
-			class="flavor-agent-pattern-backend-segments"
-			data-flavor-agent-pattern-backend-segments
-			data-saved-backend="<?php echo esc_attr( $saved_backend ); ?>"
-			aria-describedby="<?php echo esc_attr( $hint_id ); ?>"
-		>
-			<legend class="screen-reader-text">
-				<?php echo esc_html__( 'Pattern storage backend', 'flavor-agent' ); ?>
-			</legend>
-			<?php foreach ( $choices as $value => $label ) : ?>
-				<?php
-				$is_saved   = $value === $saved_backend;
-				$input_id   = $option . '-' . str_replace( '_', '-', $value );
-				$segment_id = $input_id . '-segment';
-				?>
-				<label
-					id="<?php echo esc_attr( $segment_id ); ?>"
-					class="flavor-agent-pattern-backend-segment<?php echo $is_saved ? ' is-preview-selected' : ''; ?>"
-					for="<?php echo esc_attr( $input_id ); ?>"
-				>
-					<input type="radio" class="flavor-agent-pattern-backend-segment__input" id="<?php echo esc_attr( $input_id ); ?>" name="<?php echo esc_attr( $option ); ?>" value="<?php echo esc_attr( $value ); ?>" <?php checked( $is_saved ); ?> />
-					<span class="flavor-agent-pattern-backend-segment__label">
-						<?php echo esc_html( $label ); ?>
-					</span>
-					<?php if ( $is_saved ) : ?>
-						<span
-							class="flavor-agent-pattern-backend-segment__pill"
-							data-pattern-backend-active-pill
-						>
-							<?php echo esc_html__( 'Active', 'flavor-agent' ); ?>
-						</span>
-					<?php endif; ?>
-				</label>
-			<?php endforeach; ?>
-		</fieldset>
-		<p
-			id="<?php echo esc_attr( $hint_id ); ?>"
-			class="flavor-agent-pattern-backend-hint"
-			data-pattern-backend-preview-hint
-			aria-live="polite"
-			hidden
-		>
-			<?php echo esc_html__( 'Save Changes to switch pattern storage.', 'flavor-agent' ); ?>
-		</p>
-		<?php
-	}
-
 	/**
 	 * @param array<string, mixed> $state
 	 */
-	private static function render_qdrant_pattern_storage_status_panel( array $state ): void {
-		$configured = ! empty( $state['qdrant_configured'] );
-		$tone       = $configured ? 'success' : 'warning';
-		$message    = $configured
-			? __( 'Qdrant pattern storage ready.', 'flavor-agent' )
-			: __( 'Add Qdrant URL and API key to sync the pattern catalog.', 'flavor-agent' );
-		?>
-		<div class="flavor-agent-settings-status flavor-agent-settings-status--<?php echo esc_attr( $tone ); ?>">
-			<p><?php echo esc_html( $message ); ?></p>
-		</div>
-		<?php
-	}
 
 	/**
 	 * @param array<string, mixed> $state
@@ -1064,7 +1048,7 @@ final class Page {
 	 */
 	private static function render_cloudflare_pattern_ai_search_status_panel( array $state, array $feedback ): void {
 		$instance_id         = trim( (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID, '' ) );
-		$embedding_ready     = ! empty( $state['runtime_embedding']['configured'] );
+		$credentials_ready   = ! empty( $state['cloudflare_credentials_configured'] );
 		$storage_ready       = ! empty( $state['cloudflare_pattern_ai_search_configured'] );
 		$provisioning        = is_array( $state['cloudflare_pattern_ai_search_provisioning'] ?? null )
 			? $state['cloudflare_pattern_ai_search_provisioning']
@@ -1078,14 +1062,14 @@ final class Page {
 
 		if ( $storage_ready ) {
 			self::render_cloudflare_pattern_ai_search_status(
-				'success',
-				__( 'Managed pattern index ready.', 'flavor-agent' ),
+				'accent',
+				__( 'Managed pattern index configured. Check Pattern Sync for the latest catalog result.', 'flavor-agent' ),
 				$instance_id
 			);
 			return;
 		}
 
-		if ( ! $embedding_ready ) {
+		if ( ! $credentials_ready ) {
 			self::render_cloudflare_pattern_ai_search_status(
 				'warning',
 				__( 'Needs Cloudflare credentials from the Embedding Model section.', 'flavor-agent' ),
@@ -1123,7 +1107,7 @@ final class Page {
 		if ( ! empty( $state['cloudflare_pattern_ai_search_signature_mismatch'] ) ) {
 			self::render_cloudflare_pattern_ai_search_status(
 				'warning',
-				__( 'Saved managed pattern index needs re-validation for the current Embedding Model credentials. Save settings again to re-validate.', 'flavor-agent' ),
+				__( 'Saved managed pattern index needs re-validation for the current Cloudflare credentials. Save settings again to re-validate.', 'flavor-agent' ),
 				$instance_id
 			);
 			return;
@@ -1156,7 +1140,7 @@ final class Page {
 
 		self::render_cloudflare_pattern_ai_search_status(
 			'warning',
-			__( 'Create managed pattern index.', 'flavor-agent' ),
+			__( 'Save Changes to create the managed pattern index, then sync the catalog.', 'flavor-agent' ),
 			$instance_id
 		);
 	}
@@ -1303,26 +1287,23 @@ final class Page {
 	}
 
 	private static function render_sync_panel( array $page_state, bool $has_feedback_error = false ): void {
-		$state              = is_array( $page_state['pattern_state'] ?? null ) ? $page_state['pattern_state'] : PatternIndex::get_runtime_state();
-		$saved_backend      = (string) ( $page_state['selected_pattern_backend'] ?? Config::PATTERN_BACKEND_QDRANT );
-		$has_prerequisites  = ! empty( $page_state['patterns_ready'] );
-		$status_label       = $has_prerequisites
-			? State::get_pattern_sync_status_label( (string) $state['status'] )
+		$state                                  = is_array( $page_state['pattern_state'] ?? null ) ? $page_state['pattern_state'] : PatternIndex::get_runtime_state();
+		$display_state                          = array_intersect_key(
+			$state,
+			array_flip( [ 'status', 'indexed_count', 'last_synced_at', 'last_attempt_at', 'stale_reason', 'stale_reasons', 'last_error' ] )
+		);
+		$display_state['recommendations_ready'] = PatternIndex::recommendation_index_readiness( $state )['ready'];
+		$has_prerequisites                      = ! empty( $page_state['patterns_ready'] );
+		$status_label                           = $has_prerequisites
+			? ( State::pattern_catalog_needs_sync( $state ) ? __( 'Needs sync', 'flavor-agent' ) : State::get_pattern_sync_status_label( (string) $state['status'] ) )
 			: self::get_pattern_sync_prerequisite_status_label( $page_state );
-		$status_tone        = ! $has_prerequisites
+		$status_tone                            = ! $has_prerequisites
 			? 'warning'
 			: ( ! empty( $state['last_error'] ) ? 'error' : State::get_pattern_sync_status_tone( (string) $state['status'] ) );
-		$last_synced_label  = $state['last_synced_at'] ? (string) $state['last_synced_at'] : __( 'Not synced yet', 'flavor-agent' );
-		$stale_reason_label = ! empty( $state['stale_reason'] )
+		$last_synced_label                      = $state['last_synced_at'] ? (string) $state['last_synced_at'] : __( 'Not synced yet', 'flavor-agent' );
+		$stale_reason_label                     = ! empty( $state['stale_reason'] )
 			? State::get_pattern_sync_reason_label( (string) $state['stale_reason'] )
 			: '';
-		$collection_name    = $state['qdrant_collection']
-			? (string) $state['qdrant_collection']
-			: QdrantClient::get_collection_name(
-				[
-					'signature_hash' => (string) ( $state['embedding_signature'] ?? '' ),
-				]
-			);
 
 		$prerequisite_message   = self::get_pattern_sync_prerequisite_message( $page_state );
 		$prerequisite_id        = 'flavor-agent-sync-prerequisites';
@@ -1364,12 +1345,19 @@ final class Page {
 				data-pattern-prerequisites-ready="<?php echo $has_prerequisites ? '1' : '0'; ?>"
 				data-pattern-prerequisite-message="<?php echo esc_attr( $prerequisite_message ); ?>"
 				data-pattern-sync-status="<?php echo esc_attr( sanitize_key( (string) ( $state['status'] ?? 'uninitialized' ) ) ); ?>"
-				data-pattern-saved-backend="<?php echo esc_attr( $saved_backend ); ?>"
-				data-pattern-backend-preview-matches-saved="1"
+				data-pattern-runtime-state="<?php echo esc_attr( Utils::encode_json_payload( $display_state, '{}' ) ); ?>"
 			>
 				<p id="flavor-agent-sync-summary" class="flavor-agent-sync-panel__summary">
 					<?php echo esc_html( $sync_summary_sentence ); ?>
 				</p>
+				<p class="description"><?php echo esc_html__( 'Sync uses saved Cloudflare storage settings. It uploads pattern text to Cloudflare AI Search, which manages catalog embeddings. Checking status may continue an already queued sync.', 'flavor-agent' ); ?></p>
+				<p id="flavor-agent-sync-config-hint" class="description" data-pattern-sync-config-hint hidden><?php echo esc_html__( 'Save Changes before syncing changed Cloudflare credentials or storage settings.', 'flavor-agent' ); ?></p>
+				<?php if ( ! empty( $state['last_error'] ) ) : ?>
+					<p class="description">
+						<?php echo esc_html__( 'Review the last error below. Check the Cloudflare credentials in Embedding Model and Pattern Storage settings, save any corrections, then check sync status before starting another sync.', 'flavor-agent' ); ?>
+						<a href="#<?php echo esc_attr( State::get_section_dom_id( Config::GROUP_EMBEDDINGS ) ); ?>"><?php echo esc_html__( 'Review Cloudflare credentials', 'flavor-agent' ); ?></a>
+					</p>
+				<?php endif; ?>
 				<?php if ( '' !== $prerequisite_message ) : ?>
 					<p id="<?php echo esc_attr( $prerequisite_id ); ?>" class="flavor-agent-sync-panel__prerequisites" data-pattern-prerequisite-copy>
 						<?php echo esc_html( $prerequisite_message ); ?>
@@ -1411,31 +1399,12 @@ final class Page {
 					);
 					?>
 				</div>
-				<details class="flavor-agent-sync-panel__technical">
-					<summary class="flavor-agent-sync-panel__technical-summary">
-						<?php echo esc_html__( 'Technical details', 'flavor-agent' ); ?>
-					</summary>
-					<div class="flavor-agent-sync-panel__technical-body">
-						<?php
-						self::render_sync_metric(
-							__( 'Qdrant Collection', 'flavor-agent' ),
-							$collection_name,
-							false,
-							'qdrant_collection'
-						);
-						self::render_sync_metric(
-							__( 'Embedding Dimension', 'flavor-agent' ),
-							(string) max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) ),
-							false,
-							'embedding_dimension'
-						);
-						?>
-					</div>
-				</details>
+
 				<div class="flavor-agent-sync-panel__actions">
 					<button<?php Utils::render_html_attributes( $sync_button_attributes ); ?>>
 						<?php echo esc_html__( 'Sync Pattern Catalog', 'flavor-agent' ); ?>
 					</button>
+					<button type="button" id="flavor-agent-sync-check-button" class="button button-secondary"><?php echo esc_html__( 'Check sync status', 'flavor-agent' ); ?></button>
 					<span id="flavor-agent-sync-spinner" class="spinner" aria-hidden="true"></span>
 					<span id="flavor-agent-sync-status" class="flavor-agent-sync-panel__status" aria-hidden="true"></span>
 					<span id="flavor-agent-sync-live-region" class="screen-reader-text" aria-live="polite"></span>
@@ -1461,75 +1430,41 @@ final class Page {
 	}
 
 	private static function get_pattern_sync_prerequisite_message( array $page_state ): string {
-		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $page_state['selected_pattern_backend'] ?? '' ) ) {
-			if ( ! empty( $page_state['cloudflare_pattern_ai_search_configured'] ) ) {
-				return '';
-			}
-
-			$provisioning = is_array( $page_state['cloudflare_pattern_ai_search_provisioning'] ?? null )
-				? $page_state['cloudflare_pattern_ai_search_provisioning']
-				: [];
-			$status       = (string) ( $provisioning['status'] ?? '' );
-
-			if ( 'provisioning' === $status ) {
-				return __( 'Managed pattern index is provisioning in the background. Wait for validation before syncing.', 'flavor-agent' );
-			}
-
-			if ( ! empty( $page_state['cloudflare_pattern_ai_search_signature_mismatch'] ) ) {
-				return __( 'Saved managed pattern index needs re-validation for the current Embedding Model credentials. Save settings again to re-validate.', 'flavor-agent' );
-			}
-
-			if ( 'error' === $status ) {
-				return __( 'Managed pattern index provisioning failed. Check Cloudflare credentials in Embedding Model, then save settings again.', 'flavor-agent' );
-			}
-
-			return __( 'Save Cloudflare credentials in Embedding Model and create the managed pattern index before syncing.', 'flavor-agent' );
+		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH !== (string) ( $page_state['selected_pattern_backend'] ?? Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH ) ) {
+			return __( 'The saved pattern storage setting is unsupported. Save valid Cloudflare settings, then sync the catalog.', 'flavor-agent' );
 		}
 
-		$embedding_ready = ! empty( $page_state['runtime_embedding']['configured'] );
-		$qdrant_ready    = ! empty( $page_state['qdrant_configured'] );
-
-		if ( $embedding_ready && $qdrant_ready ) {
+		if ( ! empty( $page_state['cloudflare_pattern_ai_search_configured'] ) ) {
 			return '';
 		}
 
-		if ( ! $embedding_ready && ! $qdrant_ready ) {
-			return __( 'Complete Embedding Model and Qdrant Pattern Storage before syncing.', 'flavor-agent' );
+		$provisioning = is_array( $page_state['cloudflare_pattern_ai_search_provisioning'] ?? null )
+			? $page_state['cloudflare_pattern_ai_search_provisioning']
+			: [];
+		$status       = (string) ( $provisioning['status'] ?? '' );
+
+		if ( 'provisioning' === $status ) {
+			return __( 'Managed pattern index is provisioning in the background. Wait for validation before syncing.', 'flavor-agent' );
 		}
 
-		if ( ! $embedding_ready ) {
-			return __( 'Complete Embedding Model before syncing.', 'flavor-agent' );
+		if ( ! empty( $page_state['cloudflare_pattern_ai_search_signature_mismatch'] ) ) {
+			return __( 'Saved managed pattern index needs re-validation for the current Cloudflare credentials. Save settings again to re-validate.', 'flavor-agent' );
 		}
 
-		return __( 'Add the Qdrant URL and API key before syncing.', 'flavor-agent' );
+		if ( 'error' === $status ) {
+			return __( 'Managed pattern index provisioning failed. Check Cloudflare credentials in Embedding Model, then save settings again.', 'flavor-agent' );
+		}
+
+		return __( 'Save Cloudflare credentials in Embedding Model to create the managed pattern index, then sync the catalog.', 'flavor-agent' );
 	}
 
 	private static function get_pattern_sync_prerequisite_status_label( array $page_state ): string {
-		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === (string) ( $page_state['selected_pattern_backend'] ?? '' ) ) {
-			if ( ! empty( $page_state['cloudflare_pattern_ai_search_configured'] ) ) {
-				return __( 'Ready', 'flavor-agent' );
-			}
+		$provisioning = is_array( $page_state['cloudflare_pattern_ai_search_provisioning'] ?? null )
+			? $page_state['cloudflare_pattern_ai_search_provisioning']
+			: [];
 
-			$provisioning = is_array( $page_state['cloudflare_pattern_ai_search_provisioning'] ?? null )
-				? $page_state['cloudflare_pattern_ai_search_provisioning']
-				: [];
-
-			if ( 'provisioning' === (string) ( $provisioning['status'] ?? '' ) ) {
-				return __( 'Provisioning', 'flavor-agent' );
-			}
-
-			return __( 'Needs pattern storage', 'flavor-agent' );
-		}
-
-		$embedding_ready = ! empty( $page_state['runtime_embedding']['configured'] );
-		$qdrant_ready    = ! empty( $page_state['qdrant_configured'] );
-
-		if ( ! $embedding_ready && ! $qdrant_ready ) {
-			return __( 'Needs model & storage', 'flavor-agent' );
-		}
-
-		if ( ! $embedding_ready ) {
-			return __( 'Needs embedding model', 'flavor-agent' );
+		if ( 'provisioning' === (string) ( $provisioning['status'] ?? '' ) ) {
+			return __( 'Provisioning', 'flavor-agent' );
 		}
 
 		return __( 'Needs pattern storage', 'flavor-agent' );
@@ -1540,6 +1475,14 @@ final class Page {
 
 		if ( '' !== self::get_pattern_sync_prerequisite_message( $page_state ) ) {
 			return __( 'Pattern recommendations stay unavailable until setup is complete.', 'flavor-agent' );
+		}
+
+		if ( State::pattern_catalog_needs_sync( $state ) ) {
+			if ( in_array( 'pattern_store_migration_required', PatternIndex::get_stale_reasons( $state ), true ) ) {
+				return __( 'Pattern recommendations are unavailable until the catalog is rebuilt in Cloudflare AI Search. Save Cloudflare settings and sync the catalog; existing vectors are not copied.', 'flavor-agent' );
+			}
+
+			return __( 'Pattern recommendations are unavailable until the catalog is rebuilt or revalidated in Cloudflare AI Search. Review and save Cloudflare settings, then sync the catalog.', 'flavor-agent' );
 		}
 
 		if ( ! empty( $state['last_error'] ) ) {

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace FlavorAgent\Admin\Settings;
 
 use FlavorAgent\Embeddings\EmbeddingClient;
-use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
@@ -22,7 +21,6 @@ final class Validation {
 	private const SECRET_OPTION_NAMES = [
 		'flavor_agent_cloudflare_workers_ai_api_token',
 		Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN,
-		'flavor_agent_qdrant_key',
 	];
 
 	private const SECRET_OPTION_COMPANIONS = [
@@ -33,9 +31,6 @@ final class Validation {
 		Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN => [
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_ACCOUNT_ID,
 			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID,
-		],
-		'flavor_agent_qdrant_key'                      => [
-			'flavor_agent_qdrant_url',
 		],
 	];
 
@@ -51,15 +46,6 @@ final class Validation {
 	private static ?array $workers_ai_validation_state = null;
 
 	private static bool $workers_ai_validation_error_reported = false;
-
-	private static bool $workers_ai_dimension_warning_reported = false;
-
-	/**
-	 * @var array{fingerprint: string, values: array<string, string>, error: \WP_Error|null}|null
-	 */
-	private static ?array $qdrant_validation_state = null;
-
-	private static bool $qdrant_validation_error_reported = false;
 
 	/**
 	 * @var array{fingerprint: string, values: array<string, string>, error: \WP_Error|null}|null
@@ -86,15 +72,6 @@ final class Validation {
 		return $count;
 	}
 
-	public static function sanitize_pattern_recommendation_threshold( mixed $value ): float {
-		$threshold = (float) $value;
-
-		$threshold = max( 0.0, min( 1.0, round( $threshold, 2 ) ) );
-		Feedback::mark_section_changed_by_option( 'flavor_agent_pattern_recommendation_threshold', $threshold );
-
-		return $threshold;
-	}
-
 	public static function sanitize_pattern_recommendation_threshold_cloudflare_ai_search( mixed $value ): float {
 		$threshold = (float) $value;
 
@@ -108,15 +85,8 @@ final class Validation {
 	}
 
 	public static function sanitize_pattern_retrieval_backend( mixed $value ): string {
-		$backend = sanitize_key( (string) $value );
-
-		if ( ! in_array( $backend, Config::PATTERN_BACKENDS, true ) ) {
-			$backend = Config::PATTERN_BACKEND_QDRANT;
-		}
-
-		Feedback::mark_section_changed_by_option( Config::OPTION_PATTERN_RETRIEVAL_BACKEND, $backend );
-
-		return $backend;
+		// Legacy callers normalize to the only supported pattern store.
+		return Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH;
 	}
 
 	public static function sanitize_pattern_max_recommendations( mixed $value ): int {
@@ -173,42 +143,6 @@ final class Validation {
 			$value,
 			'flavor_agent_cloudflare_workers_ai_embedding_model'
 		);
-	}
-
-	public static function sanitize_qdrant_url( mixed $value ): string {
-		$sanitized_value = Utils::sanitize_url_value( $value );
-		Feedback::mark_section_changed_by_option( 'flavor_agent_qdrant_url', $sanitized_value );
-		$resolved_values = self::resolve_qdrant_submission_values(
-			[
-				'flavor_agent_qdrant_url' => $sanitized_value,
-			]
-		);
-
-		if ( is_wp_error( $resolved_values ) ) {
-			self::report_qdrant_validation_error( $resolved_values );
-
-			return (string) get_option( 'flavor_agent_qdrant_url', '' );
-		}
-
-		return $resolved_values['flavor_agent_qdrant_url'] ?? $sanitized_value;
-	}
-
-	public static function sanitize_qdrant_key( mixed $value ): string {
-		$sanitized_value = self::sanitize_text_option_value( $value, 'flavor_agent_qdrant_key' );
-		Feedback::mark_section_changed_by_option( 'flavor_agent_qdrant_key', $sanitized_value );
-		$resolved_values = self::resolve_qdrant_submission_values(
-			[
-				'flavor_agent_qdrant_key' => $sanitized_value,
-			]
-		);
-
-		if ( is_wp_error( $resolved_values ) ) {
-			self::report_qdrant_validation_error( $resolved_values );
-
-			return (string) get_option( 'flavor_agent_qdrant_key', '' );
-		}
-
-		return $resolved_values['flavor_agent_qdrant_key'] ?? $sanitized_value;
 	}
 
 	public static function sanitize_cloudflare_pattern_ai_search_instance_id( mixed $value ): string {
@@ -320,77 +254,7 @@ final class Validation {
 			return $validation;
 		}
 
-		self::maybe_report_workers_ai_dimension_warning( $validation );
-
 		return $values;
-	}
-
-	/**
-	 * @param array<string, string> $overrides
-	 * @return array<string, string>|\WP_Error
-	 */
-	public static function resolve_qdrant_submission_values( array $overrides = [] ): array|\WP_Error {
-		$current_values = self::get_current_qdrant_values();
-		$values         = self::get_cached_submission_values(
-			'qdrant',
-			static function () use ( $current_values ): array {
-				return [
-					'flavor_agent_qdrant_url' => self::read_posted_url_value(
-						'flavor_agent_qdrant_url',
-						$current_values['flavor_agent_qdrant_url']
-					),
-					'flavor_agent_qdrant_key' => self::read_posted_text_value(
-						'flavor_agent_qdrant_key',
-						$current_values['flavor_agent_qdrant_key']
-					),
-				];
-			}
-		);
-
-		foreach ( $overrides as $option_name => $override_value ) {
-			$values[ $option_name ] = 'flavor_agent_qdrant_url' === $option_name
-				? Utils::sanitize_url_value( $override_value )
-				: sanitize_text_field( $override_value );
-		}
-
-		if ( ! self::should_validate_submission() ) {
-			return $values;
-		}
-
-		if (
-			'' === $values['flavor_agent_qdrant_url'] ||
-			'' === $values['flavor_agent_qdrant_key']
-		) {
-			return $values;
-		}
-
-		if ( ! self::values_require_validation( $values, $current_values ) ) {
-			return $values;
-		}
-
-		$fingerprint = self::build_validation_fingerprint( $values );
-
-		if (
-			is_array( self::$qdrant_validation_state ) &&
-			( self::$qdrant_validation_state['fingerprint'] ?? '' ) === $fingerprint
-		) {
-			return self::$qdrant_validation_state['error'] instanceof \WP_Error
-				? self::$qdrant_validation_state['error']
-				: self::$qdrant_validation_state['values'];
-		}
-
-		$validation = QdrantClient::validate_configuration(
-			$values['flavor_agent_qdrant_url'],
-			$values['flavor_agent_qdrant_key']
-		);
-
-		self::$qdrant_validation_state = [
-			'fingerprint' => $fingerprint,
-			'values'      => $values,
-			'error'       => is_wp_error( $validation ) ? $validation : null,
-		];
-
-		return is_wp_error( $validation ) ? $validation : $values;
 	}
 
 	/**
@@ -431,10 +295,6 @@ final class Validation {
 			return $values;
 		}
 
-		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH !== self::get_submitted_or_saved_pattern_backend() ) {
-			return $values;
-		}
-
 		$workers_ai_values = self::resolve_workers_ai_submission_values();
 
 		if ( is_wp_error( $workers_ai_values ) ) {
@@ -462,6 +322,10 @@ final class Validation {
 
 			return $values;
 		}
+
+		// Only an explicit, valid settings save retires a legacy or unsupported selector.
+		PatternIndex::preserve_store_migration_state();
+		update_option( Config::OPTION_PATTERN_RETRIEVAL_BACKEND, Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH );
 
 		self::maybe_report_pattern_ai_search_embedding_model_fallback_warning( $embedding_model );
 
@@ -622,18 +486,6 @@ final class Validation {
 		$model = sanitize_text_field( $value );
 
 		return '' !== $model ? $model : WorkersAIEmbeddingConfiguration::DEFAULT_MODEL;
-	}
-
-	/**
-	 * @return array<string, string>
-	 */
-	private static function get_current_qdrant_values(): array {
-		return self::get_current_option_values(
-			[
-				'flavor_agent_qdrant_url' => [ Utils::class, 'sanitize_url_value' ],
-				'flavor_agent_qdrant_key' => 'sanitize_text_field',
-			]
-		);
 	}
 
 	/**
@@ -807,23 +659,6 @@ final class Validation {
 		return is_string( $value ) ? $value : null;
 	}
 
-	private static function read_posted_url_value( string $option_name, string $fallback ): string {
-		if ( ! self::has_valid_submission_nonce() ) {
-			return Utils::sanitize_url_value( $fallback );
-		}
-
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.MissingUnslash,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Nonce is validated above; the value is unslashed and sanitized immediately below.
-		$value = $_POST[ $option_name ] ?? null;
-
-		if ( ! is_string( $value ) ) {
-			return Utils::sanitize_url_value( $fallback );
-		}
-
-		$value = wp_unslash( $value );
-
-		return Utils::sanitize_url_value( $value );
-	}
-
 	/**
 	 * @param array<string, string> $values
 	 */
@@ -908,80 +743,6 @@ final class Validation {
 		self::$workers_ai_validation_error_reported = true;
 	}
 
-	/**
-	 * @param array{dimension?: int} $validation
-	 */
-	private static function maybe_report_workers_ai_dimension_warning( array $validation ): void {
-		if ( self::$workers_ai_dimension_warning_reported ) {
-			return;
-		}
-
-		$validated_dimension = max( 0, (int) ( $validation['dimension'] ?? 0 ) );
-		if ( 0 === $validated_dimension ) {
-			return;
-		}
-
-		$selected_backend = sanitize_key(
-			(string) get_option( Config::OPTION_PATTERN_RETRIEVAL_BACKEND, Config::PATTERN_BACKEND_QDRANT )
-		);
-		if ( Config::PATTERN_BACKEND_QDRANT !== $selected_backend ) {
-			return;
-		}
-
-		$state            = PatternIndex::get_state();
-		$stored_dimension = max( 0, (int) ( $state['embedding_dimension'] ?? 0 ) );
-		if (
-			0 === $stored_dimension
-			|| $stored_dimension === $validated_dimension
-			|| empty( $state['last_synced_at'] )
-		) {
-			return;
-		}
-
-		$message = sprintf(
-			/* translators: 1: previous embedding dimension, 2: validated embedding dimension */
-			__( 'The saved Qdrant pattern index uses %1$d embedding dimensions, but the validated Cloudflare Workers AI model returns %2$d. Re-sync patterns before relying on Qdrant pattern recommendations.', 'flavor-agent' ),
-			$stored_dimension,
-			$validated_dimension
-		);
-
-		if ( '' !== Feedback::get_request_key_from_post() ) {
-			Feedback::record_section_feedback_messages(
-				Config::GROUP_EMBEDDINGS,
-				[
-					[
-						'tone'    => 'warning',
-						'message' => $message,
-					],
-				],
-				true
-			);
-		} else {
-			add_settings_error(
-				Config::OPTION_GROUP,
-				'flavor_agent_workers_ai_dimension_changed',
-				$message,
-				'warning'
-			);
-		}
-
-		self::$workers_ai_dimension_warning_reported = true;
-	}
-
-	private static function report_qdrant_validation_error( \WP_Error $error ): void {
-		if ( self::$qdrant_validation_error_reported ) {
-			return;
-		}
-
-		Feedback::report_validation_feedback(
-			Config::GROUP_PATTERNS,
-			'flavor_agent_qdrant_validation',
-			$error,
-			__( 'We kept your previous Qdrant settings because validation failed.', 'flavor-agent' )
-		);
-		self::$qdrant_validation_error_reported = true;
-	}
-
 	private static function report_pattern_ai_search_validation_error( \WP_Error $error ): void {
 		if ( self::$pattern_ai_search_validation_error_reported ) {
 			return;
@@ -1055,29 +816,6 @@ final class Validation {
 			$message,
 			$tone
 		);
-	}
-
-	private static function get_submitted_or_saved_pattern_backend(): string {
-		if ( self::has_valid_submission_nonce() ) {
-			// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Nonce is validated above; value is read-only and sanitized below.
-			$posted = wp_unslash( $_POST[ Config::OPTION_PATTERN_RETRIEVAL_BACKEND ] ?? '' );
-
-			if ( is_string( $posted ) ) {
-				$posted = sanitize_key( $posted );
-
-				if ( in_array( $posted, Config::PATTERN_BACKENDS, true ) ) {
-					return $posted;
-				}
-			}
-		}
-
-		$saved = sanitize_key(
-			(string) get_option( Config::OPTION_PATTERN_RETRIEVAL_BACKEND, Config::PATTERN_BACKEND_QDRANT )
-		);
-
-		return in_array( $saved, Config::PATTERN_BACKENDS, true )
-			? $saved
-			: Config::PATTERN_BACKEND_QDRANT;
 	}
 
 	private static function parse_boolean_flag( mixed $value ): bool {

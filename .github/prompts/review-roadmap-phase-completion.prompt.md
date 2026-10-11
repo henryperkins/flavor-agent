@@ -36,7 +36,7 @@ Pick the subset that matches the phase; do not open all of these every time.
 - **Validation feedback / diagnostics:** `inc/Abilities/RecommendationAbilityExecution.php`, `inc/Abilities/{Block,Style,Template}Abilities.php`, `src/store/recommendation-outcomes.js`
 - **Guideline attribution:** `Guidelines::version_id()` / `Guidelines::format_prompt_context()`, `inc/Activity/Repository.php`, `inc/Activity/Serializer.php`
 - **Docs fingerprint:** `inc/Support/DocsGuidanceResult.php`
-- **Pattern metadata/ranking:** `inc/Patterns/PatternIndex.php`, `inc/Patterns/Retrieval/QdrantPatternRetrievalBackend.php`, `inc/Patterns/Retrieval/CloudflareAISearchPatternRetrievalBackend.php`, `inc/Abilities/PatternAbilities.php`
+- **Pattern metadata/ranking:** `inc/Patterns/PatternIndex.php`, `inc/Patterns/Retrieval/CloudflareAISearchPatternRetrievalBackend.php`, `inc/Abilities/PatternAbilities.php`
 - **Learning loop:** `inc/Activity/RecommendationOutcome.php`, `inc/Activity/RecommendationOutcomeMetrics.php`, `inc/REST/Agent_Controller.php`, `src/store/activity-undo.js`, `src/admin/activity-log.js`, `src/admin/activity-log-utils.js`
 - **Cross-cutting contracts/docs:** `docs/SOURCE_OF_TRUTH.md`, `docs/FEATURE_SURFACE_MATRIX.md`, `docs/reference/cross-surface-validation-gates.md`, `docs/reference/abilities-and-routes.md`, `docs/reference/wordpress-ai-roadmap-tracking.md`, `STATUS.md`
 

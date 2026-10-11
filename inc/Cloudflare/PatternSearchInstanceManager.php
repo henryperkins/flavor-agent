@@ -124,11 +124,9 @@ final class PatternSearchInstanceManager extends BaseHttpClient {
 			return;
 		}
 
-		if (
-			Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH !== sanitize_key(
-				(string) get_option( Config::OPTION_PATTERN_RETRIEVAL_BACKEND, Config::PATTERN_BACKEND_QDRANT )
-			)
-		) {
+		// Provisioning requires the explicit current settings save, rather than
+		// the retrieval selector's passive legacy compatibility default.
+		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH !== get_option( Config::OPTION_PATTERN_RETRIEVAL_BACKEND, '' ) ) {
 			return;
 		}
 

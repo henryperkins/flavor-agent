@@ -2,7 +2,7 @@
 
 Flavor Agent lets AI work on a live WordPress site without unchecked control. Every AI action it mediates runs through one governance layer: operations validated against bounded schemas, structural changes gated behind review, every apply the plugin owns attributed and recorded server-side, every recorded change reversible with drift detection so an undo never clobbers later human edits. Humans get this through native Gutenberg and Site Editor surfaces — blocks, content, patterns, templates, template parts, navigation, Global Styles, and Style Book; external agents get the same recommendation, validation, and freshness contracts through the WordPress Abilities API and MCP. Built on the WordPress 7.1 AI stack while retaining a WordPress 7.0 minimum. The recommendation surfaces are the demonstration; the governance layer is the product — its contract map lives in [`docs/reference/governance-layer.md`](docs/reference/governance-layer.md).
 
-I built it to prove AI can be practical product infrastructure, not a chatbot pasted onto a workflow: Connectors-owned text generation, Cloudflare-backed embeddings and search, bounded apply semantics, undo, activity audit, and explicit service ownership make every recommendation reviewable, traceable, and safe to ship.
+I built it to prove AI can be practical product infrastructure, not a chatbot pasted onto a workflow: Connectors-owned text generation, Cloudflare-managed pattern embeddings and search, bounded apply semantics, undo, activity audit, and explicit service ownership make every recommendation reviewable, traceable, and safe to ship.
 
 > **Release status:** `v0.1.0` is the final initial release. Implementation hardening, current live-corpus evidence, connector-backed Anthropic behavior, minimum visual proof, clean artifact inspection, and the infrastructure-only GitHub Actions disposition are closed. GitHub-hosted jobs did not execute because of the recorded account lock; the maintainer-approved waiver retains every local, browser, Plugin Check, packaging, and exact-tag gate. The GitHub release carries the verified zip, complete local logs, waiver record, checksums, and exact-tag verification record. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
 
@@ -50,7 +50,7 @@ Flavor Agent is for WordPress builders, editors, and plugin developers who want 
 2. Install dependencies with Node 20/npm 10 or Node 24/npm 11, plus Composer.
 3. Build production assets with `npm run build`.
 4. Activate **Flavor Agent** in WordPress.
-5. Configure text generation in `Settings > Connectors`; optionally configure pattern retrieval, embeddings, Developer Docs suspension status, and guidelines in `Settings > Flavor Agent`.
+5. Configure text generation in `Settings > Connectors`; optionally configure Cloudflare pattern setup, Developer Docs suspension status, and guidelines in `Settings > Flavor Agent`.
 
 For a representative development environment, use the local setup notes in [`docs/reference/local-environment-setup.md`](docs/reference/local-environment-setup.md). WordPress 7.1 is released; the Docker-backed Site Editor harness pins the exact stable `wordpress:7.1.0-php8.2-apache` image so harness runs stay reproducible.
 
@@ -81,17 +81,19 @@ Flavor Agent is a WordPress plugin with a PHP backend under `inc/`, editor/admin
 
 The editor app mounts first-party UI into native Gutenberg and Site Editor locations: block Inspector panels, post/page document panels, the pattern inserter, template and template-part panels, Global Styles, Style Book, and navigation-block advisory sections. Activity records are written server-side and reused by inline editor history plus the wp-admin approval/audit page.
 
-Provider ownership is explicit: text generation flows through the WordPress AI Client and `Settings > Connectors`; plugin-owned settings cover embeddings, Qdrant, private Cloudflare AI Search pattern retrieval, Developer Docs suspension status, guidelines, and pattern sync.
+Cloudflare AI Search is the sole supported pattern store. Provider ownership is explicit: text generation flows through the WordPress AI Client and `Settings > Connectors`; plugin-owned settings cover Cloudflare credentials/model setup and validation, private Cloudflare AI Search pattern retrieval, Developer Docs suspension status, guidelines, and pattern sync.
 
 ## Provider matrix
 
-| Capability               | OpenAI and Azure OpenAI Connectors          | Anthropic and other Connectors          | Cloudflare Workers AI                                         | Cloudflare AI Search                                | Qdrant                          |
-| ------------------------ | ------------------------------------------- | --------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------- | ------------------------------- |
-| Text generation          | Via `Settings > Connectors`                 | Via `Settings > Connectors`             | Not used for chat by Flavor Agent                             | Not used for chat                                   | Not used for chat               |
-| Embeddings               | Not used for embeddings by Flavor Agent     | Not used for embeddings                 | Only plugin-owned embedding backend for Qdrant                | Managed embeddings/indexing for private patterns    | Stores/searches vectors         |
-| Pattern retrieval        | Reranking can use connector-backed chat     | Reranking can use connector-backed chat | Embeddings only when the Qdrant backend is selected           | Private pattern retrieval backend option            | Vector retrieval backend option |
-| WordPress docs grounding | Not used                                    | Not used                                | Not used                                                      | Disabled by default in v0.1.3         | Not used                        |
-| Configuration owner      | `Settings > Connectors`                     | `Settings > Connectors`                 | `Settings > Flavor Agent`                                     | `Settings > Flavor Agent` or built-in docs endpoint | `Settings > Flavor Agent`       |
+| Capability | OpenAI and Azure OpenAI Connectors | Anthropic and other Connectors | Cloudflare Workers AI | Cloudflare AI Search |
+| --- | --- | --- | --- | --- |
+| Text generation | Via `Settings > Connectors` | Via `Settings > Connectors` | Not used for chat by Flavor Agent | Not used for chat |
+| Embeddings | Not used for embeddings by Flavor Agent | Not used for embeddings | Settings-validation probe; shared account/token/model setup | Managed embeddings/indexing for private patterns |
+| Pattern retrieval | Reranking can use connector-backed chat | Reranking can use connector-backed chat | Shared account/token for managed index setup | Sole supported pattern store and retrieval service |
+| WordPress docs grounding | Not used | Not used | Not used | Disabled by default in v0.1.3 |
+| Configuration owner | `Settings > Connectors` | `Settings > Connectors` | `Settings > Flavor Agent` | `Settings > Flavor Agent` or built-in docs endpoint |
+
+Older Qdrant installations require explicit Cloudflare AI Search setup and a new pattern sync. No vectors or remote data are copied, no remote index is provisioned by the local migration, and the old cosine threshold is not reused. See [pattern storage migration](docs/reference/pattern-storage-migration.md).
 
 See the external-service disclosure in [`readme.txt`](readme.txt) and [`docs/reference/external-service-disclosure.md`](docs/reference/external-service-disclosure.md) for service-specific data and trigger details.
 

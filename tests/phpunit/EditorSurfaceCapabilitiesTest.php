@@ -7,6 +7,7 @@ namespace FlavorAgent\Tests;
 require_once __DIR__ . '/support/editor-surface-capabilities-bootstrap.php';
 
 use FlavorAgent\Admin\Settings\Config;
+use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
@@ -248,8 +249,8 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'workers-token',
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
-			'flavor_agent_qdrant_url'                      => 'https://example.cloud.qdrant.io:6333',
-			'flavor_agent_qdrant_key'                      => 'qdrant-key',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => PatternSearchInstanceManager::credential_signature( 'account-123', 'workers-token', '@cf/qwen/qwen3-embedding-0.6b' ),
 			'connectors_ai_openai_api_key'                 => 'connector-key',
 			'wpai_features_enabled'                        => true,
 			'wpai_feature_flavor-agent_enabled'            => true,
@@ -286,8 +287,8 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'workers-token',
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
-			'flavor_agent_qdrant_url'                      => 'https://example.cloud.qdrant.io:6333',
-			'flavor_agent_qdrant_key'                      => 'qdrant-key',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => PatternSearchInstanceManager::credential_signature( 'account-123', 'workers-token', '@cf/qwen/qwen3-embedding-0.6b' ),
 			'connectors_ai_openai_api_key'                 => 'connector-key',
 			'wpai_features_enabled'                        => true,
 			'wpai_feature_flavor-agent_enabled'            => true,
@@ -309,10 +310,14 @@ final class EditorSurfaceCapabilitiesTest extends TestCase {
 			array_merge(
 				PatternIndex::get_state(),
 				[
-					'status'         => 'ready',
-					'fingerprint'    => 'fingerprint-123',
-					'last_synced_at' => '2026-06-04T00:00:00+00:00',
-					'indexed_count'  => 3,
+					'status'                         => 'ready',
+					'pattern_backend'                => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+					'cloudflare_ai_search_namespace' => PatternSearchInstanceManager::managed_namespace(),
+					'cloudflare_ai_search_instance'  => PatternSearchInstanceManager::managed_instance_id(),
+					'cloudflare_ai_search_signature' => PatternSearchInstanceManager::credential_signature( 'account-123', 'workers-token', '@cf/qwen/qwen3-embedding-0.6b' ),
+					'fingerprint'                    => 'fingerprint-123',
+					'last_synced_at'                 => '2026-06-04T00:00:00+00:00',
+					'indexed_count'                  => 3,
 				]
 			)
 		);

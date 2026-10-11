@@ -397,13 +397,19 @@ function seedFlavorAgentOptions( harness ) {
 			'playground-workers-token',
 		flavor_agent_cloudflare_workers_ai_embedding_model:
 			'@cf/qwen/qwen3-embedding-0.6b',
-		flavor_agent_qdrant_url: 'https://example.test/qdrant',
-		flavor_agent_qdrant_key: 'playground-qdrant-key',
+		flavor_agent_pattern_retrieval_backend: 'cloudflare_ai_search',
 	};
 
 	for ( const [ optionName, value ] of Object.entries( optionValues ) ) {
 		runWpCli( harness, [ 'option', 'update', optionName, value ] );
 	}
+
+	// Local metadata only: no provider provisioning or connectivity is claimed.
+	runWpCli( harness, [
+		'eval',
+		`update_option( 'flavor_agent_cloudflare_pattern_ai_search_instance_id', FlavorAgent\\Cloudflare\\PatternSearchInstanceManager::managed_instance_id() );
+update_option( 'flavor_agent_cloudflare_pattern_ai_search_validated_signature', FlavorAgent\\Cloudflare\\PatternSearchInstanceManager::credential_signature( 'playground-account', 'playground-workers-token', '@cf/qwen/qwen3-embedding-0.6b' ) );`,
+	] );
 }
 
 async function bootstrapWp70Harness( options = {} ) {

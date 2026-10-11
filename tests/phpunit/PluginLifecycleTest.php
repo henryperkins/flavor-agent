@@ -52,7 +52,8 @@ final class PluginLifecycleTest extends TestCase {
 		$this->assertHookNotRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_namespace', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_instance_id', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookNotRegistered( 'update_option_flavor_agent_cloudflare_pattern_ai_search_api_token', [ PatternIndex::class, 'handle_dependency_change' ] );
-		$this->assertHookRegistered( 'update_option_flavor_agent_qdrant_url', [ PatternIndex::class, 'handle_dependency_change' ] );
+		$this->assertHookNotRegistered( 'update_option_flavor_agent_qdrant_url', [ PatternIndex::class, 'handle_dependency_change' ] );
+		$this->assertHookNotRegistered( 'update_option_flavor_agent_qdrant_key', [ PatternIndex::class, 'handle_dependency_change' ] );
 		$this->assertHookRegistered( 'update_option_home', [ PatternIndex::class, 'handle_dependency_change' ] );
 	}
 
@@ -137,8 +138,8 @@ final class PluginLifecycleTest extends TestCase {
 
 		$this->assertSame( 'existing-token', WordPressTestState::$options['flavor_agent_cloudflare_workers_ai_api_token'] );
 		$this->assertArrayNotHasKey( 'flavor_agent_cloudflare_workers_ai_api_token', WordPressTestState::$option_autoload );
-		$this->assertSame( '', WordPressTestState::$options['flavor_agent_qdrant_key'] );
-		$this->assertFalse( WordPressTestState::$option_autoload['flavor_agent_qdrant_key'] );
+		$this->assertArrayNotHasKey( 'flavor_agent_qdrant_key', WordPressTestState::$options );
+		$this->assertArrayNotHasKey( 'flavor_agent_qdrant_key', WordPressTestState::$option_autoload );
 		$this->assertArrayNotHasKey( 'flavor_agent_cloudflare_pattern_ai_search_api_token', WordPressTestState::$options );
 	}
 
@@ -210,8 +211,8 @@ final class PluginLifecycleTest extends TestCase {
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
-			'flavor_agent_qdrant_url'                      => 'https://qdrant.example.test:6333',
-			'flavor_agent_qdrant_key'                      => 'qdrant-key',
+			'flavor_agent_cloudflare_pattern_ai_search_instance_id' => PatternSearchInstanceManager::managed_instance_id(),
+			'flavor_agent_cloudflare_pattern_ai_search_validated_signature' => PatternSearchInstanceManager::credential_signature( 'account-123', 'token-xyz', '@cf/qwen/qwen3-embedding-0.6b' ),
 			'flavor_agent_docs_prewarm_state'              => [],
 			'flavor_agent_cloudflare_ai_search_account_id' => '',
 			'flavor_agent_cloudflare_ai_search_instance_id' => '',

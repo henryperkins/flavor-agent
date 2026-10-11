@@ -26,7 +26,7 @@ Flavor Agent owns:
 - Native Gutenberg, Site Editor, inserter, settings, and admin approval/audit affordances.
 - Bounded apply paths only where the plugin can review, validate, record, and undo.
 - External-agent style applies only through `request-style-apply` followed by administrator approval in `Settings > AI Activity`.
-- Clear setup and degraded-state messaging when providers, embeddings, Qdrant, capabilities, or WordPress surface support are missing.
+- Clear setup and degraded-state messaging when providers, shared Cloudflare credentials, managed pattern storage, capabilities, or WordPress surface support are missing.
 
 Flavor Agent does not own:
 
@@ -445,7 +445,7 @@ Release-quality as-is: yes if setup is understandable and validation preserves p
 
 Stop at:
 
-- Embeddings and Qdrant setup for plugin-owned pattern recommendations.
+- Shared Cloudflare credentials and managed Cloudflare AI Search index setup for pattern recommendations; direct Workers AI embedding requests validate settings, while managed AI Search owns catalog embeddings.
 - Connector readiness messaging for text generation.
 - Pattern recommendation sync status and manual sync.
 - Guidelines import/export where already supported.
@@ -461,7 +461,7 @@ Do not add:
 
 ### Release Actions
 
-- [ ] Make backend ownership labels explicit: `Settings > Flavor Agent` for plugin-owned embeddings/Qdrant and `Settings > Connectors` for text generation providers.
+- [ ] Make backend ownership labels explicit: `Settings > Flavor Agent` for Cloudflare setup/validation and managed Cloudflare AI Search pattern storage and `Settings > Connectors` for text generation providers.
 - [ ] Keep validation errors from replacing prior saved credentials.
 - [ ] Confirm manual sync status and stale/error states are understandable.
 - [ ] Defer DataForm modernization unless current setup UX blocks release.

@@ -13,8 +13,8 @@ module.exports = {
 	testPathIgnorePatterns: [
 		...( baseConfig.testPathIgnorePatterns || [ '/node_modules/' ] ),
 		'/tools/code-search/',
-		'/\\.worktrees/',
-		'/\\.claude/worktrees/',
+		'<rootDir>/\\.worktrees/',
+		'<rootDir>/\\.claude/worktrees/',
 		'/output/',
 	],
 	// Ignore generated harness trees and adjacent checkouts during module

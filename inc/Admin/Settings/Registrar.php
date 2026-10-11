@@ -15,7 +15,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 final class Registrar {
 
-
 	public static function register_settings(): void {
 		register_setting(
 			Config::OPTION_GROUP,
@@ -24,15 +23,6 @@ final class Registrar {
 				'type'              => 'string',
 				'sanitize_callback' => [ Settings::class, 'sanitize_openai_provider' ],
 				'default'           => WorkersAIEmbeddingConfiguration::PROVIDER,
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
-			Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [ Settings::class, 'sanitize_pattern_retrieval_backend' ],
-				'default'           => Config::PATTERN_BACKEND_QDRANT,
 			]
 		);
 
@@ -71,34 +61,6 @@ final class Registrar {
 				'type'              => 'string',
 				'sanitize_callback' => [ Settings::class, 'sanitize_cloudflare_workers_ai_embedding_model' ],
 				'default'           => WorkersAIEmbeddingConfiguration::DEFAULT_MODEL,
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
-			'flavor_agent_qdrant_url',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [ Settings::class, 'sanitize_qdrant_url' ],
-				'default'           => '',
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
-			'flavor_agent_qdrant_key',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [ Settings::class, 'sanitize_qdrant_key' ],
-				'default'           => '',
-				'autoload'          => false,
-			]
-		);
-		register_setting(
-			Config::OPTION_GROUP,
-			'flavor_agent_pattern_recommendation_threshold',
-			[
-				'type'              => 'number',
-				'sanitize_callback' => [ Settings::class, 'sanitize_pattern_recommendation_threshold' ],
-				'default'           => 0.3,
 			]
 		);
 		register_setting(
@@ -199,18 +161,6 @@ final class Registrar {
 			Config::PAGE_SLUG
 		);
 		add_settings_section(
-			'flavor_agent_pattern_retrieval',
-			'Pattern Storage',
-			[ Settings::class, 'render_pattern_retrieval_section' ],
-			Config::PAGE_SLUG
-		);
-		add_settings_section(
-			'flavor_agent_qdrant',
-			'Qdrant Pattern Storage',
-			[ Settings::class, 'render_qdrant_section' ],
-			Config::PAGE_SLUG
-		);
-		add_settings_section(
 			'flavor_agent_cloudflare_pattern_ai_search',
 			'Cloudflare AI Search Pattern Storage',
 			[ Settings::class, 'render_cloudflare_pattern_ai_search_section' ],
@@ -241,24 +191,6 @@ final class Registrar {
 			Config::PAGE_SLUG
 		);
 
-		add_settings_field(
-			Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
-			'Pattern Storage',
-			[ Settings::class, 'render_select_field' ],
-			Config::PAGE_SLUG,
-			'flavor_agent_pattern_retrieval',
-			[
-				'option'      => Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
-				'label_for'   => Config::OPTION_PATTERN_RETRIEVAL_BACKEND,
-				'default'     => Config::PATTERN_BACKEND_QDRANT,
-				'choices'     => [
-					Config::PATTERN_BACKEND_QDRANT => 'Qdrant vector storage',
-					Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH => 'Cloudflare AI Search managed index',
-				],
-				'description' => 'Choose where the pattern catalog is stored.',
-				'class'       => 'flavor-agent-settings-row--critical',
-			]
-		);
 		add_settings_field(
 			'flavor_agent_cloudflare_workers_ai_account_id',
 			'Account ID',
@@ -301,60 +233,9 @@ final class Registrar {
 				'label_for'    => 'flavor_agent_cloudflare_workers_ai_embedding_model',
 				'default'      => WorkersAIEmbeddingConfiguration::DEFAULT_MODEL,
 				'placeholder'  => WorkersAIEmbeddingConfiguration::DEFAULT_MODEL,
-				'description'  => 'Workers AI embedding model ID.',
+				'description'  => 'Workers AI model used for the settings validation request and managed pattern index configuration. Cloudflare AI Search manages catalog embeddings.',
 				'autocomplete' => 'off',
 				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
-			'flavor_agent_qdrant_url',
-			'Cluster URL',
-			[ Settings::class, 'render_text_field' ],
-			Config::PAGE_SLUG,
-			'flavor_agent_qdrant',
-			[
-				'option'       => 'flavor_agent_qdrant_url',
-				'label_for'    => 'flavor_agent_qdrant_url',
-				'type'         => 'url',
-				'placeholder'  => 'https://my-cluster.cloud.qdrant.io:6333',
-				'description'  => 'Qdrant cluster URL, including the port.',
-				'autocomplete' => 'url',
-				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
-			'flavor_agent_qdrant_key',
-			'API Key',
-			[ Settings::class, 'render_text_field' ],
-			Config::PAGE_SLUG,
-			'flavor_agent_qdrant',
-			[
-				'option'       => 'flavor_agent_qdrant_key',
-				'label_for'    => 'flavor_agent_qdrant_key',
-				'type'         => 'password',
-				'placeholder'  => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-				'description'  => 'API key with read and write access.',
-				'autocomplete' => 'new-password',
-				'class'        => 'flavor-agent-settings-row--critical',
-			]
-		);
-		add_settings_field(
-			'flavor_agent_pattern_recommendation_threshold',
-			'Ranking Threshold',
-			[ Settings::class, 'render_text_field' ],
-			Config::PAGE_SLUG,
-			'flavor_agent_pattern_recommendations',
-			[
-				'option'      => 'flavor_agent_pattern_recommendation_threshold',
-				'label_for'   => 'flavor_agent_pattern_recommendation_threshold',
-				'type'        => 'number',
-				'default'     => '0.3',
-				'step'        => '0.01',
-				'min'         => '0',
-				'max'         => '1',
-				'placeholder' => '0.30',
-				'description' => 'Higher values drop weaker matches.',
-				'inputmode'   => 'decimal',
 			]
 		);
 		add_settings_field(
@@ -372,7 +253,7 @@ final class Registrar {
 				'min'         => '0',
 				'max'         => '1',
 				'placeholder' => '0.20',
-				'description' => 'AI Search match threshold.',
+				'description' => 'Higher values drop weaker Cloudflare AI Search matches. AI Search scores are not cosine similarity scores.',
 				'inputmode'   => 'decimal',
 			]
 		);

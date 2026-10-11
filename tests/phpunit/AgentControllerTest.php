@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace FlavorAgent\Tests;
 
 use FlavorAgent\Activity\Repository as ActivityRepository;
-use FlavorAgent\Embeddings\EmbeddingClient;
-use FlavorAgent\Embeddings\QdrantClient;
 use FlavorAgent\Context\ServerCollector;
+use FlavorAgent\Admin\Settings\Config;
+use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\OpenAI\Provider;
 use FlavorAgent\Patterns\PatternIndex;
 use FlavorAgent\REST\Agent_Controller;
@@ -185,17 +185,23 @@ final class AgentControllerTest extends TestCase {
 			'args'      => [],
 		];
 
-		$this->queue_signature_probe();
-		$this->queue_ensure_collection( false );
-		$this->queue_scroll( [] );
-		$this->queue_embeddings(
-			[
-				[ 0.11, 0.22 ],
-				[ 0.33, 0.44 ],
-				[ 0.55, 0.66 ],
-			]
+		$this->queue_cloudflare_items( [] );
+		foreach ( ServerCollector::for_patterns() as $pattern ) {
+			WordPressTestState::$remote_post_responses[] = [
+				'response' => [ 'code' => 200 ],
+				'body'     => wp_json_encode( [ 'success' => true ] ),
+			];
+		}
+		$this->queue_cloudflare_items(
+			array_map(
+				static fn( array $pattern ): array => [
+					'id'     => PatternIndex::pattern_uuid( $pattern['name'] ),
+					'key'    => PatternIndex::pattern_uuid( $pattern['name'] ) . '.md',
+					'status' => 'completed',
+				],
+				ServerCollector::for_patterns()
+			)
 		);
-		$this->queue_qdrant_success( '/points', 'PUT' );
 
 		$request  = new \WP_REST_Request( 'GET', '/flavor-agent/v1/sync-patterns' );
 		$response = Agent_Controller::handle_get_sync_patterns( $request );
@@ -225,6 +231,29 @@ final class AgentControllerTest extends TestCase {
 		$this->assertArrayNotHasKey( PatternIndex::CRON_HOOK, WordPressTestState::$scheduled_events );
 		$this->assertCount( 0, WordPressTestState::$remote_get_calls );
 		$this->assertCount( 0, WordPressTestState::$remote_post_calls );
+	}
+
+	public function test_handle_get_sync_patterns_does_not_migrate_an_old_due_cron_index(): void {
+		$this->configure_pattern_recommendation_backends();
+		WordPressTestState::$options[ PatternIndex::STATE_OPTION ] = [
+			'status'            => 'indexing',
+			'last_synced_at'    => '2026-03-24T00:00:00+00:00',
+			'indexed_count'     => 42,
+			'qdrant_collection' => 'old-patterns',
+		];
+		wp_schedule_single_event( time() - 1, PatternIndex::CRON_HOOK );
+
+		$response = Agent_Controller::handle_get_sync_patterns( new \WP_REST_Request( 'GET', '/flavor-agent/v1/sync-patterns' ) );
+		$state    = $response->get_data()['runtimeState'];
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( 'stale', $state['status'] );
+		$this->assertSame( 'pattern_store_migration_required', $state['stale_reason'] );
+		$this->assertNull( $state['last_synced_at'] );
+		$this->assertSame( 0, $state['indexed_count'] );
+		$this->assertArrayNotHasKey( 'qdrant_collection', $state );
+		$this->assertFalse( wp_next_scheduled( PatternIndex::CRON_HOOK ) );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 	}
 
 	public function test_handle_create_activity_persists_structured_entries(): void {
@@ -781,21 +810,21 @@ final class AgentControllerTest extends TestCase {
 
 	private function configure_pattern_recommendation_backends(): void {
 		WordPressTestState::$options             = [
-			Provider::OPTION_NAME                          => 'cloudflare_workers_ai',
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'account-123',
 			'flavor_agent_cloudflare_workers_ai_api_token' => 'token-xyz',
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
-			'flavor_agent_qdrant_url'                      => 'https://example.cloud.qdrant.io:6333',
-			'flavor_agent_qdrant_key'                      => 'qdrant-key',
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_INSTANCE_ID => PatternSearchInstanceManager::managed_instance_id(),
+			Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE => PatternSearchInstanceManager::credential_signature(
+				'account-123',
+				'token-xyz',
+				'@cf/qwen/qwen3-embedding-0.6b'
+			),
 		];
 		WordPressTestState::$ai_client_supported = true;
 	}
 
-
 	private function save_ready_pattern_index_state(): void {
 		$patterns             = ServerCollector::for_patterns();
-		$embedding_config     = Provider::embedding_configuration();
-		$embedding_signature  = EmbeddingClient::build_signature_for_dimension( 2, $embedding_config );
 		$pattern_fingerprints = [];
 		$normalize_list       = static function ( array $values ): string {
 			$values = array_values(
@@ -833,125 +862,45 @@ final class AgentControllerTest extends TestCase {
 			array_merge(
 				PatternIndex::get_state(),
 				[
-					'status'                 => 'ready',
-					'fingerprint'            => PatternIndex::compute_fingerprint( $patterns ),
-					'qdrant_url'             => (string) get_option( 'flavor_agent_qdrant_url', '' ),
-					'qdrant_collection'      => QdrantClient::get_collection_name( $embedding_signature ),
-					'openai_provider'        => $embedding_config['provider'],
-					'openai_endpoint'        => $embedding_config['endpoint'],
-					'embedding_model'        => $embedding_config['model'],
-					'embedding_dimension'    => 2,
-					'embedding_signature'    => $embedding_signature['signature_hash'],
-					'last_synced_at'         => '2026-03-24T00:00:00+00:00',
-					'last_attempt_at'        => '2026-03-24T00:00:00+00:00',
-					'indexed_count'          => count( $patterns ),
-					'last_error'             => null,
-					'last_error_code'        => '',
-					'last_error_status'      => 0,
-					'last_error_retryable'   => false,
-					'last_error_retry_after' => null,
-					'pattern_fingerprints'   => $pattern_fingerprints,
+					'status'                         => 'ready',
+					'pattern_backend'                => Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
+					'cloudflare_ai_search_namespace' => 'default',
+					'cloudflare_ai_search_instance'  => PatternSearchInstanceManager::managed_instance_id(),
+					'cloudflare_ai_search_signature' => (string) get_option( Config::OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE ),
+					'fingerprint'                    => PatternIndex::compute_fingerprint( $patterns ),
+					'last_synced_at'                 => '2026-03-24T00:00:00+00:00',
+					'last_attempt_at'                => '2026-03-24T00:00:00+00:00',
+					'indexed_count'                  => count( $patterns ),
+					'last_error'                     => null,
+					'last_error_code'                => '',
+					'last_error_status'              => 0,
+					'last_error_retryable'           => false,
+					'last_error_retry_after'         => null,
+					'pattern_fingerprints'           => $pattern_fingerprints,
 				]
 			)
 		);
-
-		if ( [] === WordPressTestState::$remote_get_responses ) {
-			WordPressTestState::$remote_get_response = $this->qdrant_collection_response( 2 );
-		}
-	}
-
-	private function queue_signature_probe(): void {
-		$this->queue_embeddings(
-			[
-				[ 0.01, 0.02 ],
-			]
-		);
-	}
-
-	private function queue_ensure_collection( bool $collection_exists = true ): void {
-		WordPressTestState::$remote_get_responses[] = $collection_exists
-			? $this->qdrant_collection_response( 2 )
-			: $this->qdrant_response(
-				404,
-				[
-					'status' => [
-						'error' => 'Collection not found',
-					],
-				]
-			);
-
-		if ( ! $collection_exists ) {
-			WordPressTestState::$remote_post_responses[] = $this->qdrant_response(
-				200,
-				[
-					'status' => 'ok',
-					'result' => [],
-				]
-			);
-		}
-
-		for ( $i = 0; $i < 5; $i++ ) {
-			$this->queue_qdrant_success( '/index', 'PUT' );
-		}
 	}
 
 	/**
-	 * @param array<int, array<string, mixed>> $points
+	 * @param array<int, array<string, mixed>> $items
 	 */
-	private function queue_scroll( array $points ): void {
-		WordPressTestState::$remote_post_responses[] = $this->qdrant_response(
-			200,
-			[
-				'status' => 'ok',
-				'result' => [
-					'points'           => $points,
-					'next_page_offset' => null,
-				],
-			]
-		);
-	}
-
-	/**
-	 * @param array<int, array<int, float>> $vectors
-	 */
-	private function queue_embeddings( array $vectors ): void {
-		WordPressTestState::$remote_post_responses[] = [
+	private function queue_cloudflare_items( array $items ): void {
+		WordPressTestState::$remote_get_responses[] = [
 			'response' => [ 'code' => 200 ],
 			'body'     => wp_json_encode(
 				[
-					'data' => array_map(
-						static fn( array $vector ): array => [
-							'embedding' => $vector,
-						],
-						$vectors
-					),
+					'result'      => $items,
+					'result_info' => [
+						'count'       => count( $items ),
+						'page'        => 1,
+						'total_count' => count( $items ),
+						'per_page'    => 50,
+					],
 				]
 			),
 		];
 	}
-
-	private function queue_qdrant_success( string $url_suffix, string $method ): void {
-		unset( $url_suffix, $method );
-
-		WordPressTestState::$remote_post_responses[] = $this->qdrant_response(
-			200,
-			[
-				'status' => 'ok',
-				'result' => [],
-			]
-		);
-	}
-
-	/**
-	 * @return array<string, mixed>
-	 */
-	private function qdrant_response( int $status, array $body ): array {
-		return [
-			'response' => [ 'code' => $status ],
-			'body'     => wp_json_encode( $body ),
-		];
-	}
-
 
 	private function stub_successful_llm_response(): void {
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
@@ -963,54 +912,6 @@ final class AgentControllerTest extends TestCase {
 			]
 		);
 	}
-
-	/**
-	 * @param float[] $vector
-	 * @return array<string, mixed>
-	 */
-	private function embedding_response( array $vector ): array {
-		return [
-			'response' => [ 'code' => 200 ],
-			'body'     => wp_json_encode(
-				[
-					'data' => [
-						[
-							'embedding' => $vector,
-						],
-					],
-				]
-			),
-		];
-	}
-
-
-	/**
-	 * @return array<string, mixed>
-	 */
-	private function qdrant_collection_response( int $dimension ): array {
-		return [
-			'response' => [ 'code' => 200 ],
-			'body'     => wp_json_encode(
-				[
-					'status' => 'ok',
-					'result' => [
-						'config' => [
-							'params' => [
-								'vectors' => [
-									'size'     => $dimension,
-									'distance' => 'Cosine',
-								],
-							],
-						],
-					],
-				],
-			),
-		];
-	}
-
-
-
-
 
 	/**
 	 * @return array<string, mixed>

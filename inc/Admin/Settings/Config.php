@@ -6,7 +6,6 @@ namespace FlavorAgent\Admin\Settings;
 
 final class Config {
 
-
 	public const OPTION_GROUP                                    = 'flavor_agent_settings';
 	public const PAGE_SLUG                                       = 'flavor-agent';
 	public const GROUP_CHAT                                      = 'chat';
@@ -25,12 +24,9 @@ final class Config {
 	public const OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_VALIDATED_SIGNATURE      = 'flavor_agent_cloudflare_pattern_ai_search_validated_signature';
 	public const OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_PROVISIONING_STATE       = 'flavor_agent_cloudflare_pattern_ai_search_provisioning_state';
 	public const OPTION_CLOUDFLARE_PATTERN_AI_SEARCH_API_TOKEN                = 'flavor_agent_cloudflare_pattern_ai_search_api_token';
-	public const OPTION_PATTERN_RECOMMENDATION_THRESHOLD_QDRANT               = 'flavor_agent_pattern_recommendation_threshold';
 	public const OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH = 'flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search';
-	public const PATTERN_BACKEND_QDRANT                                       = 'qdrant';
 	public const PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH                         = 'cloudflare_ai_search';
 	public const PATTERN_BACKENDS                    = [
-		self::PATTERN_BACKEND_QDRANT,
 		self::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH,
 	];
 	public const OPEN_SECTION_STORAGE_KEY            = 'flavor-agent-settings-open-section';

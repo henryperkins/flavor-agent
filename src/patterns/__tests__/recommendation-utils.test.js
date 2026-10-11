@@ -119,12 +119,7 @@ describe( 'getPatternRecommendationInsights', () => {
 					name: 'theme/hero',
 					categories: [ 'hero' ],
 					ranking: {
-						sourceSignals: [
-							'qdrant_semantic',
-							'qdrant_structural',
-							'cloudflare_ai_search',
-							'llm_ranker',
-						],
+						sourceSignals: [ 'cloudflare_ai_search', 'llm_ranker' ],
 						rankingHint: {
 							matchesNearbyBlock: true,
 						},
@@ -132,8 +127,6 @@ describe( 'getPatternRecommendationInsights', () => {
 				}
 			)
 		).toEqual( [
-			'Semantic match',
-			'Structural fit',
 			'AI Search match',
 			'Model ranked',
 			'Category: hero',
@@ -149,11 +142,14 @@ describe( 'getPatternRecommendationInsights', () => {
 				{
 					name: 'theme/cards',
 					ranking: {
-						sourceSignals: [ 'qdrant_semantic', 'qdrant_semantic' ],
+						sourceSignals: [
+							'cloudflare_ai_search',
+							'cloudflare_ai_search',
+						],
 						rankingHint: {},
 					},
 				}
 			)
-		).toEqual( [ 'Semantic match', 'Category: cards', 'Allowed here' ] );
+		).toEqual( [ 'AI Search match', 'Category: cards', 'Allowed here' ] );
 	} );
 } );

@@ -62,7 +62,7 @@ test("@wp70-site-editor settings page keeps compact help-first IA without changi
     "Text-generation provider status.",
   );
   await expect(embeddingSection.locator(sectionSummarySelector)).toContainText(
-    "Embedding credentials for semantic features.",
+    "Cloudflare credentials and model for pattern storage setup.",
   );
   await expect(patternSection.locator(sectionSummarySelector)).toContainText(
     "Storage and sync for pattern recommendations.",
@@ -139,7 +139,7 @@ test("@wp70-site-editor settings page keeps compact help-first IA without changi
   await expect(
     page.locator("#tab-panel-flavor-agent-configuration"),
   ).toContainText(
-    "Pattern Storage chooses where the pattern catalog is indexed.",
+    "Cloudflare AI Search is the pattern catalog store.",
   );
 
   await page
@@ -158,7 +158,7 @@ test("@wp70-site-editor settings page keeps compact help-first IA without changi
   await expect(
     page.locator("#tab-panel-flavor-agent-troubleshooting"),
   ).toContainText(
-    "When core Guidelines are available, Flavor Agent reads them first.",
+    "Shared Guidelines take precedence when they contain content.",
   );
   await expect(
     page.locator("#tab-panel-flavor-agent-troubleshooting"),
@@ -313,7 +313,7 @@ test("@wp70-site-editor settings page saves, validates, and persists safe fields
 
   runWpCli(
     wp70Harness,
-    ["option", "delete", "flavor_agent_pattern_recommendation_threshold"],
+    ["option", "delete", "flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search"],
     { allowFailure: true },
   );
   runWpCli(
@@ -349,7 +349,7 @@ test("@wp70-site-editor settings page saves, validates, and persists safe fields
 
   await setSettingsFieldValue(
     page,
-    "#flavor_agent_pattern_recommendation_threshold",
+    "#flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search",
     "0.72",
   );
   await setSettingsFieldValue(
@@ -386,14 +386,14 @@ test("@wp70-site-editor settings page saves, validates, and persists safe fields
   ).not.toContainText("Developer docs settings saved.");
   await expect(
     page.locator(".flavor-agent-settings-save-summary"),
-  ).toContainText("Guidelines saved.");
+  ).toContainText("Flavor Agent guidelines saved.");
 
   const savedValues = runWpCli(wp70Harness, [
     "eval",
     `
 echo wp_json_encode(
 	array(
-		'threshold' => get_option( 'flavor_agent_pattern_recommendation_threshold' ),
+		'threshold' => get_option( 'flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search' ),
 		'maxRecommendations' => get_option( 'flavor_agent_pattern_max_recommendations' ),
 		'maxDocs' => get_option( 'flavor_agent_cloudflare_ai_search_max_results' ),
 		'siteGuidelines' => get_option( 'flavor_agent_guideline_site' ),
@@ -427,7 +427,7 @@ echo wp_json_encode(
   expect(
     await getSettingsFieldValue(
       page,
-      "#flavor_agent_pattern_recommendation_threshold",
+      "#flavor_agent_pattern_recommendation_threshold_cloudflare_ai_search",
     ),
   ).toBe("0.72");
   expect(

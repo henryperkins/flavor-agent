@@ -1293,12 +1293,6 @@ final class Registration {
 										'embeddingModel' => [ 'type' => [ 'string', 'null' ] ],
 									],
 								],
-								'qdrant'                => [
-									'type'       => 'object',
-									'properties' => [
-										'configured' => [ 'type' => 'boolean' ],
-									],
-								],
 								'cloudflare_ai_search'  => [
 									'type'       => 'object',
 									'properties' => [

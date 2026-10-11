@@ -30,25 +30,24 @@ final class PatternAbilities {
 	use FormatsDocsGuidance;
 	use NormalizesInput;
 
-	private const DEFAULT_SEMANTIC_LIMIT                 = 8;
-	private const DEFAULT_STRUCTURAL_LIMIT               = 6;
-	private const FILTERED_SEMANTIC_LIMIT                = 24;
-	private const FILTERED_STRUCTURAL_LIMIT              = 18;
-	private const GENERAL_BLOCK_OVERRIDE_BONUS           = 0.03;
-	private const CUSTOM_BLOCK_MATCHING_OVERRIDE_BONUS   = 0.04;
-	private const CUSTOM_BLOCK_GENERIC_OVERRIDE_BONUS    = 0.02;
-	private const SIBLING_OVERRIDE_BONUS_PER_MATCH       = 0.01;
-	private const SIBLING_OVERRIDE_BONUS_CAP             = 0.02;
-	private const TOTAL_OVERRIDE_BONUS_CAP               = 0.05;
-	private const MAX_NEARBY_SIBLING_BLOCK_TYPES         = 4;
-	private const MAX_LLM_CANDIDATES                     = 12;
-	private const DEFAULT_MAX_RECOMMENDATIONS            = 8;
-	private const DEFAULT_RECOMMENDATION_SCORE_THRESHOLD = 0.3;
-	private const MAX_LLM_INPUT_CHARS                    = 24000;
-	private const MAX_LLM_STRUCTURE_BLOCKS               = 14;
-	private const MAX_LLM_STRUCTURE_LINES                = 18;
-	private const MAX_LLM_CONTENT_PREVIEW_CHARS          = 240;
-	private const SYNCED_PATTERN_NAME_PREFIX             = 'core/block/';
+	private const DEFAULT_SEMANTIC_LIMIT               = 8;
+	private const DEFAULT_STRUCTURAL_LIMIT             = 6;
+	private const FILTERED_SEMANTIC_LIMIT              = 24;
+	private const FILTERED_STRUCTURAL_LIMIT            = 18;
+	private const GENERAL_BLOCK_OVERRIDE_BONUS         = 0.03;
+	private const CUSTOM_BLOCK_MATCHING_OVERRIDE_BONUS = 0.04;
+	private const CUSTOM_BLOCK_GENERIC_OVERRIDE_BONUS  = 0.02;
+	private const SIBLING_OVERRIDE_BONUS_PER_MATCH     = 0.01;
+	private const SIBLING_OVERRIDE_BONUS_CAP           = 0.02;
+	private const TOTAL_OVERRIDE_BONUS_CAP             = 0.05;
+	private const MAX_NEARBY_SIBLING_BLOCK_TYPES       = 4;
+	private const MAX_LLM_CANDIDATES                   = 12;
+	private const DEFAULT_MAX_RECOMMENDATIONS          = 8;
+	private const MAX_LLM_INPUT_CHARS                  = 24000;
+	private const MAX_LLM_STRUCTURE_BLOCKS             = 14;
+	private const MAX_LLM_STRUCTURE_LINES              = 18;
+	private const MAX_LLM_CONTENT_PREVIEW_CHARS        = 240;
+	private const SYNCED_PATTERN_NAME_PREFIX           = 'core/block/';
 
 	private const PATTERN_REQUEST_PURPOSE_INSERTER_RANKING       = 'inserter_ranking';
 	private const PATTERN_MODEL_REQUEST_NO_RANKABLE_CANDIDATES   = 'no_rankable_candidates';
@@ -152,8 +151,8 @@ final class PatternAbilities {
 	}
 
 	/**
-	 * Vector-powered pattern recommendation: embed query, two-pass Qdrant
-	 * search, LLM ranking, rehydrate from Qdrant payloads.
+	 * Retrieve candidates from the private Cloudflare AI Search pattern index,
+	 * rank them, and rehydrate current readable patterns before returning them.
 	 */
 	public static function recommend_patterns( mixed $input ): array|\WP_Error {
 		$input                       = self::normalize_input( $input );
@@ -297,6 +296,13 @@ final class PatternAbilities {
 
 		// Step 2: Staleness check.
 		$has_usable_index = PatternIndex::has_usable_index( $state );
+		if ( in_array( 'pattern_store_migration_required', PatternIndex::get_stale_reasons( $state ), true ) ) {
+			return new \WP_Error(
+				'index_unavailable',
+				'Pattern recommendations are unavailable until you configure Cloudflare AI Search and run Sync Pattern Catalog from Settings > Flavor Agent.',
+				[ 'status' => 503 ]
+			);
+		}
 
 		switch ( $state['status'] ) {
 			case 'ready':
@@ -307,7 +313,7 @@ final class PatternAbilities {
 					PatternIndex::schedule_sync();
 					return new \WP_Error(
 						'index_warming',
-						'Pattern catalog is rebuilding because the embedding or vector-store configuration changed. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
+						'Pattern catalog is rebuilding because the Cloudflare pattern search configuration changed. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent.',
 						[ 'status' => 503 ]
 					);
 				}
@@ -414,7 +420,7 @@ final class PatternAbilities {
 			$has_insertion_context
 		);
 
-		$should_clauses      = self::build_structural_should_clauses(
+		$should_clauses = self::build_structural_should_clauses(
 			$post_type,
 			$block_name,
 			$template_type,
@@ -424,7 +430,6 @@ final class PatternAbilities {
 			$template_part_area,
 			$has_insertion_context
 		);
-		$ran_structural_pass = ! empty( $should_clauses );
 
 		// Step 3/4: Retrieve candidates from the selected pattern backend.
 		$backend = PatternRetrievalBackendFactory::for_runtime_state( $state );
@@ -626,7 +631,7 @@ final class PatternAbilities {
 		$recommendations_by_name                     = [];
 		$selected_backend                            = PatternRetrievalBackendFactory::selected_backend();
 		$max_recommendations                         = self::max_recommendations();
-		$score_threshold                             = self::recommendation_score_threshold( $selected_backend );
+		$score_threshold                             = self::recommendation_score_threshold();
 		$ranked_recommendations                      = $data['recommendations'];
 		$diagnostics['pipelineTrace']['llmReturned'] = count( $ranked_recommendations );
 		foreach ( $ranked_recommendations as $rec ) {
@@ -657,12 +662,7 @@ final class PatternAbilities {
 				sanitize_text_field( $reason_text ),
 				$ranking_hint
 			);
-			$source_signals = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $selected_backend
-				? [ 'cloudflare_ai_search', 'llm_ranker' ]
-				: [ 'qdrant_semantic', 'llm_ranker' ];
-			if ( Config::PATTERN_BACKEND_QDRANT === $selected_backend && $ran_structural_pass ) {
-				$source_signals[] = 'qdrant_structural';
-			}
+			$source_signals = [ 'cloudflare_ai_search', 'llm_ranker' ];
 			if ( is_array( $ranking_hint['componentScores'] ?? null ) ) {
 				$source_signals[] = 'component_ranking_v1';
 			}
@@ -743,7 +743,6 @@ final class PatternAbilities {
 								'indexStatus'        => (string) ( $state['status'] ?? '' ),
 								'patternBackend'     => $selected_backend,
 								'embeddingSignature' => (string) ( $state['embedding_signature'] ?? '' ),
-								'qdrantCollection'   => (string) ( $state['qdrant_collection'] ?? '' ),
 								'cloudflareAISearchNamespace' => (string) ( $state['cloudflare_ai_search_namespace'] ?? '' ),
 								'cloudflareAISearchInstance' => (string) ( $state['cloudflare_ai_search_instance'] ?? '' ),
 							],
@@ -790,7 +789,11 @@ final class PatternAbilities {
 	}
 
 	private static function validate_recommendation_backends(): true|\WP_Error {
-		$selected_backend = PatternRetrievalBackendFactory::selected_backend();
+		$backend = PatternRetrievalBackendFactory::for_runtime_state( [] );
+
+		if ( is_wp_error( $backend ) ) {
+			return $backend;
+		}
 
 		if ( ! Provider::chat_configured() ) {
 			return new \WP_Error(
@@ -800,29 +803,10 @@ final class PatternAbilities {
 			);
 		}
 
-		if ( Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $selected_backend ) {
-			if ( ! PatternSearchClient::is_configured() ) {
-				return new \WP_Error(
-					'missing_credentials',
-					'Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
-					[ 'status' => 400 ]
-				);
-			}
-
-			return true;
-		}
-
-		$qdrant_url = get_option( 'flavor_agent_qdrant_url', '' );
-		$qdrant_key = get_option( 'flavor_agent_qdrant_key', '' );
-
-		if (
-			! Provider::embedding_configured()
-			|| $qdrant_url === ''
-			|| $qdrant_key === ''
-		) {
+		if ( ! PatternSearchClient::is_configured() ) {
 			return new \WP_Error(
 				'missing_credentials',
-				'Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
+				'Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors.',
 				[ 'status' => 400 ]
 			);
 		}
@@ -1005,7 +989,6 @@ final class PatternAbilities {
 			'indexedCount'                   => max( 0, (int) ( $state['indexed_count'] ?? 0 ) ),
 			'staleReason'                    => sanitize_key( (string) ( $state['stale_reason'] ?? '' ) ),
 			'staleReasons'                   => $stale_reasons,
-			'qdrantCollection'               => sanitize_text_field( (string) ( $state['qdrant_collection'] ?? '' ) ),
 			'embeddingSignature'             => sanitize_text_field( (string) ( $state['embedding_signature'] ?? '' ) ),
 			'cloudflareAISearchNamespace'    => sanitize_text_field( (string) ( $state['cloudflare_ai_search_namespace'] ?? '' ) ),
 			'cloudflareAISearchInstance'     => sanitize_text_field( (string) ( $state['cloudflare_ai_search_instance'] ?? '' ) ),
@@ -2354,14 +2337,11 @@ SYSTEM;
 		];
 	}
 
-	private static function recommendation_score_threshold( string $backend ): float {
-		$option  = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $backend
-			? Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH
-			: Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_QDRANT;
-		$default = Config::PATTERN_BACKEND_CLOUDFLARE_AI_SEARCH === $backend
-			? Config::PATTERN_AI_SEARCH_THRESHOLD_DEFAULT
-			: self::DEFAULT_RECOMMENDATION_SCORE_THRESHOLD;
-		$value   = (float) get_option( $option, $default );
+	private static function recommendation_score_threshold(): float {
+		$value = (float) get_option(
+			Config::OPTION_PATTERN_RECOMMENDATION_THRESHOLD_CLOUDFLARE_AI_SEARCH,
+			Config::PATTERN_AI_SEARCH_THRESHOLD_DEFAULT
+		);
 
 		return max( 0.0, min( 1.0, $value ) );
 	}

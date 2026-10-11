@@ -45,13 +45,10 @@ final class InfraAbilities {
 
 		$wordpress_ai_client_configured = WordPressAIClient::is_supported();
 		$workers_ai_embedding_config    = Provider::embedding_configuration( WorkersAIEmbeddingConfiguration::PROVIDER );
-		$qdrant_url                     = get_option( 'flavor_agent_qdrant_url', '' );
-		$qdrant_key                     = get_option( 'flavor_agent_qdrant_key', '' );
 		$cloudflare_ai_search_id        = AISearchClient::configured_instance_id();
 		$cloudflare_runtime_state       = AISearchClient::get_runtime_state();
 		$pattern_readiness              = PatternIndex::recommendation_index_readiness();
 
-		$qdrant_configured                 = ! empty( $qdrant_url ) && ! empty( $qdrant_key );
 		$cloudflare_configured             = AISearchClient::is_configured();
 		$active_chat_configured            = ChatClient::is_supported();
 		$recommendations_enabled           = FeatureBootstrap::recommendation_feature_enabled();
@@ -97,9 +94,6 @@ final class InfraAbilities {
 					'embeddingModel' => ! empty( $workers_ai_embedding_config['model'] )
 						? $workers_ai_embedding_config['model']
 						: null,
-				],
-				'qdrant'                => [
-					'configured' => $qdrant_configured,
 				],
 				'cloudflare_ai_search'  => [
 					'configured' => $cloudflare_configured,

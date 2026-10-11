@@ -37,6 +37,7 @@ final class UninstallOptions {
 			'flavor_agent_cloudflare_workers_ai_account_id',
 			'flavor_agent_cloudflare_workers_ai_api_token',
 			'flavor_agent_cloudflare_workers_ai_embedding_model',
+			// Retired storage options remain here only to clean up older installs.
 			'flavor_agent_qdrant_url',
 			'flavor_agent_qdrant_key',
 			'flavor_agent_pattern_recommendation_threshold',

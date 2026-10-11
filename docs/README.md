@@ -69,7 +69,7 @@ Read these documents in this order:
    - `release-surface-scope-review.md` — release stopping points per surface, scope-freeze checklist, and product-coherence rubric for what merits release presence.
    - `surfaces/release-stop-lines.md` — canonical release stop-line catalog used by the release scope review.
    - `release-submission-and-review.md` — WordPress.org submission artifacts, guideline audit, reviewer-cycle discipline, and KPIs from pre-submission through approval.
-   - `pattern-recommendation-debugging.md` — operator runbook for sync, Qdrant collection health, raw retrieval, and reranking triage.
+   - `pattern-recommendation-debugging.md` — operator runbook for managed Cloudflare AI Search sync, item processing, scoped retrieval, and reranking triage.
    - `provider-precedence.md` — AI backend selection, credential fallback chain, and surface-to-backend map.
    - `external-service-disclosure.md` — service disclosure source for external endpoints, triggers, and data types.
    - `developer-docs-public-corpus-runbook.md` — ownership, refresh cadence, validation query, and release gate for the built-in public Developer Docs grounding corpus.
@@ -118,7 +118,7 @@ Each top-level doc has one job:
    - `release-surface-scope-review.md` — Which surfaces merit release presence? Which surfaces should stop, harden, or remain advisory before release?
    - `surfaces/release-stop-lines.md` — Which stop line applies to each release surface?
    - `release-submission-and-review.md` — Which artifacts and audits does WordPress.org require? Which signals indicate progress toward approval?
-   - `pattern-recommendation-debugging.md` — How do you debug sync, Qdrant collection health, raw retrieval, and reranking failures?
+   - `pattern-recommendation-debugging.md` — How do you debug managed Cloudflare AI Search sync, item processing, scoped retrieval, and reranking failures?
    - `provider-precedence.md` — Which AI backend serves a request? What credential sources are checked and in what order?
    - `external-service-disclosure.md` — Which external services can be contacted? What data is sent and what user action triggers it?
    - `developer-docs-public-corpus-runbook.md` — Who owns the built-in public Developer Docs grounding corpus? Which source scopes, refresh cadence, and validation evidence gate the current-release coverage warning?

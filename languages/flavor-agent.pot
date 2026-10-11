@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-08T20:14:28+00:00\n"
+"POT-Creation-Date: 2026-10-11T05:56:36+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: flavor-agent\n"
@@ -17,7 +17,7 @@ msgstr ""
 #. Plugin Name of the plugin
 #: flavor-agent.php
 #: inc/Abilities/Registration.php:43
-#: inc/Admin/Settings/Page.php:52
+#: inc/Admin/Settings/Page.php:56
 #: inc/AI/FlavorAgentFeature.php:26
 #: inc/MCP/ServerBootstrap.php:37
 msgid "Flavor Agent"
@@ -37,84 +37,84 @@ msgstr ""
 msgid "You cannot request content recommendations for that post."
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1042
+#: inc/Abilities/RecommendationAbilityExecution.php:1035
 msgid "Content recommendation request"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1043
+#: inc/Abilities/RecommendationAbilityExecution.php:1036
 msgid "Navigation recommendation request"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1044
+#: inc/Abilities/RecommendationAbilityExecution.php:1037
 msgid "Pattern recommendation request"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1045
+#: inc/Abilities/RecommendationAbilityExecution.php:1038
 msgid "Block recommendation request"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1046
+#: inc/Abilities/RecommendationAbilityExecution.php:1039
 msgid "Template recommendation request"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1047
+#: inc/Abilities/RecommendationAbilityExecution.php:1040
 msgid "Template-part recommendation request"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1048
+#: inc/Abilities/RecommendationAbilityExecution.php:1041
 msgid "Post content structure recommendation request"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1049
+#: inc/Abilities/RecommendationAbilityExecution.php:1042
 msgid "Global Styles recommendation request"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1050
+#: inc/Abilities/RecommendationAbilityExecution.php:1043
 msgid "Style Book recommendation request"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1051
+#: inc/Abilities/RecommendationAbilityExecution.php:1044
 msgid "AI request diagnostic"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1188
+#: inc/Abilities/RecommendationAbilityExecution.php:1181
 msgid "Content request failed"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1189
+#: inc/Abilities/RecommendationAbilityExecution.php:1182
 msgid "Navigation request failed"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1190
+#: inc/Abilities/RecommendationAbilityExecution.php:1183
 msgid "Pattern request failed"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1191
-#: src/store/index.js:1182
+#: inc/Abilities/RecommendationAbilityExecution.php:1184
+#: src/store/index.js:1183
 msgid "Block request failed"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1192
+#: inc/Abilities/RecommendationAbilityExecution.php:1185
 msgid "Template request failed"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1193
+#: inc/Abilities/RecommendationAbilityExecution.php:1186
 msgid "Template-part request failed"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1194
+#: inc/Abilities/RecommendationAbilityExecution.php:1187
 msgid "Post content structure request failed"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1195
+#: inc/Abilities/RecommendationAbilityExecution.php:1188
 msgid "Global Styles request failed"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1196
+#: inc/Abilities/RecommendationAbilityExecution.php:1189
 msgid "Style Book request failed"
 msgstr ""
 
-#: inc/Abilities/RecommendationAbilityExecution.php:1197
+#: inc/Abilities/RecommendationAbilityExecution.php:1190
 msgid "AI request failed"
 msgstr ""
 
@@ -411,118 +411,109 @@ msgstr ""
 msgid "Block recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:52
+#: inc/Abilities/SurfaceCapabilities.php:51
 msgid "Configure a text-generation provider in Settings > Connectors to enable content recommendations."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:56
+#: inc/Abilities/SurfaceCapabilities.php:55
 msgid "Content recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:61
+#: inc/Abilities/SurfaceCapabilities.php:60
 msgid "Configure a text-generation provider in Settings > Connectors to enable template recommendations."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:65
+#: inc/Abilities/SurfaceCapabilities.php:64
 msgid "Template recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:70
+#: inc/Abilities/SurfaceCapabilities.php:69
 msgid "Configure a text-generation provider in Settings > Connectors to enable template-part recommendations."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:74
+#: inc/Abilities/SurfaceCapabilities.php:73
 msgid "Template-part recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:79
+#: inc/Abilities/SurfaceCapabilities.php:78
 msgid "Configure a text-generation provider in Settings > Connectors to enable navigation recommendations."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:83
+#: inc/Abilities/SurfaceCapabilities.php:82
 msgid "Navigation recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:88
+#: inc/Abilities/SurfaceCapabilities.php:87
 msgid "Configure a text-generation provider in Settings > Connectors to enable Global Styles recommendations."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:92
+#: inc/Abilities/SurfaceCapabilities.php:91
 msgid "Global Styles recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:97
+#: inc/Abilities/SurfaceCapabilities.php:96
 msgid "Configure a text-generation provider in Settings > Connectors to enable Style Book recommendations."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:101
+#: inc/Abilities/SurfaceCapabilities.php:100
 msgid "Style Book recommendations are not configured yet. Ask an administrator to configure a text-generation provider in Settings > Connectors."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:206
+#: inc/Abilities/SurfaceCapabilities.php:205
 #: src/utils/capability-flags.js:216
 msgid "Navigation recommendations require the edit_theme_options capability."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:231
+#: inc/Abilities/SurfaceCapabilities.php:230
 #: src/utils/capability-flags.js:226
 msgid "Global Styles recommendations require the edit_theme_options capability."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:255
+#: inc/Abilities/SurfaceCapabilities.php:254
 #: src/utils/capability-flags.js:240
 msgid "Style Book recommendations require the edit_theme_options capability."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:292
+#: inc/Abilities/SurfaceCapabilities.php:291
 msgid "Enable Flavor Agent in Settings > AI to use recommendation surfaces."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:293
+#: inc/Abilities/SurfaceCapabilities.php:292
 msgid "Flavor Agent recommendations are disabled. Ask an administrator to enable Flavor Agent in Settings > AI."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:423
+#: inc/Abilities/SurfaceCapabilities.php:422
 msgid "Pattern recommendations are not configured yet. Ask an administrator to configure Pattern Storage in Settings > Flavor Agent and a text-generation provider in Settings > Connectors."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:428
-msgid "Pattern recommendations need the first pattern catalog sync in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors."
+#: inc/Abilities/SurfaceCapabilities.php:427
+msgid "Pattern recommendations need a pattern catalog sync in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:431
-msgid "Pattern recommendations need the first pattern catalog sync in Settings > Flavor Agent."
+#: inc/Abilities/SurfaceCapabilities.php:430
+msgid "Pattern recommendations need a pattern catalog sync in Settings > Flavor Agent."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:435
+#: inc/Abilities/SurfaceCapabilities.php:434
 msgid "Pattern catalog is building. Try again shortly or run Sync Pattern Catalog from Settings > Flavor Agent."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:439
+#: inc/Abilities/SurfaceCapabilities.php:438
 msgid "Pattern catalog sync failed. Review the last sync error in Settings > Flavor Agent."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:444
+#: inc/Abilities/SurfaceCapabilities.php:442
+#: src/utils/capability-flags.js:250
 #: src/utils/capability-flags.js:254
 msgid "Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:448
+#: inc/Abilities/SurfaceCapabilities.php:446
 msgid "Pattern recommendations need Cloudflare AI Search Pattern Storage in Settings > Flavor Agent."
 msgstr ""
 
-#: inc/Abilities/SurfaceCapabilities.php:451
-#: inc/Abilities/SurfaceCapabilities.php:462
+#: inc/Abilities/SurfaceCapabilities.php:449
 msgid "Pattern recommendations need a usable text-generation provider in Settings > Connectors."
-msgstr ""
-
-#: inc/Abilities/SurfaceCapabilities.php:455
-#: src/utils/capability-flags.js:250
-msgid "Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent, plus a usable text-generation provider in Settings > Connectors."
-msgstr ""
-
-#: inc/Abilities/SurfaceCapabilities.php:459
-msgid "Pattern recommendations need the Embedding Model and Qdrant Pattern Storage in Settings > Flavor Agent."
 msgstr ""
 
 #: inc/Activity/PersistenceAssurance.php:193
@@ -570,8 +561,8 @@ msgstr ""
 
 #: inc/Activity/PersistenceAssurance.php:265
 #: src/components/AIActivitySection.js:221
-#: src/inspector/SuggestionChips.js:282
-#: src/inspector/SuggestionChips.js:357
+#: src/inspector/SuggestionChips.js:300
+#: src/inspector/SuggestionChips.js:375
 #: src/template-parts/TemplatePartRecommender.js:1188
 #: src/templates/TemplateRecommender.js:1096
 msgid "Changed in editor"
@@ -581,7 +572,7 @@ msgstr ""
 #: src/admin/activity-log-utils.js:1740
 #: src/admin/activity-log-utils.js:1933
 #: src/admin/activity-log.js:1733
-#: src/admin/activity-log.js:3468
+#: src/admin/activity-log.js:3516
 #: src/components/AIActivitySection.js:222
 msgid "Applied"
 msgstr ""
@@ -600,7 +591,7 @@ msgstr ""
 #: src/admin/activity-log-utils.js:1736
 #: src/admin/activity-log-utils.js:1923
 #: src/admin/activity-log.js:181
-#: src/admin/activity-log.js:3476
+#: src/admin/activity-log.js:3524
 #: src/components/AIActivitySection.js:146
 msgid "Rejected"
 msgstr ""
@@ -609,7 +600,7 @@ msgstr ""
 #: src/admin/activity-log-utils.js:1738
 #: src/admin/activity-log-utils.js:1925
 #: src/admin/activity-log.js:187
-#: src/admin/activity-log.js:3480
+#: src/admin/activity-log.js:3528
 #: src/components/AIActivitySection.js:148
 msgid "Expired"
 msgstr ""
@@ -661,7 +652,7 @@ msgid "AI Activity"
 msgstr ""
 
 #: inc/Admin/ActivityPage.php:54
-#: src/admin/activity-log.js:3882
+#: src/admin/activity-log.js:3988
 msgid "AI Activity Log"
 msgstr ""
 
@@ -670,12 +661,12 @@ msgid "Flavor Agent could not load the interactive activity log. Reload this pag
 msgstr ""
 
 #: inc/Admin/ActivityPage.php:66
-#: src/admin/activity-log.js:3903
+#: src/admin/activity-log.js:4009
 msgid "Flavor Agent settings"
 msgstr ""
 
 #: inc/Admin/ActivityPage.php:69
-#: src/admin/activity-log.js:3906
+#: src/admin/activity-log.js:4012
 msgid "Connectors"
 msgstr ""
 
@@ -702,7 +693,7 @@ msgid "Target: %1$s. Requested by: %2$s. Expires: %3$s."
 msgstr ""
 
 #: inc/Admin/ActivityPage.php:138
-#: inc/Admin/Settings/Page.php:617
+#: inc/Admin/Settings/Page.php:638
 msgid "Open AI Activity"
 msgstr ""
 
@@ -794,14 +785,10 @@ msgid "Cloudflare Workers AI validation failed. Check the account ID, API token,
 msgstr ""
 
 #: inc/Admin/Settings/Feedback.php:387
-msgid "Qdrant validation failed. Check the cluster URL and API key, then try again."
-msgstr ""
-
-#: inc/Admin/Settings/Feedback.php:388
 msgid "Cloudflare AI Search Pattern Storage validation failed. Check the Cloudflare credentials from the Embedding Model section and managed pattern index, then try again."
 msgstr ""
 
-#: inc/Admin/Settings/Feedback.php:389
+#: inc/Admin/Settings/Feedback.php:388
 msgid "Validation failed. Check the saved values and try again."
 msgstr ""
 
@@ -827,808 +814,885 @@ msgstr ""
 msgid "Use Connectors for text generation. Flavor Agent shows the active chat path here."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:48
-msgid "Use this page for embedding credentials, pattern storage, developer-doc grounding limits, Guidelines, and AI Activity logging controls."
+#: inc/Admin/Settings/Help.php:46
+msgid "Enable Flavor Agent in Settings > AI and configure a text-generation provider in Connectors. Then use Flavor Agent in the block editor: open a post, select a block, and open AI Recommendations in its settings. Opening the editor does not request recommendations, apply changes, or publish content."
 msgstr ""
 
 #: inc/Admin/Settings/Help.php:49
+msgid "Use this page for embedding credentials, pattern storage, developer-doc grounding limits, Guidelines, and AI Activity logging controls."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:50
 msgid "Use this page for embedding credentials, pattern storage, Developer Docs status, Guidelines, and AI Activity logging controls."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:51
-msgid "When core Guidelines are available, Flavor Agent reads them first. Legacy fields remain available for migration and rollback."
+#: inc/Admin/Settings/Help.php:52
+msgid "Shared Guidelines take precedence when they contain content. The Guidelines section identifies the active source and shows its guidance. Legacy fields, imports, exports, and Save Changes edit only the Flavor Agent fallback."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:58
+#: inc/Admin/Settings/Help.php:59
 msgid "Models & Storage"
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:62
-msgid "Embedding credentials power semantic matching, including Qdrant pattern recommendations."
-msgstr ""
-
 #: inc/Admin/Settings/Help.php:63
-msgid "Pattern Storage chooses where the pattern catalog is indexed. Qdrant uses the configured Embedding Model."
+msgid "The Cloudflare account, token, and model support pattern storage setup. Save Changes sends an embedding validation request; Cloudflare AI Search manages embeddings for the pattern catalog."
 msgstr ""
 
 #: inc/Admin/Settings/Help.php:64
-msgid "Private AI Search pattern storage reuses the Cloudflare account and token from the Embedding Model section. Flavor Agent creates and owns a dedicated pattern index when Cloudflare AI Search Pattern Storage is selected."
+msgid "Configured means settings are present, not that the service is currently reachable. Changed credentials are validated when saved. Pattern Sync reports the latest index result; checking status may continue an already queued sync."
 msgstr ""
 
 #: inc/Admin/Settings/Help.php:65
-msgid "Qdrant and AI Search scores use different scales, so tune thresholds separately."
+msgid "Cloudflare AI Search is the pattern catalog store. Save Cloudflare credentials to provision the managed index, then sync the pattern catalog."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:72
+#: inc/Admin/Settings/Help.php:66
+msgid "Private AI Search pattern storage reuses the Cloudflare account and token from the Embedding Model section. Saving valid Cloudflare settings creates or revalidates a dedicated pattern index owned by Flavor Agent."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:67
+msgid "The AI Search match threshold filters weaker pattern matches."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:74
 msgid "Troubleshooting"
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:78
+#: inc/Admin/Settings/Help.php:80
 msgid "Developer Docs use the built-in developer.wordpress.org grounding path. Recommendations still run without grounding when the search backend is unreachable."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:79
-#: inc/Admin/Settings/Page.php:761
+#: inc/Admin/Settings/Help.php:81
+#: inc/Admin/Settings/Page.php:747
 msgid "Developer Docs grounding is temporarily disabled in this release by release policy. Recommendations remain available."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:81
+#: inc/Admin/Settings/Help.php:83
 msgid "The Developer Docs group shows compact runtime status. Detailed grounding diagnostics, fingerprints, and request history belong in AI Activity entries and validation logs rather than the primary settings form."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:82
+#: inc/Admin/Settings/Help.php:84
 msgid "Pattern Sync stays unavailable until the selected storage path is configured. The sync panel shows stale reasons, last errors, and technical index details."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:83
-msgid "When core Guidelines are available, Flavor Agent reads them first."
-msgstr ""
-
-#: inc/Admin/Settings/Help.php:84
-msgid "Guidelines import fills the form. Save Changes persists imported values, and export uses the Gutenberg-compatible guideline_categories JSON shape."
-msgstr ""
-
 #: inc/Admin/Settings/Help.php:85
+msgid "Save changed embedding or storage settings before starting Pattern Sync. If monitoring shows Status unavailable, the last known result is qualified: use Check sync status to reconnect before starting another sync. A failed request does not prove the background sync stopped."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:86
+msgid "Shared Guidelines take precedence when they contain content. Use the registered shared Guidelines management screen to change them; this page keeps the legacy fallback separate."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:87
+msgid "Guidelines import fills the fallback form. Save Changes persists those values, and export includes the current fallback form, including unsaved edits, in the Gutenberg-compatible guideline_categories JSON shape."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:88
 msgid "AI Activity Dual Logging keeps Flavor Agent request diagnostics alongside core AI Request Logs when core logging is enabled."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:100
+#: inc/Admin/Settings/Help.php:105
 msgid "Quick Links"
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:104
-#: inc/Admin/Settings/Page.php:36
-#: inc/Admin/Settings/Page.php:38
-#: inc/Admin/Settings/Page.php:557
+#: inc/Admin/Settings/Help.php:109
+#: inc/Admin/Settings/Page.php:67
+msgid "Open Post Editor"
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:114
+#: inc/Admin/Settings/Page.php:71
+msgid "Open AI Settings"
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:119
+#: inc/Admin/Settings/Page.php:40
+#: inc/Admin/Settings/Page.php:42
+#: inc/Admin/Settings/Page.php:578
 #: src/utils/capability-flags.js:142
 #: src/utils/capability-flags.js:163
 msgid "Open Connectors"
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:109
-#: inc/Admin/Settings/Page.php:36
-#: inc/Admin/Settings/Page.php:38
+#: inc/Admin/Settings/Help.php:124
+#: inc/Admin/Settings/Page.php:40
+#: inc/Admin/Settings/Page.php:42
 msgid "Open Activity Log"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:55
+#: inc/Admin/Settings/Page.php:59
 msgid "Flavor Agent Settings"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:58
+#: inc/Admin/Settings/Page.php:62
 msgid "Configure setup, storage, docs, and guidance."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:81
+#: inc/Admin/Settings/Page.php:83
+msgid "Flavor Agent editor recommendations are unavailable. Activate a compatible WordPress AI plugin and the Abilities API, then enable Flavor Agent in Settings > AI. Text generation also requires a configured provider in Connectors."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:85
+msgid "Flavor Agent editor recommendations are disabled. Enable Flavor Agent in Settings > AI, then configure a text-generation provider in Connectors. Opening AI settings does not enable the feature or request recommendations."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:87
+msgid "Create or open a post in the block editor, select a block, and open AI Recommendations in its settings. Flavor Agent must be enabled in Settings > AI. Text generation requires a configured provider in Connectors. Opening the editor does not request recommendations, apply changes, or publish content."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:89
+msgid "Flavor Agent recommendations are available in the block editor. Ask an administrator for permission to create and edit posts and enable the block editor for posts. Text generation also requires a configured provider in Connectors."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:92
+msgid "No accessible AI settings screen is registered on this site. Ask the administrator responsible for the WordPress AI plugin to enable Flavor Agent."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:108
 msgid "1. AI Model"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:91
+#: inc/Admin/Settings/Page.php:118
 msgid "2. Embedding Model"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:101
+#: inc/Admin/Settings/Page.php:128
 msgid "3. Patterns"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:111
+#: inc/Admin/Settings/Page.php:138
 msgid "4. Developer Docs"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:121
+#: inc/Admin/Settings/Page.php:148
 msgid "5. Guidelines"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:131
+#: inc/Admin/Settings/Page.php:158
 msgid "6. Experimental Features"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:143
+#: inc/Admin/Settings/Page.php:170
 msgid "Save Changes"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:187
-#: inc/Admin/Settings/State.php:197
+#: inc/Admin/Settings/Page.php:206
+#: inc/Admin/Settings/State.php:251
 msgid "AI Activity logging controls."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:226
+#: inc/Admin/Settings/Page.php:245
 msgid "AI model settings saved."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:233
+#: inc/Admin/Settings/Page.php:252
 msgid "Embedding model settings saved."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:241
+#: inc/Admin/Settings/Page.php:260
 msgid "Pattern settings saved. Run Pattern Sync to update the index."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:242
+#: inc/Admin/Settings/Page.php:261
 msgid "Pattern settings saved."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:250
+#: inc/Admin/Settings/Page.php:269
 msgid "Developer docs settings saved."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:257
-msgid "Guidelines saved."
+#: inc/Admin/Settings/Page.php:277
+msgid "Flavor Agent guidelines saved."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:264
+#: inc/Admin/Settings/Page.php:278
+msgid "Legacy fallback guidelines saved. Active shared or provider guidelines are unchanged."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:285
 msgid "Experimental feature settings saved."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:297
+#: inc/Admin/Settings/Page.php:318
 msgid "Jetpack AI"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:301
+#: inc/Admin/Settings/Page.php:322
 msgid "WordPress AI Client"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:304
+#: inc/Admin/Settings/Page.php:325
 #: src/admin/activity-log-utils.js:3166
 msgid "Not available"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:309
-#: inc/Admin/Settings/Page.php:1510
-#: inc/Admin/Settings/State.php:143
-#: inc/Admin/Settings/State.php:219
-#: inc/Admin/Settings/State.php:266
-#: inc/Admin/Settings/State.php:292
-#: inc/Admin/Settings/State.php:447
+#: inc/Admin/Settings/Page.php:330
+#: inc/Admin/Settings/State.php:197
+#: inc/Admin/Settings/State.php:302
+#: inc/Admin/Settings/State.php:337
+#: inc/Admin/Settings/State.php:483
 #: src/admin/settings-page-controller.js:8
-#: src/admin/settings-page-controller.js:134
+#: src/admin/settings-page-controller.js:200
 #: src/templates/TemplateRecommender.js:1091
 msgid "Ready"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:310
-#: inc/Admin/Settings/State.php:140
-#: inc/Admin/Settings/State.php:222
-#: src/admin/settings-page-controller.js:119
-#: src/admin/settings-page-controller.js:320
+#: inc/Admin/Settings/Page.php:331
+#: inc/Admin/Settings/State.php:194
+#: inc/Admin/Settings/State.php:276
+#: src/admin/settings-page-controller.js:178
+#: src/admin/settings-page-controller.js:406
 msgid "Needs setup"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:321
+#: inc/Admin/Settings/Page.php:342
 msgid "AI Runtime"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:327
+#: inc/Admin/Settings/Page.php:348
 msgid "AI Model"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:333
+#: inc/Admin/Settings/Page.php:354
 msgid "Embedding Model"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:339
+#: inc/Admin/Settings/Page.php:360
 msgid "Patterns"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:348
+#: inc/Admin/Settings/Page.php:369
 msgid "Developer Docs"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:354
+#: inc/Admin/Settings/Page.php:375
 msgid "Guidelines"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:360
+#: inc/Admin/Settings/Page.php:381
 msgid "Experimental Features"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:541
+#: inc/Admin/Settings/Page.php:562
 msgid "Not configured"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:544
+#: inc/Admin/Settings/Page.php:565
 msgid "Text generation is managed in Connectors."
 msgstr ""
 
 #. translators: %s: runtime chat provider label
-#: inc/Admin/Settings/Page.php:550
+#: inc/Admin/Settings/Page.php:571
 #, php-format
 msgid "Current: %s."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:570
+#: inc/Admin/Settings/Page.php:591
 msgid "Flavor Agent records request diagnostics in its own activity log. Upgrade to WordPress AI 1.0.0+ to access core AI request observability."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:574
+#: inc/Admin/Settings/Page.php:595
 msgid "Flavor Agent is recording request diagnostics in its own activity log. Enable the AI Request Logging experiment in Settings > AI to also capture provider, model, token, and cost data centrally."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:577
+#: inc/Admin/Settings/Page.php:598
 msgid "Open AI settings"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:582
+#: inc/Admin/Settings/Page.php:603
 msgid "AI Activity Storage"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:583
+#: inc/Admin/Settings/Page.php:604
 msgid "Read-only status for recommendation request observability."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:610
+#: inc/Admin/Settings/Page.php:631
 msgid "Open AI Request Logs"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:622
+#: inc/Admin/Settings/Page.php:643
 msgid "AI Request Logging is on."
 msgstr ""
 
 #. translators: %s: embedding provider label
-#: inc/Admin/Settings/Page.php:644
+#: inc/Admin/Settings/Page.php:665
 #, php-format
 msgid "Current embedding provider: %s."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:655
+#: inc/Admin/Settings/Page.php:676
 msgid "Cloudflare Workers AI"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:656
-msgid "Used for embeddings."
+#: inc/Admin/Settings/Page.php:677
+msgid "Used to validate Cloudflare pattern storage settings."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:689
-msgid "Choose where the pattern catalog is stored."
+#: inc/Admin/Settings/Page.php:707
+msgid "Cloudflare AI Search stores the pattern catalog and manages its embeddings. Save Changes validates the Cloudflare credentials and creates or re-validates the managed index in the background. Then sync the catalog. Existing vectors from an older storage setup are not copied."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:702
-msgid "Qdrant Pattern Storage"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:703
-msgid "Vector storage for the pattern index."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:723
+#: inc/Admin/Settings/Page.php:711
 msgid "Cloudflare AI Search Pattern Storage"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:724
+#: inc/Admin/Settings/Page.php:712
 msgid "Managed pattern index using the saved Cloudflare credentials from the Embedding Model section."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:732
+#: inc/Admin/Settings/Page.php:719
 msgid "Advanced Ranking"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:769
+#: inc/Admin/Settings/Page.php:755
 msgid "Built-in developer.wordpress.org grounding is active."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:772
+#: inc/Admin/Settings/Page.php:758
 msgid "This panel reports the last live recommendation-time docs request; it does not probe the backend when the page loads."
 msgstr ""
 
 #. translators: %s: last docs search timestamp.
-#: inc/Admin/Settings/Page.php:781
+#: inc/Admin/Settings/Page.php:767
 #, php-format
 msgid "Last search: %s."
 msgstr ""
 
 #. translators: %d: number of guidance chunks returned by the last docs search.
-#: inc/Admin/Settings/Page.php:786
+#: inc/Admin/Settings/Page.php:772
 #, php-format
 msgid "Last result count: %d."
 msgstr ""
 
 #. translators: %s: last docs search outcome label.
-#: inc/Admin/Settings/Page.php:794
+#: inc/Admin/Settings/Page.php:780
 #, php-format
 msgid "Last outcome: %s"
 msgstr ""
 
 #. translators: %s: last docs search error code.
-#: inc/Admin/Settings/Page.php:802
+#: inc/Admin/Settings/Page.php:788
 #, php-format
 msgid "Last error code: %s."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:838
-msgid "Core Guidelines connected."
+#: inc/Admin/Settings/Page.php:829
+msgid "Flavor Agent guidelines are active. Edit and save the fields below to change the guidance used by Flavor Agent."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:888
+#: inc/Admin/Settings/Page.php:831
+msgid "Shared Guidelines are available but empty. These fallback guidelines remain active until shared Guidelines contain content."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:834
+msgid "Shared Guidelines are available but empty. Add fallback guidance below and save it to use it in Flavor Agent until shared Guidelines contain content."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:836
+msgid "Shared Guidelines are active and managed by WordPress. The active guidance is shown below. Saving this page does not change shared Guidelines."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:838
+msgid "A custom Guidelines provider is active. The active guidance is shown below. Saving this page changes only the legacy fallback, not the provider’s guidance."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:842
+msgid "Manage Shared Guidelines"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:844
+msgid "No accessible shared Guidelines management screen is registered on this site. Ask the administrator responsible for the WordPress Guidelines provider to update the active guidance."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:850
+msgid "Legacy fallback guidelines (inactive)"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:852
+msgid "These stored fallback values are inactive while shared or provider guidelines are selected. Editing, importing, exporting, or saving them does not change the active guidance."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:880
+msgid "Site context"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:881
+msgid "Copy Guidelines"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:882
+msgid "Image Guidelines"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:883
+msgid "Additional Guidelines"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:887
+msgid "Active guidelines"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:889
+msgid "The active Guidelines source has no guidance yet."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:937
 msgid "Block Guidelines"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:892
+#: inc/Admin/Settings/Page.php:941
 msgid "Add extra rules for a specific block when needed."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:906
+#: inc/Admin/Settings/Page.php:955
 #: src/admin/activity-log-utils.js:457
 #: src/admin/activity-log-utils.js:1104
 #: src/admin/FixtureExport.js:13
 msgid "Block"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:916
+#: inc/Admin/Settings/Page.php:966
 msgid "Guideline text"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:922
+#: inc/Admin/Settings/Page.php:972
 msgid "Enter guidelines for how this block should be used..."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:929
+#: inc/Admin/Settings/Page.php:980
 msgid "Cancel"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:932
-#: src/admin/settings-page-controller.js:713
+#: inc/Admin/Settings/Page.php:983
+#: src/admin/settings-page-controller.js:971
 msgid "Add Block Guideline"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:946
+#: inc/Admin/Settings/Page.php:997
+msgid "Import Fallback JSON"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:997
 msgid "Import JSON"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:949
+#: inc/Admin/Settings/Page.php:1000
+msgid "Export Fallback JSON"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1000
 msgid "Export JSON"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:954
-msgid "Import fills the form. Save Changes to persist."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:994
-msgid "Qdrant"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:995
-msgid "Cloudflare AI Search"
+#: inc/Admin/Settings/Page.php:1005
+msgid "Import fills only the legacy fallback form. Save Changes persists that fallback. Export includes these fallback form values, including unsaved edits."
 msgstr ""
 
 #: inc/Admin/Settings/Page.php:1005
-msgid "Pattern storage backend"
+msgid "Import fills the form. Save Changes to persist."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1027
-msgid "Active"
+#: inc/Admin/Settings/Page.php:1066
+msgid "Managed pattern index configured. Check Pattern Sync for the latest catalog result."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1040
-msgid "Save Changes to switch pattern storage."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1052
-msgid "Qdrant pattern storage ready."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1053
-msgid "Add Qdrant URL and API key to sync the pattern catalog."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1082
-#: inc/Admin/Settings/Validation.php:1039
-msgid "Managed pattern index ready."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1091
+#: inc/Admin/Settings/Page.php:1075
 msgid "Needs Cloudflare credentials from the Embedding Model section."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1100
+#: inc/Admin/Settings/Page.php:1084
 msgid "Managed pattern index is provisioning in the background. Refresh this page shortly."
 msgstr ""
 
 #. translators: %s: deterministic Cloudflare AI Search instance ID
-#: inc/Admin/Settings/Page.php:1111
+#: inc/Admin/Settings/Page.php:1095
 #, php-format
 msgid "Managed pattern index needs attention. Flavor Agent will not adopt %s until ownership and schema can be proven. Fix or remove the conflicting Cloudflare AI Search instance, then save settings again."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1126
-#: inc/Admin/Settings/Page.php:1479
-#: inc/Admin/Settings/State.php:391
-msgid "Saved managed pattern index needs re-validation for the current Embedding Model credentials. Save settings again to re-validate."
+#: inc/Admin/Settings/Page.php:1110
+#: inc/Admin/Settings/Page.php:1451
+#: inc/Admin/Settings/State.php:441
+msgid "Saved managed pattern index needs re-validation for the current Cloudflare credentials. Save settings again to re-validate."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1135
+#: inc/Admin/Settings/Page.php:1119
 msgid "Managed pattern index provisioning failed. Check the Cloudflare credentials from Embedding Model, then save settings again."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1148
+#: inc/Admin/Settings/Page.php:1132
 msgid "Managed pattern index needs attention."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1159
-msgid "Create managed pattern index."
+#: inc/Admin/Settings/Page.php:1143
+msgid "Save Changes to create the managed pattern index, then sync the catalog."
 msgstr ""
 
 #. translators: %s: Cloudflare AI Search instance ID.
-#: inc/Admin/Settings/Page.php:1173
+#: inc/Admin/Settings/Page.php:1157
 #, php-format
 msgid "Instance ID: %s"
 msgstr ""
 
 #. translators: %s: error code returned while provisioning Cloudflare AI Search.
-#: inc/Admin/Settings/Page.php:1183
+#: inc/Admin/Settings/Page.php:1167
 #, php-format
 msgid "Error code: %s"
 msgstr ""
 
 #. translators: %s: error message returned while provisioning Cloudflare AI Search.
-#: inc/Admin/Settings/Page.php:1193
+#: inc/Admin/Settings/Page.php:1177
 #, php-format
 msgid "Error message: %s"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1207
+#: inc/Admin/Settings/Page.php:1191
 msgid "Advanced details"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1315
-#: src/admin/settings-page-controller.js:359
-msgid "Not synced yet"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1359
-#: inc/Admin/Settings/Page.php:1437
-msgid "Sync Pattern Catalog"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1381
-#: src/admin/activity-log.js:3462
-msgid "Status"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1387
-msgid "Indexed Patterns"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1393
-msgid "Last Synced"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1399
-msgid "Refresh Needed Because"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1406
-msgid "Last Error"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1416
-msgid "Technical details"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1421
-msgid "Qdrant Collection"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1427
-msgid "Embedding Dimension"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1475
-msgid "Managed pattern index is provisioning in the background. Wait for validation before syncing."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1483
-msgid "Managed pattern index provisioning failed. Check Cloudflare credentials in Embedding Model, then save settings again."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1486
-msgid "Save Cloudflare credentials in Embedding Model and create the managed pattern index before syncing."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1497
-msgid "Complete Embedding Model and Qdrant Pattern Storage before syncing."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1501
-msgid "Complete Embedding Model before syncing."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1504
-msgid "Add the Qdrant URL and API key before syncing."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1518
-msgid "Provisioning"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1521
-#: inc/Admin/Settings/Page.php:1535
-#: inc/Admin/Settings/State.php:244
-#: inc/Admin/Settings/State.php:258
-msgid "Needs pattern storage"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1528
-#: inc/Admin/Settings/State.php:237
-#: inc/Admin/Settings/State.php:251
-msgid "Needs model & storage"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1532
-#: inc/Admin/Settings/State.php:241
-#: inc/Admin/Settings/State.php:255
-msgid "Needs embedding model"
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1542
-msgid "Pattern recommendations stay unavailable until setup is complete."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1546
-msgid "Pattern recommendations need attention before use."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1550
-#: src/admin/settings-page-controller.js:175
-msgid "Pattern recommendations are ready."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1551
-msgid "Pattern recommendations are available but out of date."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1552
-#: src/admin/settings-page-controller.js:182
-msgid "Pattern recommendations are syncing now."
-msgstr ""
-
-#: inc/Admin/Settings/Page.php:1553
-msgid "Pattern recommendations stay unavailable until you sync the catalog."
-msgstr ""
-
-#: inc/Admin/Settings/State.php:133
-msgid "Text-generation provider status."
-msgstr ""
-
-#: inc/Admin/Settings/State.php:135
-#: inc/Admin/Settings/State.php:159
-msgid "Required"
-msgstr ""
-
-#: inc/Admin/Settings/State.php:144
-msgid "Partial"
-msgstr ""
-
-#: inc/Admin/Settings/State.php:157
-msgid "Embedding credentials for semantic features."
-msgstr ""
-
-#: inc/Admin/Settings/State.php:166
-msgid "Storage and sync for pattern recommendations."
-msgstr ""
-
-#: inc/Admin/Settings/State.php:168
-#: inc/Admin/Settings/State.php:186
-#: inc/Admin/Settings/State.php:199
-msgid "Optional"
-msgstr ""
-
-#: inc/Admin/Settings/State.php:174
-msgid "Built-in developer.wordpress.org grounding."
-msgstr ""
-
-#: inc/Admin/Settings/State.php:176
-msgid "Built in"
-msgstr ""
-
-#: inc/Admin/Settings/State.php:182
-msgid "Site and block guidance."
-msgstr ""
-
-#: inc/Admin/Settings/State.php:188
-msgid "Core bridge"
-msgstr ""
-
-#: inc/Admin/Settings/State.php:200
-msgid "Logging"
-msgstr ""
-
-#: inc/Admin/Settings/State.php:262
-#: inc/Admin/Settings/State.php:289
-#: src/admin/settings-page-controller.js:126
-msgid "Needs attention"
-msgstr ""
-
-#: inc/Admin/Settings/State.php:267
-#: inc/Admin/Settings/State.php:448
-#: src/admin/settings-page-controller.js:9
-#: src/admin/settings-page-controller.js:139
-msgid "Refresh needed"
-msgstr ""
-
-#: inc/Admin/Settings/State.php:268
-#: inc/Admin/Settings/State.php:446
-#: src/admin/settings-page-controller.js:7
-#: src/admin/settings-page-controller.js:144
-msgid "Syncing"
-msgstr ""
-
-#: inc/Admin/Settings/State.php:269
-#: src/admin/settings-page-controller.js:149
+#: inc/Admin/Settings/Page.php:1298
+#: inc/Admin/Settings/State.php:294
+#: inc/Admin/Settings/State.php:305
+#: src/admin/settings-page-controller.js:114
+#: src/admin/settings-page-controller.js:185
+#: src/admin/settings-page-controller.js:215
 msgid "Needs sync"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:281
+#: inc/Admin/Settings/Page.php:1303
+#: src/admin/settings-page-controller.js:479
+msgid "Not synced yet"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1340
+#: inc/Admin/Settings/Page.php:1405
+msgid "Sync Pattern Catalog"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1353
+msgid "Sync uses saved Cloudflare storage settings. It uploads pattern text to Cloudflare AI Search, which manages catalog embeddings. Checking status may continue an already queued sync."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1354
+msgid "Save Changes before syncing changed Cloudflare credentials or storage settings."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1357
+msgid "Review the last error below. Check the Cloudflare credentials in Embedding Model and Pattern Storage settings, save any corrections, then check sync status before starting another sync."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1358
+msgid "Review Cloudflare credentials"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1369
+#: src/admin/activity-log.js:3510
+msgid "Status"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1375
+msgid "Indexed Patterns"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1381
+msgid "Last Synced"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1387
+msgid "Refresh Needed Because"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1394
+msgid "Last Error"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1407
+msgid "Check sync status"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1434
+msgid "The saved pattern storage setting is unsupported. Save valid Cloudflare settings, then sync the catalog."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1447
+msgid "Managed pattern index is provisioning in the background. Wait for validation before syncing."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1455
+msgid "Managed pattern index provisioning failed. Check Cloudflare credentials in Embedding Model, then save settings again."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1458
+msgid "Save Cloudflare credentials in Embedding Model to create the managed pattern index, then sync the catalog."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1467
+msgid "Provisioning"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1470
+#: inc/Admin/Settings/State.php:290
+msgid "Needs pattern storage"
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1477
+msgid "Pattern recommendations stay unavailable until setup is complete."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1482
+#: src/admin/settings-page-controller.js:238
+msgid "Pattern recommendations are unavailable until the catalog is rebuilt in Cloudflare AI Search. Save Cloudflare settings and sync the catalog; existing vectors are not copied."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1485
+#: src/admin/settings-page-controller.js:244
+msgid "Pattern recommendations are unavailable until the catalog is rebuilt or revalidated in Cloudflare AI Search. Review and save Cloudflare settings, then sync the catalog."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1489
+msgid "Pattern recommendations need attention before use."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1493
+#: src/admin/settings-page-controller.js:259
+msgid "Pattern recommendations are ready."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1494
+msgid "Pattern recommendations are available but out of date."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1495
+#: src/admin/settings-page-controller.js:266
+msgid "Pattern recommendations are syncing now."
+msgstr ""
+
+#: inc/Admin/Settings/Page.php:1496
+msgid "Pattern recommendations stay unavailable until you sync the catalog."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:187
+msgid "Text-generation provider status."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:189
+#: inc/Admin/Settings/State.php:213
+msgid "Required"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:198
+msgid "Partial"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:211
+msgid "Cloudflare credentials and model for pattern storage setup."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:220
+msgid "Storage and sync for pattern recommendations."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:222
+#: inc/Admin/Settings/State.php:240
+#: inc/Admin/Settings/State.php:253
+msgid "Optional"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:228
+msgid "Built-in developer.wordpress.org grounding."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:230
+msgid "Built in"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:236
+msgid "Site and block guidance."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:242
+msgid "Core bridge"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:254
+msgid "Logging"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:273
+msgid "Configured"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:286
+#: inc/Admin/Settings/State.php:298
+#: inc/Admin/Settings/State.php:334
+#: src/admin/settings-page-controller.js:192
+msgid "Needs attention"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:303
+#: inc/Admin/Settings/State.php:484
+#: src/admin/settings-page-controller.js:9
+#: src/admin/settings-page-controller.js:205
+msgid "Refresh needed"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:304
+#: inc/Admin/Settings/State.php:482
+#: src/admin/settings-page-controller.js:7
+#: src/admin/settings-page-controller.js:210
+msgid "Syncing"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:326
 msgid "Temporarily disabled"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:285
+#: inc/Admin/Settings/State.php:330
 #: src/admin/activity-log.js:351
 msgid "Unavailable"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:299
+#: inc/Admin/Settings/State.php:344
 msgid "The last live Developer Docs grounding request failed to reach the search backend. Recommendations still run without it."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:302
+#: inc/Admin/Settings/State.php:347
 msgid "The last live Developer Docs grounding request failed. Recommendations still run without it."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:307
+#: inc/Admin/Settings/State.php:352
 msgid "Grounding attached successfully."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:308
+#: inc/Admin/Settings/State.php:353
 msgid "The last live docs request returned no trusted Developer Docs matches."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:309
+#: inc/Admin/Settings/State.php:354
 msgid "The last live docs request failed before any Developer Docs guidance could be attached."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:319
-#: inc/Admin/Settings/State.php:330
+#: inc/Admin/Settings/State.php:364
+#: inc/Admin/Settings/State.php:375
 msgid "Off"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:322
-#: inc/Admin/Settings/State.php:333
+#: inc/Admin/Settings/State.php:367
+#: inc/Admin/Settings/State.php:378
 msgid "On"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:347
+#: inc/Admin/Settings/State.php:392
 msgid "Text generation is not configured. Open Connectors to choose a provider."
 msgstr ""
 
 #. translators: 1: provider label
-#: inc/Admin/Settings/State.php:354
+#: inc/Admin/Settings/State.php:399
 #, php-format
 msgid "%1$s is saved from an older setup, but that connector is not available. Open Connectors to choose a provider."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:365
+#: inc/Admin/Settings/State.php:410
 msgid "Embedding model is not configured."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:381
-#: inc/Admin/Settings/State.php:401
-msgid "Cloudflare AI Search Pattern Storage needs saved Cloudflare credentials from the Embedding Model section and a managed pattern index."
+#: inc/Admin/Settings/State.php:415
+msgid "Cloudflare credentials and model settings are saved. Configured does not confirm current connectivity. Save Changes sends an embedding validation request and creates or revalidates the managed pattern index. Cloudflare AI Search manages catalog embeddings."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:386
+#: inc/Admin/Settings/State.php:424
+msgid "The saved pattern storage setting is unsupported. Save valid Cloudflare credentials to use Cloudflare AI Search, then sync the pattern catalog."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:433
+msgid "Save Cloudflare credentials in Embedding Model to create the managed Cloudflare AI Search pattern index, then sync the catalog."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:439
 msgid "Managed Cloudflare AI Search pattern index is provisioning. Sync will unlock after validation finishes."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:396
+#: inc/Admin/Settings/State.php:444
 msgid "Managed Cloudflare AI Search pattern index provisioning failed. Check the status panel, then save settings again."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:408
-msgid "Embedding Model is required before syncing patterns."
-msgstr ""
-
-#: inc/Admin/Settings/State.php:413
-msgid "Pattern Storage is required before syncing."
-msgstr ""
-
-#: inc/Admin/Settings/State.php:449
+#: inc/Admin/Settings/State.php:485
 #: src/admin/settings-page-controller.js:6
 msgid "Error"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:450
+#: inc/Admin/Settings/State.php:486
 #: src/admin/settings-page-controller.js:10
 msgid "Not synced"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:467
+#: inc/Admin/Settings/State.php:503
 msgid "Embedding model, provider, or vector size changed."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:468
-#: src/admin/settings-page-controller.js:26
-msgid "Pattern index collection naming changed and needs a rebuild."
-msgstr ""
-
-#: inc/Admin/Settings/State.php:469
-#: src/admin/settings-page-controller.js:30
-msgid "Pattern index collection is missing and needs a rebuild."
-msgstr ""
-
-#: inc/Admin/Settings/State.php:470
-#: src/admin/settings-page-controller.js:34
-msgid "Pattern index collection vector size no longer matches the active embedding configuration."
-msgstr ""
-
-#: inc/Admin/Settings/State.php:471
-#: src/admin/settings-page-controller.js:38
-msgid "Qdrant endpoint changed."
-msgstr ""
-
-#: inc/Admin/Settings/State.php:472
-#: src/admin/settings-page-controller.js:39
+#: inc/Admin/Settings/State.php:504
 msgid "Embedding endpoint changed."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:473
-#: src/admin/settings-page-controller.js:43
+#: inc/Admin/Settings/State.php:505
+#: src/admin/settings-page-controller.js:26
+msgid "The previous pattern catalog must be rebuilt in Cloudflare AI Search. Save Cloudflare settings and sync; existing vectors are not copied."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:506
+#: src/admin/settings-page-controller.js:30
+msgid "Pattern storage changed. Sync the Cloudflare AI Search catalog."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:507
+#: src/admin/settings-page-controller.js:34
+msgid "Cloudflare storage namespace changed. Save Cloudflare settings and sync the catalog."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:508
+#: src/admin/settings-page-controller.js:38
+msgid "Cloudflare managed index changed. Save Cloudflare settings and sync the catalog."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:509
+#: src/admin/settings-page-controller.js:42
+msgid "Cloudflare credentials or managed embedding model changed. Save Cloudflare settings and sync the catalog."
+msgstr ""
+
+#: inc/Admin/Settings/State.php:510
+#: src/admin/settings-page-controller.js:46
 msgid "Registered patterns changed."
 msgstr ""
 
-#: inc/Admin/Settings/Validation.php:906
+#: inc/Admin/Settings/Validation.php:741
 msgid "We kept your previous Cloudflare Workers AI settings because validation failed."
 msgstr ""
 
-#. translators: 1: previous embedding dimension, 2: validated embedding dimension
-#: inc/Admin/Settings/Validation.php:943
-#, php-format
-msgid "The saved Qdrant pattern index uses %1$d embedding dimensions, but the validated Cloudflare Workers AI model returns %2$d. Re-sync patterns before relying on Qdrant pattern recommendations."
-msgstr ""
-
-#: inc/Admin/Settings/Validation.php:980
-msgid "We kept your previous Qdrant settings because validation failed."
-msgstr ""
-
-#: inc/Admin/Settings/Validation.php:994
+#: inc/Admin/Settings/Validation.php:755
 msgid "We kept your previous private Cloudflare AI Search pattern settings because validation failed."
 msgstr ""
 
 #. translators: %s: Cloudflare AI Search embedding model ID
-#: inc/Admin/Settings/Validation.php:1011
+#: inc/Admin/Settings/Validation.php:772
 #, php-format
 msgid "Cloudflare AI Search Pattern Storage will use %s because the saved Embedding Model is not supported by Cloudflare AI Search."
 msgstr ""
 
-#: inc/Admin/Settings/Validation.php:1035
+#: inc/Admin/Settings/Validation.php:796
 msgid "Managed pattern index created."
 msgstr ""
 
-#: inc/Admin/Settings/Validation.php:1037
+#: inc/Admin/Settings/Validation.php:798
 msgid "Managed pattern index adopted."
 msgstr ""
 
-#: inc/Admin/Settings/Validation.php:1038
+#: inc/Admin/Settings/Validation.php:799
 msgid "Managed pattern index provisioning started."
+msgstr ""
+
+#: inc/Admin/Settings/Validation.php:800
+msgid "Managed pattern index ready."
 msgstr ""
 
 #: inc/AI/FeatureBootstrap.php:159
@@ -1674,7 +1738,7 @@ msgid "Contrast check unavailable: unresolved %1$s at %2$s."
 msgstr ""
 
 #. translators: 1: number of dropped operations, 2: total operations submitted
-#: inc/LLM/StylePrompt.php:1079
+#: inc/LLM/StylePrompt.php:1127
 #, php-format
 msgid "Validation: %1$d of %2$d operations could not be applied safely at this scope."
 msgstr ""
@@ -1858,8 +1922,8 @@ msgstr ""
 #: src/admin/activity-log-utils.js:1092
 #: src/admin/activity-log-utils.js:1543
 #: src/admin/FixtureExport.js:18
-#: src/inspector/BlockRecommendationsPanel.js:1448
-#: src/inspector/BlockRecommendationsPanel.js:1715
+#: src/inspector/BlockRecommendationsPanel.js:1487
+#: src/inspector/BlockRecommendationsPanel.js:1754
 msgid "Pattern"
 msgstr ""
 
@@ -1967,10 +2031,10 @@ msgid "%s block"
 msgstr ""
 
 #: src/admin/activity-log-utils.js:1718
-#: src/admin/activity-log.js:3482
+#: src/admin/activity-log.js:3530
 #: src/components/AIActivitySection.js:126
 #: src/content/ContentRecommender.js:609
-#: src/inspector/BlockRecommendationsPanel.js:1541
+#: src/inspector/BlockRecommendationsPanel.js:1580
 #: src/style-surfaces/presentation.js:121
 msgid "Review"
 msgstr ""
@@ -1992,7 +2056,7 @@ msgstr ""
 #: src/admin/activity-log-utils.js:1929
 #: src/admin/activity-log.js:163
 #: src/admin/activity-log.js:1727
-#: src/admin/activity-log.js:3483
+#: src/admin/activity-log.js:3531
 #: src/components/AIActivitySection.js:176
 msgid "Undone"
 msgstr ""
@@ -2002,7 +2066,7 @@ msgstr ""
 #: src/admin/activity-log-utils.js:2972
 #: src/admin/activity-log.js:193
 #: src/admin/activity-log.js:1729
-#: src/admin/activity-log.js:3486
+#: src/admin/activity-log.js:3534
 #: src/components/AIActivitySection.js:182
 msgid "Undo blocked"
 msgstr ""
@@ -2011,7 +2075,7 @@ msgstr ""
 #: src/admin/activity-log-utils.js:2931
 #: src/admin/activity-log-utils.js:3301
 #: src/admin/activity-log.js:175
-#: src/admin/activity-log.js:3472
+#: src/admin/activity-log.js:3520
 #: src/components/AIActivitySection.js:142
 msgid "Pending approval"
 msgstr ""
@@ -2256,7 +2320,7 @@ msgid "What changed"
 msgstr ""
 
 #: src/admin/activity-log-utils.js:2992
-#: src/admin/activity-log.js:2640
+#: src/admin/activity-log.js:2653
 msgid "Requested"
 msgstr ""
 
@@ -2372,7 +2436,7 @@ msgid "Review-only"
 msgstr ""
 
 #: src/admin/activity-log.js:199
-#: src/admin/activity-log.js:3490
+#: src/admin/activity-log.js:3538
 msgid "Failed or unavailable"
 msgstr ""
 
@@ -2501,12 +2565,12 @@ msgid "Activity log unavailable"
 msgstr ""
 
 #: src/admin/activity-log.js:941
-#: src/admin/activity-log.js:3268
+#: src/admin/activity-log.js:3310
 msgid "Flavor Agent could not load the recent AI activity log."
 msgstr ""
 
 #: src/admin/activity-log.js:949
-#: src/admin/activity-log.js:3861
+#: src/admin/activity-log.js:3967
 msgid "Retry loading activity"
 msgstr ""
 
@@ -2528,7 +2592,7 @@ msgstr ""
 #: src/admin/activity-log.js:981
 #: src/admin/activity-log.js:1185
 #: src/components/AIActivitySection.js:528
-#: src/components/UndoToast.js:38
+#: src/components/UndoToast.js:44
 #: src/store/toasts.js:61
 msgid "Undo"
 msgstr ""
@@ -2539,37 +2603,37 @@ msgstr ""
 #: src/admin/activity-log.js:2410
 #: src/admin/activity-log.js:2416
 #: src/admin/activity-log.js:2434
-#: src/admin/activity-log.js:3431
+#: src/admin/activity-log.js:3479
 msgid "Recorded"
 msgstr ""
 
 #: src/admin/activity-log.js:983
-#: src/admin/activity-log.js:3451
+#: src/admin/activity-log.js:3499
 msgid "Surface"
 msgstr ""
 
 #: src/admin/activity-log.js:984
-#: src/admin/activity-log.js:3438
+#: src/admin/activity-log.js:3486
 msgid "Action type"
 msgstr ""
 
 #: src/admin/activity-log.js:986
-#: src/admin/activity-log.js:3627
+#: src/admin/activity-log.js:3675
 msgid "Recorded activity type"
 msgstr ""
 
 #: src/admin/activity-log.js:989
-#: src/admin/activity-log.js:3549
+#: src/admin/activity-log.js:3597
 msgid "Entity"
 msgstr ""
 
 #: src/admin/activity-log.js:990
-#: src/admin/activity-log.js:3529
+#: src/admin/activity-log.js:3577
 msgid "Post type"
 msgstr ""
 
 #: src/admin/activity-log.js:991
-#: src/admin/activity-log.js:3540
+#: src/admin/activity-log.js:3588
 msgid "Entity ID"
 msgstr ""
 
@@ -2578,23 +2642,23 @@ msgid "Document scope"
 msgstr ""
 
 #: src/admin/activity-log.js:994
-#: src/admin/activity-log.js:3556
+#: src/admin/activity-log.js:3604
 msgid "Block path"
 msgstr ""
 
 #: src/admin/activity-log.js:995
-#: src/admin/activity-log.js:3518
+#: src/admin/activity-log.js:3566
 msgid "User"
 msgstr ""
 
 #: src/admin/activity-log.js:1001
 #: src/admin/activity-log.js:1012
-#: src/admin/activity-log.js:2659
+#: src/admin/activity-log.js:2672
 msgid "Undo state"
 msgstr ""
 
 #: src/admin/activity-log.js:1013
-#: src/admin/activity-log.js:2660
+#: src/admin/activity-log.js:2673
 msgid "Undo reason"
 msgstr ""
 
@@ -2608,33 +2672,33 @@ msgstr ""
 
 #: src/admin/activity-log.js:1025
 #: src/admin/activity-log.js:1605
-#: src/admin/activity-log.js:3565
+#: src/admin/activity-log.js:3613
 msgid "Provider"
 msgstr ""
 
 #: src/admin/activity-log.js:1026
 #: src/admin/activity-log.js:1606
-#: src/admin/activity-log.js:3576
+#: src/admin/activity-log.js:3624
 msgid "Model"
 msgstr ""
 
 #: src/admin/activity-log.js:1027
-#: src/admin/activity-log.js:3583
+#: src/admin/activity-log.js:3631
 msgid "Provider path"
 msgstr ""
 
 #: src/admin/activity-log.js:1028
-#: src/admin/activity-log.js:3594
+#: src/admin/activity-log.js:3642
 msgid "Configured in"
 msgstr ""
 
 #: src/admin/activity-log.js:1029
-#: src/admin/activity-log.js:3605
+#: src/admin/activity-log.js:3653
 msgid "Credential source"
 msgstr ""
 
 #: src/admin/activity-log.js:1030
-#: src/admin/activity-log.js:3616
+#: src/admin/activity-log.js:3664
 msgid "Selected provider"
 msgstr ""
 
@@ -2703,7 +2767,7 @@ msgid "Reference"
 msgstr ""
 
 #: src/admin/activity-log.js:1071
-#: src/admin/activity-log.js:3634
+#: src/admin/activity-log.js:3682
 msgid "Prompt"
 msgstr ""
 
@@ -2745,7 +2809,7 @@ msgid "Provider diagnostics, request context, and state snapshots below"
 msgstr ""
 
 #: src/admin/activity-log.js:1189
-#: src/admin/activity-log.js:3341
+#: src/admin/activity-log.js:3389
 msgid "Action"
 msgstr ""
 
@@ -2754,7 +2818,7 @@ msgid "Surface / entity"
 msgstr ""
 
 #: src/admin/activity-log.js:1201
-#: src/admin/activity-log.js:2639
+#: src/admin/activity-log.js:2652
 msgid "Requested by"
 msgstr ""
 
@@ -3112,162 +3176,162 @@ msgstr ""
 msgid "Raw governance diagnostics"
 msgstr ""
 
-#: src/admin/activity-log.js:2638
-#: src/inspector/BlockRecommendationsPanel.js:1452
+#: src/admin/activity-log.js:2651
+#: src/inspector/BlockRecommendationsPanel.js:1491
 msgid "Target"
 msgstr ""
 
-#: src/admin/activity-log.js:2641
+#: src/admin/activity-log.js:2654
 msgid "Expires"
 msgstr ""
 
-#: src/admin/activity-log.js:2642
+#: src/admin/activity-log.js:2655
 msgid "Request reference"
 msgstr ""
 
-#: src/admin/activity-log.js:2643
+#: src/admin/activity-log.js:2656
 msgid "Decided by"
 msgstr ""
 
-#: src/admin/activity-log.js:2644
+#: src/admin/activity-log.js:2657
 msgid "Decided"
 msgstr ""
 
-#: src/admin/activity-log.js:2645
+#: src/admin/activity-log.js:2658
 msgid "Executed"
 msgstr ""
 
-#: src/admin/activity-log.js:2646
+#: src/admin/activity-log.js:2659
 msgid "Decision note"
 msgstr ""
 
-#: src/admin/activity-log.js:2649
+#: src/admin/activity-log.js:2662
 msgid "Failure code"
 msgstr ""
 
-#: src/admin/activity-log.js:2650
+#: src/admin/activity-log.js:2663
 msgid "Failure reason"
 msgstr ""
 
-#: src/admin/activity-log.js:2652
+#: src/admin/activity-log.js:2665
 msgid "Apply attestation"
 msgstr ""
 
-#: src/admin/activity-log.js:2656
+#: src/admin/activity-log.js:2669
 msgid "Undo attestation"
 msgstr ""
 
-#: src/admin/activity-log.js:2718
+#: src/admin/activity-log.js:2731
 msgid "The decision could not be recorded."
 msgstr ""
 
-#: src/admin/activity-log.js:2734
+#: src/admin/activity-log.js:2747
 msgid "Governance evidence"
 msgstr ""
 
-#: src/admin/activity-log.js:2746
+#: src/admin/activity-log.js:2759
 msgid "Requested operations"
 msgstr ""
 
-#: src/admin/activity-log.js:2750
+#: src/admin/activity-log.js:2763
 msgid "Executed operations"
 msgstr ""
 
-#: src/admin/activity-log.js:2755
+#: src/admin/activity-log.js:2768
 msgid "Full provenance"
 msgstr ""
 
-#: src/admin/activity-log.js:2761
+#: src/admin/activity-log.js:2774
 msgid "Outcome and undo"
 msgstr ""
 
-#: src/admin/activity-log.js:2769
+#: src/admin/activity-log.js:2782
 msgid "Decision"
 msgstr ""
 
-#: src/admin/activity-log.js:2781
+#: src/admin/activity-log.js:2794
 msgid "Release review claim"
 msgstr ""
 
-#: src/admin/activity-log.js:2791
+#: src/admin/activity-log.js:2804
 msgid "Attestation signing is unavailable. Approving this change will apply it without a signed attestation."
 msgstr ""
 
-#: src/admin/activity-log.js:2799
+#: src/admin/activity-log.js:2812
 msgid "Decision note (optional)"
 msgstr ""
 
-#: src/admin/activity-log.js:2819
+#: src/admin/activity-log.js:2832
 msgid "Approve and apply"
 msgstr ""
 
-#: src/admin/activity-log.js:2827
+#: src/admin/activity-log.js:2840
 msgid "Reject"
 msgstr ""
 
-#: src/admin/activity-log.js:2853
+#: src/admin/activity-log.js:2867
 msgid "Entry details"
 msgstr ""
 
-#: src/admin/activity-log.js:2856
+#: src/admin/activity-log.js:2870
 msgid "Select an activity item to inspect request metadata, provider ownership, undo state, and navigation links."
 msgstr ""
 
-#: src/admin/activity-log.js:3328
+#: src/admin/activity-log.js:3376
 msgid "Icon"
 msgstr ""
 
-#: src/admin/activity-log.js:3372
+#: src/admin/activity-log.js:3420
 msgid "Activity evidence"
 msgstr ""
 
-#: src/admin/activity-log.js:3396
+#: src/admin/activity-log.js:3444
 msgid "Description"
 msgstr ""
 
-#: src/admin/activity-log.js:3408
+#: src/admin/activity-log.js:3456
 msgid "Date"
 msgstr ""
 
-#: src/admin/activity-log.js:3424
+#: src/admin/activity-log.js:3472
 msgid "Timestamp"
 msgstr ""
 
-#: src/admin/activity-log.js:3860
+#: src/admin/activity-log.js:3966
 msgid "Reset date filter"
 msgstr ""
 
-#: src/admin/activity-log.js:3886
+#: src/admin/activity-log.js:3992
 msgid "Decide pending external applies and review recent AI actions across editor, Site Editor, and admin surfaces. AI proposes; WordPress approves."
 msgstr ""
 
-#: src/admin/activity-log.js:3900
+#: src/admin/activity-log.js:4006
 #: src/components/surface-labels.js:52
 msgid "Refresh"
 msgstr ""
 
-#: src/admin/activity-log.js:3970
+#: src/admin/activity-log.js:4076
 msgid "Search AI activity"
 msgstr ""
 
-#: src/admin/activity-log.js:3983
+#: src/admin/activity-log.js:4089
 msgid "Loading activity…"
 msgstr ""
 
-#: src/admin/activity-log.js:3996
+#: src/admin/activity-log.js:4102
 msgid "Approvals"
 msgstr ""
 
-#: src/admin/activity-log.js:4004
+#: src/admin/activity-log.js:4110
 #: src/inspector/panel-delegation.js:49
 msgid "Filter"
 msgstr ""
 
-#: src/admin/activity-log.js:4013
+#: src/admin/activity-log.js:4119
 msgid "View options"
 msgstr ""
 
-#: src/admin/activity-log.js:4021
+#: src/admin/activity-log.js:4127
 msgid "Reset view"
 msgstr ""
 
@@ -3324,116 +3388,193 @@ msgid "Local bundle downloaded. The review decision is pending; its reviewRecord
 msgstr ""
 
 #: src/admin/settings-page-controller.js:22
-msgid "Embedding provider, model, or vector size changed."
+msgid "Cloudflare credentials or managed embedding model changed."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:160
+#: src/admin/settings-page-controller.js:226
 msgid "Pattern recommendations are not available until the required setup is complete."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:167
+#: src/admin/settings-page-controller.js:251
 msgid "Pattern recommendations need attention before they can be trusted."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:177
+#: src/admin/settings-page-controller.js:261
 msgid "Pattern recommendations are usable but out of date."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:187
+#: src/admin/settings-page-controller.js:271
 msgid "Pattern recommendations are not available until you sync the catalog."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:681
+#: src/admin/settings-page-controller.js:414
+msgid "Status unavailable"
+msgstr ""
+
+#: src/admin/settings-page-controller.js:415
+msgid "Sync not started"
+msgstr ""
+
+#. translators: %s: last confirmed sync status.
+#: src/admin/settings-page-controller.js:445
+#, js-format
+msgid "Current sync status is unavailable. Last confirmed status: %s. Index details below are last confirmed values. The server may still be working. Check sync status before starting another sync."
+msgstr ""
+
+#. translators: %s: last confirmed sync status.
+#: src/admin/settings-page-controller.js:453
+#, js-format
+msgid "The latest sync request was not accepted. Last confirmed catalog status: %s. Index details below are last confirmed values. Review the error below before trying again."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:938
 msgid "Select a block"
 msgstr ""
 
-#: src/admin/settings-page-controller.js:722
+#: src/admin/settings-page-controller.js:981
 msgid "Update Block Guideline"
 msgstr ""
 
-#: src/admin/settings-page-controller.js:737
+#: src/admin/settings-page-controller.js:996
 msgid "No block guidelines yet."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:780
+#: src/admin/settings-page-controller.js:1039
 #: src/content/ContentRecommender.js:52
 msgid "Edit"
 msgstr ""
 
-#: src/admin/settings-page-controller.js:788
+#. translators: %s: block label.
+#: src/admin/settings-page-controller.js:1044
+#, js-format
+msgid "Edit guideline for %s"
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1055
 msgid "Remove"
 msgstr ""
 
 #. translators: %s: block label.
-#: src/admin/settings-page-controller.js:799
+#: src/admin/settings-page-controller.js:1061
+#, js-format
+msgid "Remove guideline for %s"
+msgstr ""
+
+#. translators: %s: block label.
+#: src/admin/settings-page-controller.js:1075
 #, js-format
 msgid "Remove the block guideline for %s?"
 msgstr ""
 
-#: src/admin/settings-page-controller.js:822
+#: src/admin/settings-page-controller.js:1114
+msgid "Fallback block guideline removed. Save Changes to persist the inactive fallback."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1118
 msgid "Block guideline removed. Save Changes to persist."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:849
+#: src/admin/settings-page-controller.js:1145
 msgid "Check that your file contains a guideline_categories object."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:897
+#: src/admin/settings-page-controller.js:1194
 msgid "Choose a block before saving a block guideline."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:911
+#: src/admin/settings-page-controller.js:1208
 msgid "Enter guideline text before saving a block guideline."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:926
+#: src/admin/settings-page-controller.js:1225
+msgid "Fallback block guideline ready. Save Changes to persist the inactive fallback."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1229
 msgid "Block guideline ready. Save Changes to persist."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:955
+#: src/admin/settings-page-controller.js:1270
 msgid "Check that your file contains valid JSON and try again."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:966
+#: src/admin/settings-page-controller.js:1282
+msgid "Fallback guidelines imported into the form. Save Changes to persist the inactive fallback."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1286
 msgid "Guidelines imported into the form. Save Changes to persist."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:977
+#: src/admin/settings-page-controller.js:1297
 msgid "Could not import guidelines."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:998
+#: src/admin/settings-page-controller.js:1321
+msgid "Fallback guidelines exported."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1322
 msgid "Guidelines exported."
 msgstr ""
 
 #. translators: %s: sync status label.
-#: src/admin/settings-page-controller.js:1033
+#: src/admin/settings-page-controller.js:1358
 #, js-format
 msgid "Pattern catalog sync queued. Status: %s."
 msgstr ""
 
 #. translators: 1: indexed pattern count, 2: removed pattern count, 3: sync status label.
-#: src/admin/settings-page-controller.js:1043
+#: src/admin/settings-page-controller.js:1368
 #, js-format
 msgid "Synced %1$d patterns, removed %2$d. Status: %3$s."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1250
-msgid "Syncing…"
+#: src/admin/settings-page-controller.js:1532
+msgid "The server did not return a usable sync status."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1280
-#: src/admin/settings-page-controller.js:1303
+#: src/admin/settings-page-controller.js:1550
+#: src/admin/settings-page-controller.js:1595
 msgid "Unable to refresh sync status."
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1336
-msgid "Syncing pattern catalog."
+#. translators: %s: error returned while contacting the server.
+#: src/admin/settings-page-controller.js:1554
+#, js-format
+msgid "The sync request could not be confirmed and may have been accepted. Check sync status before starting another sync. %s"
 msgstr ""
 
-#: src/admin/settings-page-controller.js:1355
-#: src/admin/settings-page-controller.js:1383
-msgid "Sync failed."
+#. translators: %s: error returned while contacting the server.
+#: src/admin/settings-page-controller.js:1562
+#, js-format
+msgid "Sync monitoring is unavailable. The server may still be working. Check sync status before starting another sync. %s"
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1583
+msgid "Checking sync status…"
+msgstr ""
+
+#. translators: %s: confirmed sync status.
+#: src/admin/settings-page-controller.js:1602
+#, js-format
+msgid "Pattern catalog status updated: %s."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1629
+msgid "Syncing…"
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1650
+msgid "Starting sync…"
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1654
+msgid "Requesting pattern catalog sync."
+msgstr ""
+
+#: src/admin/settings-page-controller.js:1669
+msgid "The sync request was rejected."
 msgstr ""
 
 #: src/components/AIActivitySection.js:14
@@ -3669,19 +3810,19 @@ msgstr ""
 msgid "Context has changed since the last request."
 msgstr ""
 
-#: src/components/ToastRegion.js:45
+#: src/components/ToastRegion.js:47
 msgid "Flavor Agent recent changes"
 msgstr ""
 
-#: src/components/UndoToast.js:204
+#: src/components/UndoToast.js:224
 msgid "Undo unavailable for this change"
 msgstr ""
 
-#: src/components/UndoToast.js:259
+#: src/components/UndoToast.js:280
 msgid "Persistent until Undo or Dismiss"
 msgstr ""
 
-#: src/components/UndoToast.js:289
+#: src/components/UndoToast.js:310
 msgid "Dismiss"
 msgstr ""
 
@@ -3874,7 +4015,7 @@ msgid "Global Styles suggestions stay theme-backed and keep the review-before-ap
 msgstr ""
 
 #: src/global-styles/GlobalStylesRecommender.js:188
-#: src/inspector/BlockRecommendationsPanel.js:1137
+#: src/inspector/BlockRecommendationsPanel.js:1173
 #: src/inspector/NavigationRecommendations.js:898
 #: src/style-book/StyleBookRecommender.js:211
 #: src/template-parts/TemplatePartRecommender.js:972
@@ -3937,66 +4078,66 @@ msgstr ""
 msgid "Global Styles updated in the editor."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:71
+#: src/inspector/BlockRecommendationsPanel.js:74
 msgid "One-click apply stays limited to safe local block changes."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:75
+#: src/inspector/BlockRecommendationsPanel.js:78
 msgid "Content-only mode avoids style and settings changes."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:79
+#: src/inspector/BlockRecommendationsPanel.js:82
 msgid "This block is content-restricted. Flavor Agent will stay within editable content and may keep broader block ideas as manual guidance only."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:84
+#: src/inspector/BlockRecommendationsPanel.js:87
 msgid "Improve clarity"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:85
+#: src/inspector/BlockRecommendationsPanel.js:88
 msgid "More editorial"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:86
+#: src/inspector/BlockRecommendationsPanel.js:89
 msgid "Simplify layout"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:89
+#: src/inspector/BlockRecommendationsPanel.js:92
 msgid "Tighten the copy"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:90
+#: src/inspector/BlockRecommendationsPanel.js:93
 msgid "Clarify the message"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:91
+#: src/inspector/BlockRecommendationsPanel.js:94
 msgid "More concise"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:93
+#: src/inspector/BlockRecommendationsPanel.js:96
 msgid "Selected Block"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:94
+#: src/inspector/BlockRecommendationsPanel.js:97
 msgid "Ask for a specific outcome or fetch recommendations based on the current block context."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:672
+#: src/inspector/BlockRecommendationsPanel.js:706
 msgid "No recommendations were returned for the current prompt."
 msgstr ""
 
 #. translators: %s: recommendation label.
 #. translators: %s: number of template-part operations.
 #. translators: %s: number of template operations.
-#: src/inspector/BlockRecommendationsPanel.js:680
+#: src/inspector/BlockRecommendationsPanel.js:714
 #: src/template-parts/TemplatePartRecommender.js:783
 #: src/templates/TemplateRecommender.js:700
 #, js-format
 msgid "Applied %s in the editor."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:682
-#: src/inspector/BlockRecommendationsPanel.js:690
+#: src/inspector/BlockRecommendationsPanel.js:716
+#: src/inspector/BlockRecommendationsPanel.js:724
 #: src/style-surfaces/presentation.js:123
 #: src/template-parts/TemplatePartRecommender.js:795
 #: src/templates/TemplateRecommender.js:712
@@ -4004,222 +4145,222 @@ msgid "suggestion"
 msgstr ""
 
 #. translators: %s: recommendation label.
-#: src/inspector/BlockRecommendationsPanel.js:688
+#: src/inspector/BlockRecommendationsPanel.js:722
 #: src/template-parts/TemplatePartRecommender.js:793
 #: src/templates/TemplateRecommender.js:710
 #, js-format
 msgid "Undid %s in the editor."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:861
+#: src/inspector/BlockRecommendationsPanel.js:895
 #: src/store/update-helpers.js:2332
 msgid "No block-lane suggestions returned"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:927
+#: src/inspector/BlockRecommendationsPanel.js:961
 msgid "Recent request diagnostics and applied actions for this block."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:931
+#: src/inspector/BlockRecommendationsPanel.js:965
 msgid "Newest valid block action can be undone here."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1039
+#: src/inspector/BlockRecommendationsPanel.js:1075
 msgid "Waiting for the pattern catalog before requesting suggestions."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1044
+#: src/inspector/BlockRecommendationsPanel.js:1080
 msgid "Pattern catalog loading is taking longer than expected. You can request suggestions. Later catalog changes may require Refresh."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1053
+#: src/inspector/BlockRecommendationsPanel.js:1089
 msgid "What do you want to improve about this content?"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1057
+#: src/inspector/BlockRecommendationsPanel.js:1093
 msgid "What do you want to improve about this block?"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1059
+#: src/inspector/BlockRecommendationsPanel.js:1095
 msgid "Describe the content change you want for this block."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1063
+#: src/inspector/BlockRecommendationsPanel.js:1099
 msgid "Describe the outcome you want for this block."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1077
+#: src/inspector/BlockRecommendationsPanel.js:1113
 msgid "Server apply context is missing. Refresh before applying the previous result."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1082
+#: src/inspector/BlockRecommendationsPanel.js:1118
 msgid "Server apply context changed. Refresh before applying the previous result."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1087
+#: src/inspector/BlockRecommendationsPanel.js:1123
 msgid "Block or prompt changed. Refresh before applying the previous result."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1181
+#: src/inspector/BlockRecommendationsPanel.js:1217
 msgid "Inline-safe changes can apply directly."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1195
+#: src/inspector/BlockRecommendationsPanel.js:1231
 msgid "AI block suggestions"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1215
+#: src/inspector/BlockRecommendationsPanel.js:1252
 msgid "Review required before structural apply."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1251
+#: src/inspector/BlockRecommendationsPanel.js:1288
 msgid "Settings suggestions"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1258
+#: src/inspector/BlockRecommendationsPanel.js:1295
 msgid "Settings changes apply here only."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1267
+#: src/inspector/BlockRecommendationsPanel.js:1304
 msgid "AI settings suggestions"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1287
+#: src/inspector/BlockRecommendationsPanel.js:1325
 msgid "Style suggestions"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1294
+#: src/inspector/BlockRecommendationsPanel.js:1332
 msgid "Style changes apply here only."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1303
+#: src/inspector/BlockRecommendationsPanel.js:1341
 msgid "AI style suggestions"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1324
-#: src/inspector/BlockRecommendationsPanel.js:1330
+#: src/inspector/BlockRecommendationsPanel.js:1363
+#: src/inspector/BlockRecommendationsPanel.js:1369
 msgid "Recommended together"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1349
+#: src/inspector/BlockRecommendationsPanel.js:1388
 msgid "Select all"
 msgstr ""
 
 #. translators: %d: number of selected suggestions to apply.
-#: src/inspector/BlockRecommendationsPanel.js:1362
+#: src/inspector/BlockRecommendationsPanel.js:1401
 #, js-format
 msgid "Apply selected (%d)"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1377
+#: src/inspector/BlockRecommendationsPanel.js:1416
 msgid "These ideas are shown for reference from the last request. Refresh before acting on them against the current block."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1381
+#: src/inspector/BlockRecommendationsPanel.js:1420
 msgid "Manual follow-through only."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1417
+#: src/inspector/BlockRecommendationsPanel.js:1456
 msgid "Insert pattern before the selected block."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1418
+#: src/inspector/BlockRecommendationsPanel.js:1457
 msgid "Insert pattern after the selected block."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1422
+#: src/inspector/BlockRecommendationsPanel.js:1461
 msgid "Replace the selected block with a pattern."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1428
+#: src/inspector/BlockRecommendationsPanel.js:1467
 msgid "Review structural operation."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1433
+#: src/inspector/BlockRecommendationsPanel.js:1472
 msgid "Before this block"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1437
+#: src/inspector/BlockRecommendationsPanel.js:1476
 msgid "After this block"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1456
+#: src/inspector/BlockRecommendationsPanel.js:1495
 #: src/inspector/panel-delegation.js:67
 msgid "Position"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1496
-#: src/inspector/BlockRecommendationsPanel.js:1648
+#: src/inspector/BlockRecommendationsPanel.js:1535
+#: src/inspector/BlockRecommendationsPanel.js:1687
 #: src/inspector/SuggestionChips.js:32
 msgid "Suggestion"
 msgstr ""
 
 #. translators: %s: recommendation label.
-#: src/inspector/BlockRecommendationsPanel.js:1501
+#: src/inspector/BlockRecommendationsPanel.js:1540
 #, js-format
 msgid "Refresh to review %s"
 msgstr ""
 
 #. translators: %s: recommendation label.
-#: src/inspector/BlockRecommendationsPanel.js:1506
+#: src/inspector/BlockRecommendationsPanel.js:1545
 #, js-format
 msgctxt "recommendation action label"
 msgid "Review %s"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1525
-#: src/inspector/BlockRecommendationsPanel.js:1659
+#: src/inspector/BlockRecommendationsPanel.js:1564
+#: src/inspector/BlockRecommendationsPanel.js:1698
 msgid "Validator computed"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1540
+#: src/inspector/BlockRecommendationsPanel.js:1579
 msgid "Refresh to review"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1586
+#: src/inspector/BlockRecommendationsPanel.js:1625
 msgid "Selected structural review"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1592
+#: src/inspector/BlockRecommendationsPanel.js:1631
 msgid "This review is scoped to the current block, request token, and request signature."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1607
+#: src/inspector/BlockRecommendationsPanel.js:1646
 msgid "Applying structure"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1608
+#: src/inspector/BlockRecommendationsPanel.js:1647
 msgid "Apply reviewed structure"
 msgstr ""
 
 #. translators: %s: comma-separated eligibility blocker labels.
-#: src/inspector/BlockRecommendationsPanel.js:1676
+#: src/inspector/BlockRecommendationsPanel.js:1715
 #, js-format
 msgid "Eligibility blockers: %s."
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1713
+#: src/inspector/BlockRecommendationsPanel.js:1752
 msgid "Structure"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1717
+#: src/inspector/BlockRecommendationsPanel.js:1756
 msgid "Style variation"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1719
+#: src/inspector/BlockRecommendationsPanel.js:1758
 msgid "Manual idea"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1726
-#: src/inspector/BlockRecommendationsPanel.js:1770
+#: src/inspector/BlockRecommendationsPanel.js:1765
+#: src/inspector/BlockRecommendationsPanel.js:1809
 msgid "AI Recommendations"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1774
+#: src/inspector/BlockRecommendationsPanel.js:1813
 msgid "Last Selected Block"
 msgstr ""
 
-#: src/inspector/BlockRecommendationsPanel.js:1775
+#: src/inspector/BlockRecommendationsPanel.js:1814
 msgid "Using the last selected block until selection returns."
 msgstr ""
 
@@ -4398,11 +4539,11 @@ msgstr ""
 msgid "List View"
 msgstr ""
 
-#: src/inspector/SuggestionChips.js:161
+#: src/inspector/SuggestionChips.js:179
 msgid "These hints mirror the latest AI Recommendations result. Apply them from that main panel."
 msgstr ""
 
-#: src/inspector/SuggestionChips.js:176
+#: src/inspector/SuggestionChips.js:194
 msgid "These suggestions reflect the last AI Recommendations request. Refresh that main panel to update them for the current block."
 msgstr ""
 
@@ -4760,26 +4901,18 @@ msgid "Cannot insert pattern \"%s\" because Gutenberg did not provide insertable
 msgstr ""
 
 #: src/patterns/recommendation-utils.js:36
-msgid "Semantic match"
-msgstr ""
-
-#: src/patterns/recommendation-utils.js:37
-msgid "Structural fit"
-msgstr ""
-
-#: src/patterns/recommendation-utils.js:38
 msgid "AI Search match"
 msgstr ""
 
-#: src/patterns/recommendation-utils.js:39
+#: src/patterns/recommendation-utils.js:37
 msgid "Model ranked"
 msgstr ""
 
-#: src/patterns/recommendation-utils.js:79
+#: src/patterns/recommendation-utils.js:77
 msgid "Allowed here"
 msgstr ""
 
-#: src/patterns/recommendation-utils.js:87
+#: src/patterns/recommendation-utils.js:85
 msgid "Nearby block fit"
 msgstr ""
 
@@ -4824,8 +4957,8 @@ msgid "The activity entry is unavailable."
 msgstr ""
 
 #: src/store/activity-session.js:139
-#: src/store/index.js:1141
-#: src/store/index.js:1915
+#: src/store/index.js:1142
+#: src/store/index.js:1935
 msgid "Request failed."
 msgstr ""
 
@@ -4907,113 +5040,113 @@ msgstr ""
 msgid "Style Book apply failed unexpectedly."
 msgstr ""
 
-#: src/store/index.js:258
+#: src/store/index.js:259
 msgid "The block recommendation endpoint returned a non-JSON response."
 msgstr ""
 
-#: src/store/index.js:262
+#: src/store/index.js:263
 msgid "WordPress REST returned a response the editor could not parse as JSON. Check the HTTP response body and PHP debug log for warning output, a fatal error page, or a proxy/auth HTML response."
 msgstr ""
 
-#: src/store/index.js:588
+#: src/store/index.js:589
 msgid "This template result is stale. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:593
+#: src/store/index.js:594
 msgid "This template-part result is stale. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:598
+#: src/store/index.js:599
 msgid "This Global Styles result is stale. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:603
+#: src/store/index.js:604
 msgid "This Style Book result is stale. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:608
+#: src/store/index.js:609
 msgid "This result is stale. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:618
+#: src/store/index.js:619
 msgid "This template result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:623
+#: src/store/index.js:624
 msgid "This template-part result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:628
+#: src/store/index.js:629
 msgid "This Global Styles result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:633
+#: src/store/index.js:634
 msgid "This Style Book result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:638
+#: src/store/index.js:639
 msgid "This result no longer matches the current server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:648
+#: src/store/index.js:649
 msgid "This template result is missing the server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:653
+#: src/store/index.js:654
 msgid "This template-part result is missing the server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:658
+#: src/store/index.js:659
 msgid "This Global Styles result is missing the server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:663
+#: src/store/index.js:664
 msgid "This Style Book result is missing the server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:668
+#: src/store/index.js:669
 msgid "This result is missing the server-resolved apply context. Refresh recommendations before applying it."
 msgstr ""
 
-#: src/store/index.js:678
+#: src/store/index.js:679
 msgid "Flavor Agent could not revalidate this template result against the current server apply context. Try again or refresh recommendations."
 msgstr ""
 
-#: src/store/index.js:683
+#: src/store/index.js:684
 msgid "Flavor Agent could not revalidate this template-part result against the current server apply context. Try again or refresh recommendations."
 msgstr ""
 
-#: src/store/index.js:688
+#: src/store/index.js:689
 msgid "Flavor Agent could not revalidate this Global Styles result against the current server apply context. Try again or refresh recommendations."
 msgstr ""
 
-#: src/store/index.js:693
+#: src/store/index.js:694
 msgid "Flavor Agent could not revalidate this Style Book result against the current server apply context. Try again or refresh recommendations."
 msgstr ""
 
-#: src/store/index.js:698
+#: src/store/index.js:699
 msgid "Flavor Agent could not revalidate this result against the current server apply context. Try again or refresh recommendations."
 msgstr ""
 
 #. translators: %s: transport error detail returned by the connector.
-#: src/store/index.js:1160
+#: src/store/index.js:1161
 #, js-format
 msgid "Transport detail: %s"
 msgstr ""
 
 #. translators: %s: original parser error message.
-#: src/store/index.js:1173
+#: src/store/index.js:1174
 #, js-format
 msgid "Original parser message: %s"
 msgstr ""
 
-#: src/store/index.js:2292
+#: src/store/index.js:2331
 msgid "This suggestion is advisory and requires manual follow-through or a broader preview/apply flow."
 msgstr ""
 
-#: src/store/index.js:2365
-#: src/store/index.js:2447
-#: src/store/index.js:2775
+#: src/store/index.js:2404
+#: src/store/index.js:2486
+#: src/store/index.js:2833
 msgid "This suggestion includes unsupported or unsafe attribute changes and could not be applied."
 msgstr ""
 

@@ -224,8 +224,7 @@ add_action(
 			'flavor_agent_cloudflare_workers_ai_account_id' => 'playground-account',
 			'flavor_agent_cloudflare_workers_ai_api_token'  => 'playground-workers-token',
 			'flavor_agent_cloudflare_workers_ai_embedding_model' => '@cf/qwen/qwen3-embedding-0.6b',
-			'flavor_agent_qdrant_url'                      => 'https://example.test/qdrant',
-			'flavor_agent_qdrant_key'                      => 'playground-qdrant-key',
+			'flavor_agent_pattern_retrieval_backend'       => 'cloudflare_ai_search',
 		];
 
 		foreach ($stubbed_options as $flavor_agent_option_name => $value) {
@@ -233,6 +232,19 @@ add_action(
 				update_option($flavor_agent_option_name, $value);
 			}
 		}
+		// Test-only metadata. No external provider is contacted by this fixture.
+		update_option(
+			'flavor_agent_cloudflare_pattern_ai_search_instance_id',
+			FlavorAgent\Cloudflare\PatternSearchInstanceManager::managed_instance_id()
+		);
+		update_option(
+			'flavor_agent_cloudflare_pattern_ai_search_validated_signature',
+			FlavorAgent\Cloudflare\PatternSearchInstanceManager::credential_signature(
+				'playground-account',
+				'playground-workers-token',
+				'@cf/qwen/qwen3-embedding-0.6b'
+			)
+		);
 	},
 	0
 );

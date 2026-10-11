@@ -4036,6 +4036,13 @@ namespace {
 		}
 	}
 
+	if (! function_exists('wp_enqueue_script_module')) {
+		function wp_enqueue_script_module(string $id, string $src = '', array $deps = [], $version = false): void
+		{
+			unset($id, $src, $deps, $version);
+		}
+	}
+
 	if (! function_exists('get_block_templates')) {
 		function get_block_templates(array $query = [], string $template_type = 'wp_template'): array
 		{
