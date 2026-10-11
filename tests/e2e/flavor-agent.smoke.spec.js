@@ -5181,6 +5181,24 @@ test( '@wp70-site-editor style book applies and undoes paragraph colors with def
 	page,
 } ) => {
 	const styleRequests = [];
+	let delayedApplyActivity = false;
+	await page.route( /\/flavor-agent\/v1\/activity(?:\?|$)/, async ( route ) => {
+		const request = route.request();
+		if (
+			request.method() !== 'POST' ||
+			request.postDataJSON()?.entry?.type !== 'apply_style_book_suggestion'
+		) {
+			await route.continue();
+			return;
+		}
+
+		// Local activity is visible before persistence finishes and queues its
+		// toast. Keep the backend real while exercising that delayed toast.
+		delayedApplyActivity = true;
+		const persistedResponse = await route.fetch();
+		await new Promise( ( resolve ) => setTimeout( resolve, 250 ) );
+		await route.fulfill( { response: persistedResponse } );
+	} );
 	const response = JSON.parse( JSON.stringify( STYLE_BOOK_RESPONSE ) );
 	response.suggestions[ 0 ].description =
 		'Use ink text on the paper background for paragraph emphasis.';
@@ -5271,12 +5289,15 @@ test( '@wp70-site-editor style book applies and undoes paragraph colors with def
 		);
 	const activityRow = panel.locator( '.flavor-agent-activity-row' );
 	await expect( activityRow.getByText( 'Undo available' ) ).toBeVisible();
-	const applyToast = page.locator( '.flavor-agent-toast' ).first();
-	if ( await applyToast.isVisible().catch( () => false ) ) {
-		await applyToast
-			.getByRole( 'button', { name: 'Dismiss', exact: true } )
-			.click();
-	}
+	await expect.poll( () => delayedApplyActivity ).toBe( true );
+	const applyToast = page.locator( '.flavor-agent-toast' ).filter( {
+		hasText: 'Style Book updated in editor (not saved)',
+	} );
+	await expect( applyToast ).toBeVisible();
+	await applyToast
+		.getByRole( 'button', { name: 'Dismiss', exact: true } )
+		.click();
+	await expect( applyToast ).toBeHidden();
 	await activityRow
 		.getByRole( 'button', { name: 'Undo', exact: true } )
 		.click();

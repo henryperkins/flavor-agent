@@ -6,6 +6,7 @@ namespace FlavorAgent\Admin\Settings;
 
 use FlavorAgent\Activity\RequestLoggingBridge;
 use FlavorAgent\AI\FeatureBootstrap;
+use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\Embeddings\QdrantClient;
@@ -242,6 +243,7 @@ final class Page {
 		}
 
 		if (
+			AISearchClient::is_enabled() &&
 			! empty( $changed_sections[ Config::GROUP_DOCS ] ) &&
 			! Feedback::feedback_group_has_tone( $feedback, Config::GROUP_DOCS, 'error' )
 		) {
@@ -752,6 +754,16 @@ final class Page {
 	 */
 	private static function render_docs_grounding_group( array $state, array $feedback ): void {
 		self::render_section_status_blocks( Config::GROUP_DOCS, $state, $feedback );
+
+		if ( false === ( $state['docs_grounding_enabled'] ?? true ) ) {
+			?>
+			<p class="description">
+				<?php echo esc_html__( 'Developer Docs grounding is temporarily disabled in this release by release policy. Recommendations remain available.', 'flavor-agent' ); ?>
+			</p>
+			<?php
+			return;
+		}
+
 		?>
 		<p class="description">
 			<?php echo esc_html__( 'Built-in developer.wordpress.org grounding is active.', 'flavor-agent' ); ?>

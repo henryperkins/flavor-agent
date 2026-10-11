@@ -6,6 +6,7 @@ namespace FlavorAgent\Admin\Settings;
 
 use FlavorAgent\Embeddings\EmbeddingClient;
 use FlavorAgent\Embeddings\QdrantClient;
+use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Cloudflare\PatternSearchInstanceManager;
 use FlavorAgent\Cloudflare\WorkersAIEmbeddingConfiguration;
 use FlavorAgent\Guidelines;
@@ -75,6 +76,10 @@ final class Validation {
 	private static array $submission_value_cache = [];
 
 	public static function sanitize_grounding_result_count( mixed $value ): int {
+		if ( ! AISearchClient::is_enabled() ) {
+			return max( 1, min( 8, (int) get_option( 'flavor_agent_cloudflare_ai_search_max_results', 4 ) ) );
+		}
+
 		$count = max( 1, min( 8, (int) $value ) );
 		Feedback::mark_section_changed_by_option( 'flavor_agent_cloudflare_ai_search_max_results', $count );
 

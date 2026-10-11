@@ -42,8 +42,8 @@ Navigation participates in the server review-freshness contract even though it i
 1. When a stored `ready` result is displayed, the UI triggers a background `resolveSignatureOnly` request via `revalidateNavigationReviewFreshness()`
 2. The backend resolves the server context that participates in review freshness (menu structure, target inventory, overlay parts, overlay context, and theme tokens) and returns only the `reviewContextSignature` hash — no docs lookup or model call is made
 3. If the returned signature differs from the stored result's `reviewContextSignature`, the UI marks the result as stale and exposes a refresh affordance
-4. Signature-only revalidation returns docs-grounding status. Unavailable trusted grounding marks the stored navigation result stale; stale or degraded trusted grounding remains reviewable with warning metadata.
-5. Navigation docs grounding uses the shared cache/fallback collector. Exact, family, and entity cache hits are reused immediately; on generic or missing fallback guidance, a full request may perform a foreground docs warm before queuing async warming.
+4. Signature-only revalidation returns docs-grounding status. Removing previously attached docs content changes the content fingerprint and marks the stored navigation result stale; diagnostic-only changes do not.
+5. External navigation docs grounding is disabled by default in v0.1.3 before cached or live lookup, including signature-only checks. Explicitly enabled development uses one cache-first best-effort search per recommendation and a cache-only signature read; no family/entity fallback or async docs warm is used.
 
 ## What This Surface Can Do
 

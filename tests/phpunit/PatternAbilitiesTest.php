@@ -1770,6 +1770,8 @@ final class PatternAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_patterns_includes_wordpress_docs_guidance_in_ranking_input(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		$this->configure_backends();
 		$this->configure_docs_grounding();
 		$this->save_index_state();
@@ -1832,6 +1834,8 @@ final class PatternAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_patterns_docs_grounding_performs_single_best_effort_search_on_cache_miss(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		$this->configure_backends();
 		$this->configure_docs_grounding();
 		$this->save_index_state();

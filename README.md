@@ -6,7 +6,7 @@ I built it to prove AI can be practical product infrastructure, not a chatbot pa
 
 > **Release status:** `v0.1.0` is the final initial release. Implementation hardening, current live-corpus evidence, connector-backed Anthropic behavior, minimum visual proof, clean artifact inspection, and the infrastructure-only GitHub Actions disposition are closed. GitHub-hosted jobs did not execute because of the recorded account lock; the maintainer-approved waiver retains every local, browser, Plugin Check, packaging, and exact-tag gate. The GitHub release carries the verified zip, complete local logs, waiver record, checksums, and exact-tag verification record. See [`STATUS.md`](STATUS.md) for the full working state and validation log.
 
-The [v0.1.1 candidate](docs/releases/v0.1.1.md) adds explicit dismissal and private local fixture exports. Its [exact source and ZIP validation](docs/validation/2026-10-07-v0.1.1-release-validation.md) passed the strict aggregate and all three full browser runs. The [v0.1.2 candidate](docs/releases/v0.1.2.md) supersedes it with patched dependencies, including the color parser bundled in AI Activity. Release preparation keeps corpus settlement, production package identity and live verification open; automated source deployment is disabled.
+The [v0.1.1 candidate](docs/releases/v0.1.1.md) adds explicit dismissal and private local fixture exports. Its [exact source and ZIP validation](docs/validation/2026-10-07-v0.1.1-release-validation.md) passed the strict aggregate and all three full browser runs. The [v0.1.2 candidate](docs/releases/v0.1.2.md) supersedes it with patched dependencies, including the color parser bundled in AI Activity. The [v0.1.3 candidate](docs/releases/v0.1.3.md) adds current Guidelines/catalog compatibility and temporarily disables external Developer Docs grounding by explicit maintainer decision. Recommendations retain Guidelines, patterns, and governed apply/undo behavior. Corpus settlement and retrieval remain failed service work required before restoring grounding; immutable package identity and production verification remain open. Automated source deployment is disabled.
 
 1.0 when the core Abilities/AI Client surfaces stabilize.
 
@@ -50,18 +50,18 @@ Flavor Agent is for WordPress builders, editors, and plugin developers who want 
 2. Install dependencies with Node 20/npm 10 or Node 24/npm 11, plus Composer.
 3. Build production assets with `npm run build`.
 4. Activate **Flavor Agent** in WordPress.
-5. Configure text generation in `Settings > Connectors`; optionally configure pattern retrieval, embeddings, developer-doc grounding limits/diagnostics, and guidelines in `Settings > Flavor Agent`.
+5. Configure text generation in `Settings > Connectors`; optionally configure pattern retrieval, embeddings, Developer Docs suspension status, and guidelines in `Settings > Flavor Agent`.
 
 For a representative development environment, use the local setup notes in [`docs/reference/local-environment-setup.md`](docs/reference/local-environment-setup.md). WordPress 7.1 is released; the Docker-backed Site Editor harness pins the exact stable `wordpress:7.1.0-php8.2-apache` image so harness runs stay reproducible.
 
 ## Current status
 
-- Version: `0.1.0`
+- Version: `0.1.3` candidate
 - WordPress: requires WordPress 7.0+; release browser gates target WordPress 7.1
 - PHP: requires PHP 8.2+
 - JavaScript toolchain: Node 20/npm 10 or Node 24/npm 11
 - Canonical status log: [`STATUS.md`](STATUS.md)
-- Release notes draft: [`docs/releases/v0.1.0.md`](docs/releases/v0.1.0.md)
+- Release notes draft: [`docs/releases/v0.1.3.md`](docs/releases/v0.1.3.md)
 
 Automated evidence currently recorded in the repository includes:
 
@@ -81,7 +81,7 @@ Flavor Agent is a WordPress plugin with a PHP backend under `inc/`, editor/admin
 
 The editor app mounts first-party UI into native Gutenberg and Site Editor locations: block Inspector panels, post/page document panels, the pattern inserter, template and template-part panels, Global Styles, Style Book, and navigation-block advisory sections. Activity records are written server-side and reused by inline editor history plus the wp-admin approval/audit page.
 
-Provider ownership is explicit: text generation flows through the WordPress AI Client and `Settings > Connectors`; plugin-owned settings cover embeddings, Qdrant, private Cloudflare AI Search pattern retrieval, built-in public WordPress docs grounding limits/diagnostics, guidelines, and pattern sync.
+Provider ownership is explicit: text generation flows through the WordPress AI Client and `Settings > Connectors`; plugin-owned settings cover embeddings, Qdrant, private Cloudflare AI Search pattern retrieval, Developer Docs suspension status, guidelines, and pattern sync.
 
 ## Provider matrix
 
@@ -90,7 +90,7 @@ Provider ownership is explicit: text generation flows through the WordPress AI C
 | Text generation          | Via `Settings > Connectors`                 | Via `Settings > Connectors`             | Not used for chat by Flavor Agent                             | Not used for chat                                   | Not used for chat               |
 | Embeddings               | Not used for embeddings by Flavor Agent     | Not used for embeddings                 | Only plugin-owned embedding backend for Qdrant                | Managed embeddings/indexing for private patterns    | Stores/searches vectors         |
 | Pattern retrieval        | Reranking can use connector-backed chat     | Reranking can use connector-backed chat | Embeddings only when the Qdrant backend is selected           | Private pattern retrieval backend option            | Vector retrieval backend option |
-| WordPress docs grounding | Not used                                    | Not used                                | Not used                                                      | Trusted `developer.wordpress.org` grounding         | Not used                        |
+| WordPress docs grounding | Not used                                    | Not used                                | Not used                                                      | Disabled by default in v0.1.3         | Not used                        |
 | Configuration owner      | `Settings > Connectors`                     | `Settings > Connectors`                 | `Settings > Flavor Agent`                                     | `Settings > Flavor Agent` or built-in docs endpoint | `Settings > Flavor Agent`       |
 
 See the external-service disclosure in [`readme.txt`](readme.txt) and [`docs/reference/external-service-disclosure.md`](docs/reference/external-service-disclosure.md) for service-specific data and trigger details.

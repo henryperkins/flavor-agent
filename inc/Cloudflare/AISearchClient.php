@@ -11,7 +11,7 @@ final class AISearchClient {
 	private const DEFAULT_MAX_RESULTS        = 4;
 	private const MAX_MAX_RESULTS            = 8;
 	private const CACHE_KEY_PREFIX           = 'flavor_agent_ai_search_';
-	private const CACHE_SCHEMA_VERSION       = 3;
+	private const CACHE_SCHEMA_VERSION       = 4;
 	private const CACHE_TTL                  = 21600;
 	private const BEST_EFFORT_TIMEOUT        = 5;
 	private const VALIDATION_PROBE_QUERY     = 'block editor';
@@ -24,8 +24,17 @@ final class AISearchClient {
 	private const REASON_CACHED_NO_RESULTS   = 'cached_no_results';
 	private const REASON_LIVE_NO_RESULTS     = 'live_no_results';
 	private const REASON_BACKEND_UNREACHABLE = 'backend_unreachable';
+	private const REASON_DISABLED            = 'disabled';
 
 	public const RUNTIME_STATE_OPTION = 'flavor_agent_docs_runtime_state';
+
+	/**
+	 * Developer Docs grounding is suspended by the v0.1.3 release policy.
+	 * The explicit filter supports controlled development and qualified restoration.
+	 */
+	public static function is_enabled(): bool {
+		return (bool) apply_filters( 'flavor_agent_docs_grounding_enabled', false );
+	}
 
 	public static function is_configured(
 		?string $account_id = null,
@@ -187,6 +196,16 @@ final class AISearchClient {
 	 * }
 	 */
 	public static function maybe_search_best_effort_result( string $query, ?int $max_results = null ): array {
+		if ( ! self::is_enabled() ) {
+			return [
+				'guidance'    => [],
+				'diagnostics' => self::build_best_effort_diagnostics(
+					self::REASON_DISABLED,
+					'release_policy'
+				),
+			];
+		}
+
 		$query = sanitize_textarea_field( $query );
 
 		if ( $query === '' ) {
@@ -292,7 +311,8 @@ final class AISearchClient {
 
 	/**
 	 * Minimal runtime signal for operators: the docs backend is reachable, was
-	 * unreachable on the last live search, or grounding is off (unconfigured).
+	 * unreachable on the last live search, disabled by release policy, or off
+	 * (unconfigured).
 	 *
 	 * @return array{
 	 *   status: string,
@@ -304,6 +324,17 @@ final class AISearchClient {
 	 * }
 	 */
 	public static function get_runtime_state(): array {
+		if ( ! self::is_enabled() ) {
+			return [
+				'status'           => 'disabled',
+				'lastSearchAt'     => '',
+				'lastResultCount'  => 0,
+				'lastReason'       => self::REASON_DISABLED,
+				'lastErrorCode'    => '',
+				'lastErrorMessage' => '',
+			];
+		}
+
 		if ( ! self::is_configured() ) {
 			return [
 				'status'           => 'off',
@@ -384,6 +415,14 @@ final class AISearchClient {
 		?string $api_token = null
 	): array|\WP_Error {
 		unset( $account_id, $instance_id, $api_token );
+
+		if ( ! self::is_enabled() ) {
+			return new \WP_Error(
+				'docs_grounding_disabled',
+				'Developer Docs grounding is temporarily disabled in this release.',
+				[ 'status' => 503 ]
+			);
+		}
 
 		return self::build_public_config( self::get_public_search_url() );
 	}

@@ -204,7 +204,7 @@ The plugin exposes a Settings API screen at `Settings > Flavor Agent`.
 
 Flavor Agent resolves chat through the WordPress AI Client and `Settings > Connectors`. The Cloudflare Workers AI fields on this screen configure the Flavor Agent embedding model for semantic features; they do not provide a direct plugin-managed chat fallback and saved provider values from older settings screens are ignored. Qdrant Pattern Storage uses the configured embedding model plus Qdrant. The Cloudflare AI Search pattern backend reuses the Embedding Model account/token to create or adopt a managed private AI Search pattern index in Cloudflare's `default` namespace, then uploads sanitized public-safe registered and published user pattern markdown.
 
-Flavor Agent uses its built-in public Cloudflare AI Search endpoint for trusted `developer.wordpress.org` grounding, so site owners do not enter Cloudflare account, instance, or token values for Developer Docs.
+External Developer Docs grounding is temporarily disabled by default in v0.1.3. Recommendations skip cached and live docs, retain Guidelines and apply/undo safeguards, and show an intentional disabled notice. The retained built-in public path needs no site-owner credentials when explicitly enabled for controlled development or a separately qualified restoration.
 
 Configured options:
 
@@ -230,7 +230,7 @@ Configured options:
 
 `flavor_agent_openai_provider` is kept as a compatibility option for older saved chat/provider state. The settings screen writes `cloudflare_workers_ai` for the embedding path on save.
 
-`flavor_agent_reasoning_effort` is the neutral saved option used by the Connectors-routed chat runtime when present. Valid legacy `flavor_agent_azure_reasoning_effort` values are read only as a one-way fallback/migration source, and the Azure-named option is no longer the active setting. Flavor Agent first tries standardized WordPress AI Client reasoning methods; provider-specific model custom-option fallback is limited to known pinned provider IDs today: Codex `reasoningEffort` and OpenAI `reasoning.effort`. Anthropic is intentionally left unmapped until its provider contract is documented. Developer Docs always uses the built-in public docs endpoint and exposes only source status plus the max grounding source count.
+`flavor_agent_reasoning_effort` is the neutral saved option used by the Connectors-routed chat runtime when present. Valid legacy `flavor_agent_azure_reasoning_effort` values are read only as a one-way fallback/migration source, and the Azure-named option is no longer the active setting. Flavor Agent first tries standardized WordPress AI Client reasoning methods; provider-specific model custom-option fallback is limited to known pinned provider IDs today: Codex `reasoningEffort` and OpenAI `reasoning.effort`. Anthropic is intentionally left unmapped until its provider contract is documented. Developer Docs shows its temporary suspension status in v0.1.3 and hides its inactive result-limit control while preserving the saved value. Explicitly enabled development uses the built-in public endpoint.
 
 The same screen also includes a `Sync Pattern Catalog` action that calls `POST /flavor-agent/v1/sync-patterns` to queue the WP-Cron sync job, then polls `GET /flavor-agent/v1/sync-patterns` to refresh the live sync status panel in place.
 

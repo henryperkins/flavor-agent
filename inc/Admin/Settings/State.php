@@ -32,6 +32,7 @@ final class State {
 			&& '' !== (string) get_option( 'flavor_agent_qdrant_key', '' );
 		$pattern_state            = PatternIndex::get_runtime_state();
 		$patterns_ready_for_sync  = PatternIndex::recommendation_backends_configured();
+		$docs_grounding_enabled   = AISearchClient::is_enabled();
 		$docs_configured          = AISearchClient::is_configured();
 		$runtime_docs_grounding   = AISearchClient::get_runtime_state();
 		$guidelines_enabled       = Guidelines::has_any();
@@ -53,6 +54,7 @@ final class State {
 			'cloudflare_pattern_ai_search_signature_mismatch' => self::cloudflare_pattern_ai_search_signature_mismatch(),
 			'pattern_state'                             => $pattern_state,
 			'patterns_ready'                            => $patterns_ready_for_sync,
+			'docs_grounding_enabled'                    => $docs_grounding_enabled,
 			'docs_configured'                           => $docs_configured,
 			'runtime_docs_grounding'                    => $runtime_docs_grounding,
 			'guidelines_enabled'                        => $guidelines_enabled,
@@ -272,6 +274,13 @@ final class State {
 	 * @return array{label: string, tone: string}
 	 */
 	public static function get_docs_overview_status( array $state ): array {
+		if (
+			false === ( $state['docs_grounding_enabled'] ?? true ) ||
+			'disabled' === (string) ( $state['runtime_docs_grounding']['status'] ?? '' )
+		) {
+			return self::make_badge( __( 'Temporarily disabled', 'flavor-agent' ), 'neutral' );
+		}
+
 		if ( empty( $state['docs_configured'] ) ) {
 			return self::make_badge( __( 'Unavailable', 'flavor-agent' ), 'warning' );
 		}

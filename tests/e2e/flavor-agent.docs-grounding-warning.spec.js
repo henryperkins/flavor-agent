@@ -1,187 +1,206 @@
-const { test, expect } = require( './test-fixtures' );
-const { waitForWordPressReady } = require( './wait-for-wordpress-ready' );
+const { test, expect } = require("./test-fixtures");
+const { waitForWordPressReady } = require("./wait-for-wordpress-ready");
 
 const DOCS_WARNING_TEXT =
-	'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.';
+  "Suggestions are running without developer-docs grounding right now. They are still usable.";
 
-function recommendationAbilityRoute( abilitySlug ) {
-	return new RegExp( `${ abilitySlug }(?:/|\\?|$)` );
+const DOCS_DISABLED_TEXT =
+  "Developer Docs grounding is temporarily disabled in this release. Suggestions remain available.";
+
+function recommendationAbilityRoute(abilitySlug) {
+  return new RegExp(`${abilitySlug}(?:/|\\?|$)`);
 }
 
-function getAbilityRequestInput( body = {} ) {
-	return body &&
-		typeof body === 'object' &&
-		! Array.isArray( body ) &&
-		body.input &&
-		typeof body.input === 'object' &&
-		! Array.isArray( body.input )
-		? body.input
-		: body;
+function getAbilityRequestInput(body = {}) {
+  return body &&
+    typeof body === "object" &&
+    !Array.isArray(body) &&
+    body.input &&
+    typeof body.input === "object" &&
+    !Array.isArray(body.input)
+    ? body.input
+    : body;
 }
 
-async function waitForFlavorAgent( page ) {
-	await page.waitForFunction(
-		() => Boolean( window.wp?.data?.select( 'flavor-agent' ) ),
-		undefined,
-		{ timeout: 90_000 }
-	);
+async function waitForFlavorAgent(page) {
+  await page.waitForFunction(
+    () => Boolean(window.wp?.data?.select("flavor-agent")),
+    undefined,
+    { timeout: 90_000 },
+  );
 }
 
-async function dismissWelcomeGuide( page ) {
-	await page.evaluate( () => {
-		window.wp?.data
-			?.dispatch( 'core/preferences' )
-			?.set?.( 'core/edit-post', 'welcomeGuide', false );
-		window.wp?.data
-			?.dispatch( 'core/preferences' )
-			?.set?.( 'core/edit-post', 'welcomeGuideTemplate', false );
-	} );
+async function dismissWelcomeGuide(page) {
+  await page.evaluate(() => {
+    window.wp?.data
+      ?.dispatch("core/preferences")
+      ?.set?.("core/edit-post", "welcomeGuide", false);
+    window.wp?.data
+      ?.dispatch("core/preferences")
+      ?.set?.("core/edit-post", "welcomeGuideTemplate", false);
+  });
 
-	const welcomeOverlay = page
-		.locator( '.components-modal__screen-overlay' )
-		.filter( {
-			hasText:
-				/Welcome to the editor|Welcome to the Site Editor|Page 1 of 4/i,
-		} );
+  const welcomeOverlay = page
+    .locator(".components-modal__screen-overlay")
+    .filter({
+      hasText: /Welcome to the editor|Welcome to the Site Editor|Page 1 of 4/i,
+    });
 
-	for ( let attempt = 0; attempt < 4; attempt++ ) {
-		if ( ! ( await welcomeOverlay.isVisible().catch( () => false ) ) ) {
-			return;
-		}
+  for (let attempt = 0; attempt < 4; attempt++) {
+    if (!(await welcomeOverlay.isVisible().catch(() => false))) {
+      return;
+    }
 
-		const closeButton = welcomeOverlay
-			.getByRole( 'button', { name: 'Close' } )
-			.first();
-		const getStartedButton = welcomeOverlay
-			.getByRole( 'button', { name: 'Get started' } )
-			.first();
+    const closeButton = welcomeOverlay
+      .getByRole("button", { name: "Close" })
+      .first();
+    const getStartedButton = welcomeOverlay
+      .getByRole("button", { name: "Get started" })
+      .first();
 
-		if ( await closeButton.isVisible().catch( () => false ) ) {
-			await closeButton.click().catch( () => {} );
-		} else if (
-			await getStartedButton.isVisible().catch( () => false )
-		) {
-			await getStartedButton.click().catch( () => {} );
-		} else {
-			await page.keyboard.press( 'Escape' ).catch( () => {} );
-		}
+    if (await closeButton.isVisible().catch(() => false)) {
+      await closeButton.click().catch(() => {});
+    } else if (await getStartedButton.isVisible().catch(() => false)) {
+      await getStartedButton.click().catch(() => {});
+    } else {
+      await page.keyboard.press("Escape").catch(() => {});
+    }
 
-		await page.waitForTimeout( 250 );
-	}
+    await page.waitForTimeout(250);
+  }
 }
 
-async function enableMockedPatternRecommendations( page ) {
-	await page.addInitScript( () => {
-		const applyPatternCapability = ( nextData = {} ) => {
-			const data = nextData || {};
+async function enableMockedPatternRecommendations(page) {
+  await page.addInitScript(() => {
+    const applyPatternCapability = (nextData = {}) => {
+      const data = nextData || {};
 
-			data.canRecommendPatterns = true;
-			data.capabilities = data.capabilities || {};
-			data.capabilities.surfaces = data.capabilities.surfaces || {};
-			data.capabilities.surfaces.pattern = {
-				...( data.capabilities.surfaces.pattern || {} ),
-				available: true,
-				reason: 'ready',
-				owner: 'connectors',
-				patternRuntimeSignature: 'mock-pattern-runtime',
-			};
+      data.canRecommendPatterns = true;
+      data.capabilities = data.capabilities || {};
+      data.capabilities.surfaces = data.capabilities.surfaces || {};
+      data.capabilities.surfaces.pattern = {
+        ...(data.capabilities.surfaces.pattern || {}),
+        available: true,
+        reason: "ready",
+        owner: "connectors",
+        patternRuntimeSignature: "mock-pattern-runtime",
+      };
 
-			return data;
-		};
+      return data;
+    };
 
-		let localizedData = applyPatternCapability(
-			window.flavorAgentData || {}
-		);
+    let localizedData = applyPatternCapability(window.flavorAgentData || {});
 
-		Object.defineProperty( window, 'flavorAgentData', {
-			configurable: true,
-			get() {
-				return localizedData;
-			},
-			set( nextData ) {
-				localizedData = applyPatternCapability( nextData || {} );
-			},
-		} );
-	} );
+    Object.defineProperty(window, "flavorAgentData", {
+      configurable: true,
+      get() {
+        return localizedData;
+      },
+      set(nextData) {
+        localizedData = applyPatternCapability(nextData || {});
+      },
+    });
+  });
 }
 
-async function seedParagraphBlock( page ) {
-	await page.waitForFunction( () =>
-		Boolean(
-			window.wp?.blocks?.createBlock &&
-				window.wp?.data?.select( 'core/block-editor' ) &&
-				window.wp?.data?.dispatch( 'core/block-editor' )
-		)
-	);
+async function seedParagraphBlock(page) {
+  await page.waitForFunction(() =>
+    Boolean(
+      window.wp?.blocks?.createBlock &&
+        window.wp?.data?.select("core/block-editor") &&
+        window.wp?.data?.dispatch("core/block-editor"),
+    ),
+  );
 
-	await page.evaluate( () => {
-		const { createBlock } = window.wp.blocks;
-		const paragraph = createBlock( 'core/paragraph', {
-			content: 'Docs grounding warning browser test.',
-		} );
+  await page.evaluate(() => {
+    const { createBlock } = window.wp.blocks;
+    const paragraph = createBlock("core/paragraph", {
+      content: "Docs grounding warning browser test.",
+    });
 
-		window.wp?.data?.dispatch( 'core/editor' )?.editPost( {
-			title: 'Docs Grounding Warning',
-		} );
-		window.wp?.data
-			?.dispatch( 'core/block-editor' )
-			?.resetBlocks?.( [ paragraph ] );
-		window.wp?.data
-			?.dispatch( 'core/block-editor' )
-			?.selectBlock?.( paragraph.clientId );
-	} );
+    window.wp?.data?.dispatch("core/editor")?.editPost({
+      title: "Docs Grounding Warning",
+    });
+    window.wp?.data?.dispatch("core/block-editor")?.resetBlocks?.([paragraph]);
+    window.wp?.data
+      ?.dispatch("core/block-editor")
+      ?.selectBlock?.(paragraph.clientId);
+  });
 }
 
-test( 'pattern inserter shows the soft notice when a result ran without docs grounding', async ( {
-	page,
-} ) => {
-	await page.route(
-		recommendationAbilityRoute( 'recommend-patterns' ),
-		async ( route ) => {
-			getAbilityRequestInput( route.request().postDataJSON() );
+async function assertPatternDocsNotice(page, diagnostics, message) {
+  await page.route(
+    recommendationAbilityRoute("recommend-patterns"),
+    async (route) => {
+      getAbilityRequestInput(route.request().postDataJSON());
 
-			await route.fulfill( {
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify( {
-					recommendations: [],
-					diagnostics: {},
-					docsGrounding: {
-						available: false,
-						sourceTypes: [],
-						count: 0,
-					},
-				} ),
-			} );
-		}
-	);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          recommendations: [],
+          diagnostics: {},
+          docsGrounding: {
+            available: false,
+            sourceTypes: [],
+            count: 0,
+            ...diagnostics,
+          },
+        }),
+      });
+    },
+  );
 
-	await enableMockedPatternRecommendations( page );
-	await page.goto( '/wp-admin/post-new.php', {
-		waitUntil: 'domcontentloaded',
-	} );
-	await waitForWordPressReady( page );
-	await waitForFlavorAgent( page );
-	await dismissWelcomeGuide( page );
-	await seedParagraphBlock( page );
-	// The welcome guide can mount after the editor finishes hydrating, so the
-	// pre-seed dismissal is not always the last word. Its modal overlay makes
-	// the editor behind it inert, which strips the toolbar buttons of their
-	// accessible names and leaves `Block Inserter` unmatchable until the test
-	// times out. Dismiss again post-seed, the way the pattern-surface smoke
-	// specs in flavor-agent.smoke.spec.js already do.
-	await dismissWelcomeGuide( page );
+  await enableMockedPatternRecommendations(page);
+  await page.goto("/wp-admin/post-new.php", {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForWordPressReady(page);
+  await waitForFlavorAgent(page);
+  await dismissWelcomeGuide(page);
+  await seedParagraphBlock(page);
+  // The welcome guide can mount after the editor finishes hydrating, so the
+  // pre-seed dismissal is not always the last word. Its modal overlay makes
+  // the editor behind it inert, which strips the toolbar buttons of their
+  // accessible names and leaves `Block Inserter` unmatchable until the test
+  // times out. Dismiss again post-seed, the way the pattern-surface smoke
+  // specs in flavor-agent.smoke.spec.js already do.
+  await dismissWelcomeGuide(page);
 
-	await page
-		.getByRole( 'button', {
-			name: 'Block Inserter',
-			exact: true,
-		} )
-		.click();
+  await page
+    .getByRole("button", {
+      name: "Block Inserter",
+      exact: true,
+    })
+    .click();
 
-	await expect(
-		page
-			.locator( '.components-notice__content' )
-			.filter( { hasText: DOCS_WARNING_TEXT } )
-	).toBeVisible( { timeout: 15_000 } );
-} );
+  await expect(
+    page.locator(".components-notice__content").filter({ hasText: message }),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(
+    page.getByRole("button", { name: "Block Inserter", exact: true }),
+  ).toBeEnabled();
+}
+
+test("pattern inserter shows the soft notice when a result ran without docs grounding", async ({
+  page,
+}) => {
+  await assertPatternDocsNotice(page, {}, DOCS_WARNING_TEXT);
+});
+
+test("pattern inserter explains release-disabled docs grounding while suggestions remain available", async ({
+  page,
+}) => {
+  await assertPatternDocsNotice(
+    page,
+    {
+      reason: "disabled",
+      source: "release_policy",
+      errorCode: "",
+    },
+    DOCS_DISABLED_TEXT,
+  );
+  await expect(page.locator(".components-notice__content")).not.toContainText(
+    "grounding will return when the search backend is reachable",
+  );
+});

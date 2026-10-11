@@ -45,6 +45,31 @@ describe( 'deriveDocsGroundingWarning', () => {
 		expect( warning.reason ).toBe( 'backend_unreachable' );
 		expect( warning.errorCode ).toBe( 'http_request_failed' );
 	} );
+
+	test( 'explains the release suspension without promising automatic recovery', () => {
+		const warning = deriveDocsGroundingWarning( {
+			available: false,
+			count: 0,
+			reason: 'disabled',
+			source: 'release_policy',
+			errorCode: '',
+		} );
+
+		expect( warning.tone ).toBe( 'info' );
+		expect( warning.reason ).toBe( 'disabled' );
+		expect( warning.errorCode ).toBe( '' );
+		expect( warning.message ).toBe(
+			'Developer Docs grounding is temporarily disabled in this release. Suggestions remain available.'
+		);
+		expect( warning.message ).not.toContain( 'backend' );
+		expect( warning.message ).not.toContain( 'will return' );
+	} );
+
+	test( 'does not promise automatic recovery for an unknown unavailable reason', () => {
+		const warning = deriveDocsGroundingWarning( { available: false } );
+
+		expect( warning.message ).not.toContain( 'will return' );
+	} );
 } );
 
 describe( 'getDocsGroundingWarningMessage', () => {

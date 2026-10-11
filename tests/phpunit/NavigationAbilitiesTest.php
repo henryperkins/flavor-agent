@@ -125,6 +125,8 @@ final class NavigationAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_navigation_review_signature_is_stable_between_recommendation_and_signature_modes(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		$this->configure_text_generation_connector();
 		$this->route_docs_grounding_search(
 			[

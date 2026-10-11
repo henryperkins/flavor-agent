@@ -120,7 +120,7 @@ const DOCS_GROUNDING_WARNING = {
 	reason: '',
 	errorCode: '',
 	message:
-		'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.',
+		'Suggestions are running without developer-docs grounding right now. They are still usable.',
 };
 
 const DOCS_GROUNDING_PAYLOAD = {
@@ -1287,6 +1287,52 @@ for ( const def of EXECUTABLE_SURFACE_DEFS ) {
 			expect(
 				afterWarningRecommendations[ def.docsGroundingWarningKey ]
 			).toEqual( DOCS_GROUNDING_WARNING );
+
+			const afterDisabledRecommendations = reduceExecutableSurfaceState(
+				recommendationState,
+				actions[ def.methodNames.setRecommendations ](
+					fixture.recommendationValue,
+					{
+						...fixture.payload,
+						docsGrounding: {
+							...DOCS_GROUNDING_PAYLOAD,
+							reason: 'disabled',
+							source: 'release_policy',
+							errorCode: '',
+						},
+					},
+					fixture.input.prompt,
+					8,
+					fixture.input.contextSignature,
+					fixture.reviewContextSignature,
+					fixture.resolvedContextSignature
+				)
+			);
+			expect( afterDisabledRecommendations[ def.collectionKey ] ).toEqual(
+				afterRecommendations[ def.collectionKey ]
+			);
+			expect( afterDisabledRecommendations[ def.statusKey ] ).toBe(
+				'ready'
+			);
+			expect( afterDisabledRecommendations[ def.errorKey ] ).toBeNull();
+			expect(
+				afterDisabledRecommendations[ def.reviewFreshnessStatusKey ]
+			).toBe( 'fresh' );
+			expect(
+				afterDisabledRecommendations[ def.resolvedContextSignatureKey ]
+			).toBe( fixture.resolvedContextSignature );
+			expect(
+				afterDisabledRecommendations[ def.staleReasonKey ]
+			).toBeNull();
+			expect(
+				afterDisabledRecommendations[ def.docsGroundingWarningKey ]
+			).toEqual( {
+				tone: 'info',
+				reason: 'disabled',
+				errorCode: '',
+				message:
+					'Developer Docs grounding is temporarily disabled in this release. Suggestions remain available.',
+			} );
 
 			const staleReviewState = {
 				...createExecutableSurfaceDefaultState(),

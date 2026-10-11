@@ -136,7 +136,7 @@ Older saved connector-backed, OpenAI Native, or Azure provider values do not sel
 | Navigation recommendations    | Yes               | No                  | No                  | No                               |
 | Global Styles recommendations | Yes               | No                  | No                  | No                               |
 | Style Book recommendations    | Yes               | No                  | No                  | No                               |
-| WordPress docs search         | No                | No                  | No                  | Built-in public docs endpoint    |
+| WordPress docs search         | No                | No                  | No                  | Disabled by default in v0.1.3     |
 
 ## Primary Source Files
 

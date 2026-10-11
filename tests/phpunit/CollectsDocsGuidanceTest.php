@@ -4,16 +4,83 @@ declare(strict_types=1);
 
 namespace FlavorAgent\Tests;
 
+use FlavorAgent\Cloudflare\AISearchClient;
 use FlavorAgent\Support\CollectsDocsGuidance;
 use FlavorAgent\Tests\Support\WordPressTestState;
 use PHPUnit\Framework\TestCase;
 
 final class CollectsDocsGuidanceTest extends TestCase {
 
+	private \Closure $enable_docs_grounding;
+
 	protected function setUp(): void {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		$this->enable_docs_grounding = static fn(): bool => true;
+		\add_filter( 'flavor_agent_docs_grounding_enabled', $this->enable_docs_grounding );
+	}
+
+	protected function tearDown(): void {
+		\remove_filter( 'flavor_agent_docs_grounding_enabled', $this->enable_docs_grounding );
+
+		parent::tearDown();
+	}
+
+	public function test_release_default_disables_docs_in_recommendation_and_signature_modes_but_keeps_roadmap(): void {
+		$query                                    = 'paragraph typography';
+		WordPressTestState::$remote_post_response = $this->trusted_docs_response(
+			[
+				$this->trusted_docs_chunk(
+					'developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph',
+					'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
+					'Paragraph typography guidance.',
+					'2026-10-08T10:00:00Z'
+				),
+			]
+		);
+		$primed                                   = AISearchClient::search( $query );
+		$this->assertCount( 1, $primed['guidance'] );
+		WordPressTestState::$remote_post_calls                                   = [];
+		WordPressTestState::$last_remote_post                                    = [];
+		WordPressTestState::$transients['flavor_agent_core_roadmap_guidance_v1'] = [
+			[
+				'title'      => 'WordPress AI roadmap',
+				'sourceKey'  => 'github.com/orgs/WordPress/projects/240',
+				'sourceType' => 'roadmap',
+				'url'        => 'https://github.com/orgs/WordPress/projects/240',
+				'excerpt'    => 'Open roadmap milestones: Core Improvements.',
+			],
+		];
+		$cached         = WordPressTestState::$transients;
+		$roadmap_filter = static fn(): bool => true;
+		\add_filter( 'flavor_agent_enable_core_roadmap_guidance', $roadmap_filter );
+		\remove_filter( 'flavor_agent_docs_grounding_enabled', $this->enable_docs_grounding );
+
+		$fingerprints = [];
+		foreach ( [ 'recommendation', 'signature' ] as $mode ) {
+			$result = CollectsDocsGuidance::collect_result(
+				static fn( array $c, string $p ): string => $query,
+				[ 'block' => [ 'name' => 'core/paragraph' ] ],
+				'make it punchier',
+				[ 'mode' => $mode ]
+			);
+			$this->assertFalse( $result['available'], $mode );
+			$this->assertSame( 0, $result['count'] );
+			$this->assertSame( [], $result['sourceTypes'] );
+			$this->assertSame( 'disabled', $result['reason'] );
+			$this->assertSame( 'release_policy', $result['source'] );
+			$this->assertSame( '', $result['errorCode'] );
+			$this->assertCount( 1, $result['guidance'] );
+			$this->assertSame( 'roadmap', $result['guidance'][0]['sourceType'] );
+			$fingerprints[] = $result['contentFingerprint'];
+		}
+		\remove_filter( 'flavor_agent_enable_core_roadmap_guidance', $roadmap_filter );
+
+		$this->assertSame( $fingerprints[0], $fingerprints[1] );
+		$this->assertSame( $cached, WordPressTestState::$transients );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
 	}
 
 	public function test_collect_result_recommendation_mode_uses_best_effort_and_wraps_result(): void {

@@ -871,6 +871,8 @@ final class BlockAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_block_resolve_signature_only_includes_docs_grounding_fingerprint(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		WordPressTestState::$transients = [];
 		WordPressTestState::$options    = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
@@ -961,6 +963,8 @@ final class BlockAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_block_signature_ignores_docs_runtime_fingerprint_drift(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		WordPressTestState::$transients = [];
 
 		$input    = [
@@ -1110,6 +1114,8 @@ final class BlockAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_block_resolved_signature_is_stable_between_recommendation_and_signature_modes(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		$this->configure_text_generation_connector();
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
 			[

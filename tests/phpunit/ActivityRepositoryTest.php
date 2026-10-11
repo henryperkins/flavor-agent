@@ -2109,6 +2109,7 @@ final class ActivityRepositoryTest extends TestCase {
 		$timezone_names = [
 			'Pacific/Kiritimati',
 			'Asia/Tokyo',
+			'Asia/Dhaka',
 			'Europe/London',
 			'America/New_York',
 			'Pacific/Honolulu',

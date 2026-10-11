@@ -28,6 +28,8 @@ final class InfraAbilitiesTest extends TestCase {
 	}
 
 	public function test_check_status_marks_cloudflare_docs_backend_as_configured_without_marking_plugin_ready(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		WordPressTestState::$capabilities = [
 			'edit_posts'     => true,
 			'manage_options' => true,
@@ -175,6 +177,8 @@ final class InfraAbilitiesTest extends TestCase {
 	}
 
 	public function test_check_status_filters_admin_only_docs_ability_for_non_admin_users(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		WordPressTestState::$capabilities = [
 			'edit_posts' => true,
 		];

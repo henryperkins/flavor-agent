@@ -1371,14 +1371,15 @@ final class SettingsTest extends TestCase {
 		$this->assertSame( 'flavor-agent-overview', $screen->help_tabs[0]['id'] );
 		$this->assertSame( 'Overview', $screen->help_tabs[0]['title'] );
 		$this->assertStringContainsString( 'Use Connectors for text generation. Flavor Agent shows the active chat path here.', $screen->help_tabs[0]['content'] );
-		$this->assertStringContainsString( 'Use this page for embedding credentials, pattern storage, developer-doc grounding limits, Guidelines, and AI Activity logging controls.', $screen->help_tabs[0]['content'] );
+		$this->assertStringContainsString( 'Use this page for embedding credentials, pattern storage, Developer Docs status, Guidelines, and AI Activity logging controls.', $screen->help_tabs[0]['content'] );
 		$this->assertStringContainsString( 'When core Guidelines are available, Flavor Agent reads them first. Legacy fields remain available for migration and rollback.', $screen->help_tabs[0]['content'] );
 		$this->assertSame( 'flavor-agent-configuration', $screen->help_tabs[1]['id'] );
 		$this->assertStringContainsString( 'Pattern Storage chooses where the pattern catalog is indexed.', $screen->help_tabs[1]['content'] );
 		$this->assertStringContainsString( 'Private AI Search pattern storage reuses the Cloudflare account and token from the Embedding Model section.', $screen->help_tabs[1]['content'] );
 		$this->assertStringNotContainsString( 'Settings &gt; Connectors', $screen->help_tabs[1]['content'] );
 		$this->assertSame( 'flavor-agent-troubleshooting', $screen->help_tabs[2]['id'] );
-		$this->assertStringContainsString( 'Developer Docs use the built-in developer.wordpress.org grounding path.', $screen->help_tabs[2]['content'] );
+		$this->assertStringContainsString( 'Developer Docs grounding is temporarily disabled in this release by release policy. Recommendations remain available.', $screen->help_tabs[2]['content'] );
+		$this->assertStringNotContainsString( 'The only runtime warning is a temporarily unreachable search backend', $screen->help_tabs[2]['content'] );
 		$this->assertStringContainsString( 'The Developer Docs group shows compact runtime status.', $screen->help_tabs[2]['content'] );
 		$this->assertStringContainsString( 'When core Guidelines are available, Flavor Agent reads them first.', $screen->help_tabs[2]['content'] );
 		$this->assertStringContainsString( 'AI Activity Dual Logging keeps Flavor Agent request diagnostics alongside core AI Request Logs when core logging is enabled.', $screen->help_tabs[2]['content'] );
@@ -1386,6 +1387,22 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Quick Links', $screen->help_sidebar );
 		$this->assertStringContainsString( 'options-connectors.php', $screen->help_sidebar );
 		$this->assertStringContainsString( 'flavor-agent-activity', $screen->help_sidebar );
+	}
+
+	public function test_contextual_help_retains_enabled_docs_guidance_with_explicit_opt_in(): void {
+		$screen                             = new \WP_Screen();
+		WordPressTestState::$current_screen = $screen;
+		add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
+		try {
+			Settings::register_contextual_help();
+		} finally {
+			remove_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+		}
+
+		$this->assertStringContainsString( 'Developer Docs use the built-in developer.wordpress.org grounding path.', $screen->help_tabs[2]['content'] );
+		$this->assertStringContainsString( 'Use this page for embedding credentials, pattern storage, developer-doc grounding limits, Guidelines, and AI Activity logging controls.', $screen->help_tabs[0]['content'] );
+		$this->assertStringNotContainsString( 'temporarily disabled in this release', $screen->help_tabs[2]['content'] );
 	}
 
 	public function test_render_page_moves_setup_guidance_into_wp_help(): void {
@@ -1415,7 +1432,7 @@ final class SettingsTest extends TestCase {
 		$this->assertStringContainsString( 'Storage and sync for pattern recommendations.', $output );
 		$this->assertStringContainsString( 'Choose where the pattern catalog is stored.', $output );
 		$this->assertStringContainsString( '4. Developer Docs', $output );
-		$this->assertStringContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
+		$this->assertStringContainsString( 'Developer Docs grounding is temporarily disabled in this release by release policy. Recommendations remain available.', $output );
 		$this->assertStringContainsString( '5. Guidelines', $output );
 		$this->assertStringContainsString( 'Site and block guidance.', $output );
 		$this->assertStringContainsString( '6. Experimental Features', $output );
@@ -2014,9 +2031,41 @@ final class SettingsTest extends TestCase {
 	}
 
 	public function test_render_settings_save_summary_keeps_other_success_notices_when_one_section_has_errors(): void {
+		add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
 		$_GET = [
 			'settings-updated' => 'true',
 		];
+
+		ob_start();
+		try {
+			Page::render_settings_save_summary(
+				[
+					'changed_sections' => [
+						'chat' => true,
+						'docs' => true,
+					],
+					'messages'         => [
+						'chat' => [
+							[
+								'tone'    => 'error',
+								'message' => 'Azure validation failed.',
+							],
+						],
+					],
+				]
+			);
+			$output = (string) ob_get_contents();
+		} finally {
+			ob_end_clean();
+			remove_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+		}
+
+		$this->assertStringNotContainsString( 'AI model settings saved.', $output );
+		$this->assertStringContainsString( 'Developer docs settings saved.', $output );
+	}
+
+	public function test_render_settings_save_summary_omits_disabled_docs_from_stale_changed_sections(): void {
+		$_GET = [ 'settings-updated' => 'true' ];
 
 		ob_start();
 		Page::render_settings_save_summary(
@@ -2025,20 +2074,40 @@ final class SettingsTest extends TestCase {
 					'chat' => true,
 					'docs' => true,
 				],
-				'messages'         => [
-					'chat' => [
-						[
-							'tone'    => 'error',
-							'message' => 'Azure validation failed.',
-						],
-					],
-				],
 			]
 		);
 		$output = (string) ob_get_clean();
 
-		$this->assertStringNotContainsString( 'AI model settings saved.', $output );
-		$this->assertStringContainsString( 'Developer docs settings saved.', $output );
+		$this->assertStringContainsString( 'AI model settings saved.', $output );
+		$this->assertStringNotContainsString( 'Developer docs settings saved.', $output );
+	}
+
+	public function test_disabled_docs_result_count_preserves_saved_value_without_changed_feedback(): void {
+		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_max_results'] = 7;
+		$_POST = [
+			'option_page'                        => Config::OPTION_GROUP,
+			'flavor_agent_settings_feedback_key' => 'disabled-docs-save',
+		];
+
+		foreach ( [ null, 99 ] as $submitted_value ) {
+			$this->assertSame( 7, Settings::sanitize_grounding_result_count( $submitted_value ) );
+			$this->assertSame( [], WordPressTestState::$transients );
+		}
+	}
+
+	public function test_disabled_docs_result_count_uses_registered_default_without_a_saved_value(): void {
+		$this->assertSame( 4, Settings::sanitize_grounding_result_count( null ) );
+	}
+
+	public function test_enabled_docs_result_count_clamps_submitted_value_with_explicit_opt_in(): void {
+		add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
+		try {
+			$this->assertSame( 8, Settings::sanitize_grounding_result_count( 99 ) );
+			$this->assertSame( 1, Settings::sanitize_grounding_result_count( 0 ) );
+		} finally {
+			remove_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+		}
 	}
 
 	public function test_determine_default_open_group_defaults_to_chat_when_runtime_chat_is_not_ready(): void {
@@ -2253,9 +2322,7 @@ final class SettingsTest extends TestCase {
 			'flavor_agent_cloudflare_ai_search_api_token'  => 'token-xyz',
 		];
 
-		ob_start();
-		Settings::render_page();
-		$output = (string) ob_get_clean();
+		$output = $this->render_page_with_docs_grounding_enabled();
 
 		$this->assertStringContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
 		$this->assertStringNotContainsString( 'Developer Docs Source', $output );
@@ -2531,6 +2598,58 @@ final class SettingsTest extends TestCase {
 		);
 	}
 
+	public function test_get_docs_overview_status_reports_release_suspension_neutrally(): void {
+		$this->assertSame(
+			[
+				'label' => 'Temporarily disabled',
+				'tone'  => 'neutral',
+			],
+			State::get_docs_overview_status(
+				[
+					'docs_grounding_enabled' => false,
+					'docs_configured'        => false,
+					'runtime_docs_grounding' => [ 'status' => 'disabled' ],
+				]
+			)
+		);
+	}
+
+	public function test_render_page_reports_release_suspension_instead_of_stored_backend_outcomes(): void {
+		foreach ( [ 'ok', 'unreachable' ] as $stored_status ) {
+			$stored_state = [
+				'status'           => $stored_status,
+				'lastSearchAt'     => '2026-06-11 00:00:00',
+				'lastResultCount'  => 4,
+				'lastReason'       => 'ok' === $stored_status ? 'grounded' : 'backend_unreachable',
+				'lastErrorCode'    => 'http_request_failed',
+				'lastErrorMessage' => 'Connection timed out',
+			];
+			WordPressTestState::$options[ AISearchClient::RUNTIME_STATE_OPTION ] = $stored_state;
+
+			$state = State::get_page_state();
+			$this->assertFalse( $state['docs_grounding_enabled'] ?? true );
+			$this->assertSame( 'disabled', $state['runtime_docs_grounding']['status'] );
+			$this->assertSame( 0, $state['runtime_docs_grounding']['lastResultCount'] );
+			$this->assertSame( '', $state['runtime_docs_grounding']['lastSearchAt'] );
+			$this->assertSame( '', $state['runtime_docs_grounding']['lastErrorCode'] );
+
+			ob_start();
+			Settings::render_page();
+			$output = (string) ob_get_clean();
+
+			$this->assertStringContainsString( 'Temporarily disabled', $output );
+			$this->assertStringContainsString( 'Developer Docs grounding is temporarily disabled in this release by release policy. Recommendations remain available.', $output );
+			$this->assertStringNotContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
+			$this->assertStringNotContainsString( 'name="flavor_agent_cloudflare_ai_search_max_results"', $output );
+			$this->assertStringNotContainsString( 'Last search: 2026-06-11', $output );
+			$this->assertStringNotContainsString( 'Last result count: 4.', $output );
+			$this->assertStringNotContainsString( 'Last error code: http_request_failed.', $output );
+			$this->assertStringNotContainsString( 'The last live Developer Docs grounding request failed', $output );
+			$this->assertSame( $stored_state, WordPressTestState::$options[ AISearchClient::RUNTIME_STATE_OPTION ] );
+			$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		}
+	}
+
 	public function test_render_page_shows_single_unreachable_warning_in_developer_docs_group(): void {
 		WordPressTestState::$options = [
 			AISearchClient::RUNTIME_STATE_OPTION => [
@@ -2543,9 +2662,7 @@ final class SettingsTest extends TestCase {
 			],
 		];
 
-		ob_start();
-		Settings::render_page();
-		$output = (string) ob_get_clean();
+		$output = $this->render_page_with_docs_grounding_enabled();
 
 		$this->assertStringContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
 		$this->assertStringContainsString( 'The last live Developer Docs grounding request failed to reach the search backend.', $output );
@@ -2564,12 +2681,23 @@ final class SettingsTest extends TestCase {
 			],
 		];
 
-		ob_start();
-		Settings::render_page();
-		$output = (string) ob_get_clean();
+		$output = $this->render_page_with_docs_grounding_enabled();
 
 		$this->assertStringContainsString( 'Built-in developer.wordpress.org grounding is active.', $output );
 		$this->assertStringNotContainsString( 'temporarily unavailable', $output );
+	}
+
+	private function render_page_with_docs_grounding_enabled(): string {
+		add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+		ob_start();
+
+		try {
+			Settings::render_page();
+			return (string) ob_get_contents();
+		} finally {
+			ob_end_clean();
+			remove_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+		}
 	}
 
 	/**

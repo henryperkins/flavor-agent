@@ -232,7 +232,7 @@ Renders the shared recent-actions list for executable surfaces, including ordere
 
 ### `src/components/DocsGroundingNotice.js` and `src/utils/docs-grounding-warning.js`
 
-`DocsGroundingNotice` renders a single non-dismissible info notice when a recommendation ran without developer-docs grounding (`docsGrounding.available === false`, i.e. the search backend was unreachable or returned nothing). Grounding is best-effort prompt context and never stales or blocks a result; trust and currency of the corpus are owned by `scripts/update-docs-ai-search.js`. Message resolution delegates to `getDocsGroundingWarningMessage(warning)` from the paired util.
+`DocsGroundingNotice` renders a single non-dismissible info notice when `docsGrounding.available === false`. v0.1.3 reports `reason=disabled` and explains that external grounding is temporarily disabled in this release; suggestions remain available. Explicitly enabled development paths retain reason-specific messages for transport failure, empty results, and cache-only misses. Runtime diagnostic changes do not alter content/apply fingerprints, but removal of previously attached docs content still requires normal review refresh. Trust and currency of the corpus are owned by `scripts/update-docs-ai-search.js`. Message resolution delegates to `getDocsGroundingWarningMessage(warning)` from the paired util.
 
 `utils/docs-grounding-warning.js` exposes:
 

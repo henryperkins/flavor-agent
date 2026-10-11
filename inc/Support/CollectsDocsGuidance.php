@@ -59,7 +59,14 @@ final class CollectsDocsGuidance {
 	private static function collect_parts( callable $build_query, array $context, string $prompt, array $options ): array {
 		$query = (string) $build_query( $context, $prompt );
 
-		if ( '' === $query ) {
+		if ( ! AISearchClient::is_enabled() ) {
+			$docs_guidance    = [];
+			$docs_diagnostics = [
+				'reason'    => 'disabled',
+				'source'    => 'release_policy',
+				'errorCode' => '',
+			];
+		} elseif ( '' === $query ) {
 			$docs_guidance    = [];
 			$docs_diagnostics = [
 				'reason'    => 'query_empty',

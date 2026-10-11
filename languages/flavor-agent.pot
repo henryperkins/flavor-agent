@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-10-08T16:29:38+00:00\n"
+"POT-Creation-Date: 2026-10-08T20:14:28+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: flavor-agent\n"
@@ -17,7 +17,7 @@ msgstr ""
 #. Plugin Name of the plugin
 #: flavor-agent.php
 #: inc/Abilities/Registration.php:43
-#: inc/Admin/Settings/Page.php:51
+#: inc/Admin/Settings/Page.php:52
 #: inc/AI/FlavorAgentFeature.php:26
 #: inc/MCP/ServerBootstrap.php:37
 msgid "Flavor Agent"
@@ -702,7 +702,7 @@ msgid "Target: %1$s. Requested by: %2$s. Expires: %3$s."
 msgstr ""
 
 #: inc/Admin/ActivityPage.php:138
-#: inc/Admin/Settings/Page.php:615
+#: inc/Admin/Settings/Page.php:617
 msgid "Open AI Activity"
 msgstr ""
 
@@ -814,807 +814,820 @@ msgstr ""
 msgid "Saved"
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:36
+#: inc/Admin/Settings/Help.php:40
 #: src/admin/activity-log.js:969
 msgid "Overview"
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:40
+#: inc/Admin/Settings/Help.php:44
 msgid "Flavor Agent mediates AI changes through one governed loop: AI proposes; WordPress approves. This page configures the plugin-owned backends behind that loop."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:41
+#: inc/Admin/Settings/Help.php:45
 msgid "Use Connectors for text generation. Flavor Agent shows the active chat path here."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:42
+#: inc/Admin/Settings/Help.php:48
 msgid "Use this page for embedding credentials, pattern storage, developer-doc grounding limits, Guidelines, and AI Activity logging controls."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:43
+#: inc/Admin/Settings/Help.php:49
+msgid "Use this page for embedding credentials, pattern storage, Developer Docs status, Guidelines, and AI Activity logging controls."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:51
 msgid "When core Guidelines are available, Flavor Agent reads them first. Legacy fields remain available for migration and rollback."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:50
+#: inc/Admin/Settings/Help.php:58
 msgid "Models & Storage"
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:54
+#: inc/Admin/Settings/Help.php:62
 msgid "Embedding credentials power semantic matching, including Qdrant pattern recommendations."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:55
+#: inc/Admin/Settings/Help.php:63
 msgid "Pattern Storage chooses where the pattern catalog is indexed. Qdrant uses the configured Embedding Model."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:56
+#: inc/Admin/Settings/Help.php:64
 msgid "Private AI Search pattern storage reuses the Cloudflare account and token from the Embedding Model section. Flavor Agent creates and owns a dedicated pattern index when Cloudflare AI Search Pattern Storage is selected."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:57
+#: inc/Admin/Settings/Help.php:65
 msgid "Qdrant and AI Search scores use different scales, so tune thresholds separately."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:64
+#: inc/Admin/Settings/Help.php:72
 msgid "Troubleshooting"
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:68
-msgid "Developer Docs use the built-in developer.wordpress.org grounding path. The only runtime warning is a temporarily unreachable search backend; recommendations still run without grounding."
+#: inc/Admin/Settings/Help.php:78
+msgid "Developer Docs use the built-in developer.wordpress.org grounding path. Recommendations still run without grounding when the search backend is unreachable."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:69
+#: inc/Admin/Settings/Help.php:79
+#: inc/Admin/Settings/Page.php:761
+msgid "Developer Docs grounding is temporarily disabled in this release by release policy. Recommendations remain available."
+msgstr ""
+
+#: inc/Admin/Settings/Help.php:81
 msgid "The Developer Docs group shows compact runtime status. Detailed grounding diagnostics, fingerprints, and request history belong in AI Activity entries and validation logs rather than the primary settings form."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:70
+#: inc/Admin/Settings/Help.php:82
 msgid "Pattern Sync stays unavailable until the selected storage path is configured. The sync panel shows stale reasons, last errors, and technical index details."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:71
+#: inc/Admin/Settings/Help.php:83
 msgid "When core Guidelines are available, Flavor Agent reads them first."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:72
+#: inc/Admin/Settings/Help.php:84
 msgid "Guidelines import fills the form. Save Changes persists imported values, and export uses the Gutenberg-compatible guideline_categories JSON shape."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:73
+#: inc/Admin/Settings/Help.php:85
 msgid "AI Activity Dual Logging keeps Flavor Agent request diagnostics alongside core AI Request Logs when core logging is enabled."
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:88
+#: inc/Admin/Settings/Help.php:100
 msgid "Quick Links"
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:92
-#: inc/Admin/Settings/Page.php:35
-#: inc/Admin/Settings/Page.php:37
-#: inc/Admin/Settings/Page.php:555
+#: inc/Admin/Settings/Help.php:104
+#: inc/Admin/Settings/Page.php:36
+#: inc/Admin/Settings/Page.php:38
+#: inc/Admin/Settings/Page.php:557
 #: src/utils/capability-flags.js:142
 #: src/utils/capability-flags.js:163
 msgid "Open Connectors"
 msgstr ""
 
-#: inc/Admin/Settings/Help.php:97
-#: inc/Admin/Settings/Page.php:35
-#: inc/Admin/Settings/Page.php:37
+#: inc/Admin/Settings/Help.php:109
+#: inc/Admin/Settings/Page.php:36
+#: inc/Admin/Settings/Page.php:38
 msgid "Open Activity Log"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:54
+#: inc/Admin/Settings/Page.php:55
 msgid "Flavor Agent Settings"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:57
+#: inc/Admin/Settings/Page.php:58
 msgid "Configure setup, storage, docs, and guidance."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:80
+#: inc/Admin/Settings/Page.php:81
 msgid "1. AI Model"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:90
+#: inc/Admin/Settings/Page.php:91
 msgid "2. Embedding Model"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:100
+#: inc/Admin/Settings/Page.php:101
 msgid "3. Patterns"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:110
+#: inc/Admin/Settings/Page.php:111
 msgid "4. Developer Docs"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:120
+#: inc/Admin/Settings/Page.php:121
 msgid "5. Guidelines"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:130
+#: inc/Admin/Settings/Page.php:131
 msgid "6. Experimental Features"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:142
+#: inc/Admin/Settings/Page.php:143
 msgid "Save Changes"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:186
-#: inc/Admin/Settings/State.php:195
+#: inc/Admin/Settings/Page.php:187
+#: inc/Admin/Settings/State.php:197
 msgid "AI Activity logging controls."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:225
+#: inc/Admin/Settings/Page.php:226
 msgid "AI model settings saved."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:232
+#: inc/Admin/Settings/Page.php:233
 msgid "Embedding model settings saved."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:240
+#: inc/Admin/Settings/Page.php:241
 msgid "Pattern settings saved. Run Pattern Sync to update the index."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:241
+#: inc/Admin/Settings/Page.php:242
 msgid "Pattern settings saved."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:248
+#: inc/Admin/Settings/Page.php:250
 msgid "Developer docs settings saved."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:255
+#: inc/Admin/Settings/Page.php:257
 msgid "Guidelines saved."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:262
+#: inc/Admin/Settings/Page.php:264
 msgid "Experimental feature settings saved."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:295
+#: inc/Admin/Settings/Page.php:297
 msgid "Jetpack AI"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:299
+#: inc/Admin/Settings/Page.php:301
 msgid "WordPress AI Client"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:302
+#: inc/Admin/Settings/Page.php:304
 #: src/admin/activity-log-utils.js:3166
 msgid "Not available"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:307
-#: inc/Admin/Settings/Page.php:1498
-#: inc/Admin/Settings/State.php:141
-#: inc/Admin/Settings/State.php:217
-#: inc/Admin/Settings/State.php:264
-#: inc/Admin/Settings/State.php:283
-#: inc/Admin/Settings/State.php:438
+#: inc/Admin/Settings/Page.php:309
+#: inc/Admin/Settings/Page.php:1510
+#: inc/Admin/Settings/State.php:143
+#: inc/Admin/Settings/State.php:219
+#: inc/Admin/Settings/State.php:266
+#: inc/Admin/Settings/State.php:292
+#: inc/Admin/Settings/State.php:447
 #: src/admin/settings-page-controller.js:8
 #: src/admin/settings-page-controller.js:134
 #: src/templates/TemplateRecommender.js:1091
 msgid "Ready"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:308
-#: inc/Admin/Settings/State.php:138
-#: inc/Admin/Settings/State.php:220
+#: inc/Admin/Settings/Page.php:310
+#: inc/Admin/Settings/State.php:140
+#: inc/Admin/Settings/State.php:222
 #: src/admin/settings-page-controller.js:119
 #: src/admin/settings-page-controller.js:320
 msgid "Needs setup"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:319
+#: inc/Admin/Settings/Page.php:321
 msgid "AI Runtime"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:325
+#: inc/Admin/Settings/Page.php:327
 msgid "AI Model"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:331
+#: inc/Admin/Settings/Page.php:333
 msgid "Embedding Model"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:337
+#: inc/Admin/Settings/Page.php:339
 msgid "Patterns"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:346
+#: inc/Admin/Settings/Page.php:348
 msgid "Developer Docs"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:352
+#: inc/Admin/Settings/Page.php:354
 msgid "Guidelines"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:358
+#: inc/Admin/Settings/Page.php:360
 msgid "Experimental Features"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:539
+#: inc/Admin/Settings/Page.php:541
 msgid "Not configured"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:542
+#: inc/Admin/Settings/Page.php:544
 msgid "Text generation is managed in Connectors."
 msgstr ""
 
 #. translators: %s: runtime chat provider label
-#: inc/Admin/Settings/Page.php:548
+#: inc/Admin/Settings/Page.php:550
 #, php-format
 msgid "Current: %s."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:568
+#: inc/Admin/Settings/Page.php:570
 msgid "Flavor Agent records request diagnostics in its own activity log. Upgrade to WordPress AI 1.0.0+ to access core AI request observability."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:572
+#: inc/Admin/Settings/Page.php:574
 msgid "Flavor Agent is recording request diagnostics in its own activity log. Enable the AI Request Logging experiment in Settings > AI to also capture provider, model, token, and cost data centrally."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:575
+#: inc/Admin/Settings/Page.php:577
 msgid "Open AI settings"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:580
+#: inc/Admin/Settings/Page.php:582
 msgid "AI Activity Storage"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:581
+#: inc/Admin/Settings/Page.php:583
 msgid "Read-only status for recommendation request observability."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:608
+#: inc/Admin/Settings/Page.php:610
 msgid "Open AI Request Logs"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:620
+#: inc/Admin/Settings/Page.php:622
 msgid "AI Request Logging is on."
 msgstr ""
 
 #. translators: %s: embedding provider label
-#: inc/Admin/Settings/Page.php:642
+#: inc/Admin/Settings/Page.php:644
 #, php-format
 msgid "Current embedding provider: %s."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:653
+#: inc/Admin/Settings/Page.php:655
 msgid "Cloudflare Workers AI"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:654
+#: inc/Admin/Settings/Page.php:656
 msgid "Used for embeddings."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:687
+#: inc/Admin/Settings/Page.php:689
 msgid "Choose where the pattern catalog is stored."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:700
+#: inc/Admin/Settings/Page.php:702
 msgid "Qdrant Pattern Storage"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:701
+#: inc/Admin/Settings/Page.php:703
 msgid "Vector storage for the pattern index."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:721
+#: inc/Admin/Settings/Page.php:723
 msgid "Cloudflare AI Search Pattern Storage"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:722
+#: inc/Admin/Settings/Page.php:724
 msgid "Managed pattern index using the saved Cloudflare credentials from the Embedding Model section."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:730
+#: inc/Admin/Settings/Page.php:732
 msgid "Advanced Ranking"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:757
+#: inc/Admin/Settings/Page.php:769
 msgid "Built-in developer.wordpress.org grounding is active."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:760
+#: inc/Admin/Settings/Page.php:772
 msgid "This panel reports the last live recommendation-time docs request; it does not probe the backend when the page loads."
 msgstr ""
 
 #. translators: %s: last docs search timestamp.
-#: inc/Admin/Settings/Page.php:769
+#: inc/Admin/Settings/Page.php:781
 #, php-format
 msgid "Last search: %s."
 msgstr ""
 
 #. translators: %d: number of guidance chunks returned by the last docs search.
-#: inc/Admin/Settings/Page.php:774
+#: inc/Admin/Settings/Page.php:786
 #, php-format
 msgid "Last result count: %d."
 msgstr ""
 
 #. translators: %s: last docs search outcome label.
-#: inc/Admin/Settings/Page.php:782
+#: inc/Admin/Settings/Page.php:794
 #, php-format
 msgid "Last outcome: %s"
 msgstr ""
 
 #. translators: %s: last docs search error code.
-#: inc/Admin/Settings/Page.php:790
+#: inc/Admin/Settings/Page.php:802
 #, php-format
 msgid "Last error code: %s."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:826
+#: inc/Admin/Settings/Page.php:838
 msgid "Core Guidelines connected."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:876
+#: inc/Admin/Settings/Page.php:888
 msgid "Block Guidelines"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:880
+#: inc/Admin/Settings/Page.php:892
 msgid "Add extra rules for a specific block when needed."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:894
+#: inc/Admin/Settings/Page.php:906
 #: src/admin/activity-log-utils.js:457
 #: src/admin/activity-log-utils.js:1104
 #: src/admin/FixtureExport.js:13
 msgid "Block"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:904
+#: inc/Admin/Settings/Page.php:916
 msgid "Guideline text"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:910
+#: inc/Admin/Settings/Page.php:922
 msgid "Enter guidelines for how this block should be used..."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:917
+#: inc/Admin/Settings/Page.php:929
 msgid "Cancel"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:920
+#: inc/Admin/Settings/Page.php:932
 #: src/admin/settings-page-controller.js:713
 msgid "Add Block Guideline"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:934
+#: inc/Admin/Settings/Page.php:946
 msgid "Import JSON"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:937
+#: inc/Admin/Settings/Page.php:949
 msgid "Export JSON"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:942
+#: inc/Admin/Settings/Page.php:954
 msgid "Import fills the form. Save Changes to persist."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:982
+#: inc/Admin/Settings/Page.php:994
 msgid "Qdrant"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:983
+#: inc/Admin/Settings/Page.php:995
 msgid "Cloudflare AI Search"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:993
+#: inc/Admin/Settings/Page.php:1005
 msgid "Pattern storage backend"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1015
+#: inc/Admin/Settings/Page.php:1027
 msgid "Active"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1028
+#: inc/Admin/Settings/Page.php:1040
 msgid "Save Changes to switch pattern storage."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1040
+#: inc/Admin/Settings/Page.php:1052
 msgid "Qdrant pattern storage ready."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1041
+#: inc/Admin/Settings/Page.php:1053
 msgid "Add Qdrant URL and API key to sync the pattern catalog."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1070
-#: inc/Admin/Settings/Validation.php:1034
+#: inc/Admin/Settings/Page.php:1082
+#: inc/Admin/Settings/Validation.php:1039
 msgid "Managed pattern index ready."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1079
+#: inc/Admin/Settings/Page.php:1091
 msgid "Needs Cloudflare credentials from the Embedding Model section."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1088
+#: inc/Admin/Settings/Page.php:1100
 msgid "Managed pattern index is provisioning in the background. Refresh this page shortly."
 msgstr ""
 
 #. translators: %s: deterministic Cloudflare AI Search instance ID
-#: inc/Admin/Settings/Page.php:1099
+#: inc/Admin/Settings/Page.php:1111
 #, php-format
 msgid "Managed pattern index needs attention. Flavor Agent will not adopt %s until ownership and schema can be proven. Fix or remove the conflicting Cloudflare AI Search instance, then save settings again."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1114
-#: inc/Admin/Settings/Page.php:1467
-#: inc/Admin/Settings/State.php:382
+#: inc/Admin/Settings/Page.php:1126
+#: inc/Admin/Settings/Page.php:1479
+#: inc/Admin/Settings/State.php:391
 msgid "Saved managed pattern index needs re-validation for the current Embedding Model credentials. Save settings again to re-validate."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1123
+#: inc/Admin/Settings/Page.php:1135
 msgid "Managed pattern index provisioning failed. Check the Cloudflare credentials from Embedding Model, then save settings again."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1136
+#: inc/Admin/Settings/Page.php:1148
 msgid "Managed pattern index needs attention."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1147
+#: inc/Admin/Settings/Page.php:1159
 msgid "Create managed pattern index."
 msgstr ""
 
 #. translators: %s: Cloudflare AI Search instance ID.
-#: inc/Admin/Settings/Page.php:1161
+#: inc/Admin/Settings/Page.php:1173
 #, php-format
 msgid "Instance ID: %s"
 msgstr ""
 
 #. translators: %s: error code returned while provisioning Cloudflare AI Search.
-#: inc/Admin/Settings/Page.php:1171
+#: inc/Admin/Settings/Page.php:1183
 #, php-format
 msgid "Error code: %s"
 msgstr ""
 
 #. translators: %s: error message returned while provisioning Cloudflare AI Search.
-#: inc/Admin/Settings/Page.php:1181
+#: inc/Admin/Settings/Page.php:1193
 #, php-format
 msgid "Error message: %s"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1195
+#: inc/Admin/Settings/Page.php:1207
 msgid "Advanced details"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1303
+#: inc/Admin/Settings/Page.php:1315
 #: src/admin/settings-page-controller.js:359
 msgid "Not synced yet"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1347
-#: inc/Admin/Settings/Page.php:1425
+#: inc/Admin/Settings/Page.php:1359
+#: inc/Admin/Settings/Page.php:1437
 msgid "Sync Pattern Catalog"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1369
+#: inc/Admin/Settings/Page.php:1381
 #: src/admin/activity-log.js:3462
 msgid "Status"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1375
+#: inc/Admin/Settings/Page.php:1387
 msgid "Indexed Patterns"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1381
+#: inc/Admin/Settings/Page.php:1393
 msgid "Last Synced"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1387
+#: inc/Admin/Settings/Page.php:1399
 msgid "Refresh Needed Because"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1394
+#: inc/Admin/Settings/Page.php:1406
 msgid "Last Error"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1404
+#: inc/Admin/Settings/Page.php:1416
 msgid "Technical details"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1409
+#: inc/Admin/Settings/Page.php:1421
 msgid "Qdrant Collection"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1415
+#: inc/Admin/Settings/Page.php:1427
 msgid "Embedding Dimension"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1463
+#: inc/Admin/Settings/Page.php:1475
 msgid "Managed pattern index is provisioning in the background. Wait for validation before syncing."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1471
+#: inc/Admin/Settings/Page.php:1483
 msgid "Managed pattern index provisioning failed. Check Cloudflare credentials in Embedding Model, then save settings again."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1474
+#: inc/Admin/Settings/Page.php:1486
 msgid "Save Cloudflare credentials in Embedding Model and create the managed pattern index before syncing."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1485
+#: inc/Admin/Settings/Page.php:1497
 msgid "Complete Embedding Model and Qdrant Pattern Storage before syncing."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1489
+#: inc/Admin/Settings/Page.php:1501
 msgid "Complete Embedding Model before syncing."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1492
+#: inc/Admin/Settings/Page.php:1504
 msgid "Add the Qdrant URL and API key before syncing."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1506
+#: inc/Admin/Settings/Page.php:1518
 msgid "Provisioning"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1509
-#: inc/Admin/Settings/Page.php:1523
-#: inc/Admin/Settings/State.php:242
-#: inc/Admin/Settings/State.php:256
+#: inc/Admin/Settings/Page.php:1521
+#: inc/Admin/Settings/Page.php:1535
+#: inc/Admin/Settings/State.php:244
+#: inc/Admin/Settings/State.php:258
 msgid "Needs pattern storage"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1516
-#: inc/Admin/Settings/State.php:235
-#: inc/Admin/Settings/State.php:249
+#: inc/Admin/Settings/Page.php:1528
+#: inc/Admin/Settings/State.php:237
+#: inc/Admin/Settings/State.php:251
 msgid "Needs model & storage"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1520
-#: inc/Admin/Settings/State.php:239
-#: inc/Admin/Settings/State.php:253
+#: inc/Admin/Settings/Page.php:1532
+#: inc/Admin/Settings/State.php:241
+#: inc/Admin/Settings/State.php:255
 msgid "Needs embedding model"
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1530
+#: inc/Admin/Settings/Page.php:1542
 msgid "Pattern recommendations stay unavailable until setup is complete."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1534
+#: inc/Admin/Settings/Page.php:1546
 msgid "Pattern recommendations need attention before use."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1538
+#: inc/Admin/Settings/Page.php:1550
 #: src/admin/settings-page-controller.js:175
 msgid "Pattern recommendations are ready."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1539
+#: inc/Admin/Settings/Page.php:1551
 msgid "Pattern recommendations are available but out of date."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1540
+#: inc/Admin/Settings/Page.php:1552
 #: src/admin/settings-page-controller.js:182
 msgid "Pattern recommendations are syncing now."
 msgstr ""
 
-#: inc/Admin/Settings/Page.php:1541
+#: inc/Admin/Settings/Page.php:1553
 msgid "Pattern recommendations stay unavailable until you sync the catalog."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:131
+#: inc/Admin/Settings/State.php:133
 msgid "Text-generation provider status."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:133
-#: inc/Admin/Settings/State.php:157
+#: inc/Admin/Settings/State.php:135
+#: inc/Admin/Settings/State.php:159
 msgid "Required"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:142
+#: inc/Admin/Settings/State.php:144
 msgid "Partial"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:155
+#: inc/Admin/Settings/State.php:157
 msgid "Embedding credentials for semantic features."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:164
+#: inc/Admin/Settings/State.php:166
 msgid "Storage and sync for pattern recommendations."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:166
-#: inc/Admin/Settings/State.php:184
-#: inc/Admin/Settings/State.php:197
+#: inc/Admin/Settings/State.php:168
+#: inc/Admin/Settings/State.php:186
+#: inc/Admin/Settings/State.php:199
 msgid "Optional"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:172
+#: inc/Admin/Settings/State.php:174
 msgid "Built-in developer.wordpress.org grounding."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:174
+#: inc/Admin/Settings/State.php:176
 msgid "Built in"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:180
+#: inc/Admin/Settings/State.php:182
 msgid "Site and block guidance."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:186
+#: inc/Admin/Settings/State.php:188
 msgid "Core bridge"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:198
+#: inc/Admin/Settings/State.php:200
 msgid "Logging"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:260
-#: inc/Admin/Settings/State.php:280
+#: inc/Admin/Settings/State.php:262
+#: inc/Admin/Settings/State.php:289
 #: src/admin/settings-page-controller.js:126
 msgid "Needs attention"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:265
-#: inc/Admin/Settings/State.php:439
+#: inc/Admin/Settings/State.php:267
+#: inc/Admin/Settings/State.php:448
 #: src/admin/settings-page-controller.js:9
 #: src/admin/settings-page-controller.js:139
 msgid "Refresh needed"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:266
-#: inc/Admin/Settings/State.php:437
+#: inc/Admin/Settings/State.php:268
+#: inc/Admin/Settings/State.php:446
 #: src/admin/settings-page-controller.js:7
 #: src/admin/settings-page-controller.js:144
 msgid "Syncing"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:267
+#: inc/Admin/Settings/State.php:269
 #: src/admin/settings-page-controller.js:149
 msgid "Needs sync"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:276
+#: inc/Admin/Settings/State.php:281
+msgid "Temporarily disabled"
+msgstr ""
+
+#: inc/Admin/Settings/State.php:285
 #: src/admin/activity-log.js:351
 msgid "Unavailable"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:290
+#: inc/Admin/Settings/State.php:299
 msgid "The last live Developer Docs grounding request failed to reach the search backend. Recommendations still run without it."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:293
+#: inc/Admin/Settings/State.php:302
 msgid "The last live Developer Docs grounding request failed. Recommendations still run without it."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:298
+#: inc/Admin/Settings/State.php:307
 msgid "Grounding attached successfully."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:299
+#: inc/Admin/Settings/State.php:308
 msgid "The last live docs request returned no trusted Developer Docs matches."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:300
+#: inc/Admin/Settings/State.php:309
 msgid "The last live docs request failed before any Developer Docs guidance could be attached."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:310
-#: inc/Admin/Settings/State.php:321
+#: inc/Admin/Settings/State.php:319
+#: inc/Admin/Settings/State.php:330
 msgid "Off"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:313
-#: inc/Admin/Settings/State.php:324
+#: inc/Admin/Settings/State.php:322
+#: inc/Admin/Settings/State.php:333
 msgid "On"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:338
+#: inc/Admin/Settings/State.php:347
 msgid "Text generation is not configured. Open Connectors to choose a provider."
 msgstr ""
 
 #. translators: 1: provider label
-#: inc/Admin/Settings/State.php:345
+#: inc/Admin/Settings/State.php:354
 #, php-format
 msgid "%1$s is saved from an older setup, but that connector is not available. Open Connectors to choose a provider."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:356
+#: inc/Admin/Settings/State.php:365
 msgid "Embedding model is not configured."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:372
-#: inc/Admin/Settings/State.php:392
+#: inc/Admin/Settings/State.php:381
+#: inc/Admin/Settings/State.php:401
 msgid "Cloudflare AI Search Pattern Storage needs saved Cloudflare credentials from the Embedding Model section and a managed pattern index."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:377
+#: inc/Admin/Settings/State.php:386
 msgid "Managed Cloudflare AI Search pattern index is provisioning. Sync will unlock after validation finishes."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:387
+#: inc/Admin/Settings/State.php:396
 msgid "Managed Cloudflare AI Search pattern index provisioning failed. Check the status panel, then save settings again."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:399
+#: inc/Admin/Settings/State.php:408
 msgid "Embedding Model is required before syncing patterns."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:404
+#: inc/Admin/Settings/State.php:413
 msgid "Pattern Storage is required before syncing."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:440
+#: inc/Admin/Settings/State.php:449
 #: src/admin/settings-page-controller.js:6
 msgid "Error"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:441
+#: inc/Admin/Settings/State.php:450
 #: src/admin/settings-page-controller.js:10
 msgid "Not synced"
 msgstr ""
 
-#: inc/Admin/Settings/State.php:458
+#: inc/Admin/Settings/State.php:467
 msgid "Embedding model, provider, or vector size changed."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:459
+#: inc/Admin/Settings/State.php:468
 #: src/admin/settings-page-controller.js:26
 msgid "Pattern index collection naming changed and needs a rebuild."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:460
+#: inc/Admin/Settings/State.php:469
 #: src/admin/settings-page-controller.js:30
 msgid "Pattern index collection is missing and needs a rebuild."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:461
+#: inc/Admin/Settings/State.php:470
 #: src/admin/settings-page-controller.js:34
 msgid "Pattern index collection vector size no longer matches the active embedding configuration."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:462
+#: inc/Admin/Settings/State.php:471
 #: src/admin/settings-page-controller.js:38
 msgid "Qdrant endpoint changed."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:463
+#: inc/Admin/Settings/State.php:472
 #: src/admin/settings-page-controller.js:39
 msgid "Embedding endpoint changed."
 msgstr ""
 
-#: inc/Admin/Settings/State.php:464
+#: inc/Admin/Settings/State.php:473
 #: src/admin/settings-page-controller.js:43
 msgid "Registered patterns changed."
 msgstr ""
 
-#: inc/Admin/Settings/Validation.php:901
+#: inc/Admin/Settings/Validation.php:906
 msgid "We kept your previous Cloudflare Workers AI settings because validation failed."
 msgstr ""
 
 #. translators: 1: previous embedding dimension, 2: validated embedding dimension
-#: inc/Admin/Settings/Validation.php:938
+#: inc/Admin/Settings/Validation.php:943
 #, php-format
 msgid "The saved Qdrant pattern index uses %1$d embedding dimensions, but the validated Cloudflare Workers AI model returns %2$d. Re-sync patterns before relying on Qdrant pattern recommendations."
 msgstr ""
 
-#: inc/Admin/Settings/Validation.php:975
+#: inc/Admin/Settings/Validation.php:980
 msgid "We kept your previous Qdrant settings because validation failed."
 msgstr ""
 
-#: inc/Admin/Settings/Validation.php:989
+#: inc/Admin/Settings/Validation.php:994
 msgid "We kept your previous private Cloudflare AI Search pattern settings because validation failed."
 msgstr ""
 
 #. translators: %s: Cloudflare AI Search embedding model ID
-#: inc/Admin/Settings/Validation.php:1006
+#: inc/Admin/Settings/Validation.php:1011
 #, php-format
 msgid "Cloudflare AI Search Pattern Storage will use %s because the saved Embedding Model is not supported by Cloudflare AI Search."
 msgstr ""
 
-#: inc/Admin/Settings/Validation.php:1030
+#: inc/Admin/Settings/Validation.php:1035
 msgid "Managed pattern index created."
 msgstr ""
 
-#: inc/Admin/Settings/Validation.php:1032
+#: inc/Admin/Settings/Validation.php:1037
 msgid "Managed pattern index adopted."
 msgstr ""
 
-#: inc/Admin/Settings/Validation.php:1033
+#: inc/Admin/Settings/Validation.php:1038
 msgid "Managed pattern index provisioning started."
 msgstr ""
 
@@ -5506,31 +5519,35 @@ msgid "Open approvals page"
 msgstr ""
 
 #: src/utils/docs-grounding-warning.js:45
-msgid "Suggestions are running without developer-docs grounding right now because the docs search request failed. They are still usable; grounding will return when the search backend is reachable."
+msgid "Developer Docs grounding is temporarily disabled in this release. Suggestions remain available."
 msgstr ""
 
 #: src/utils/docs-grounding-warning.js:50
-msgid "Suggestions are running without developer-docs grounding right now because this request did not return any trusted Developer Docs matches. They are still usable."
+msgid "Suggestions are running without developer-docs grounding right now because the docs search request failed. They are still usable; grounding will return when the search backend is reachable."
 msgstr ""
 
 #: src/utils/docs-grounding-warning.js:55
-msgid "Suggestions are running without developer-docs grounding right now because this request reused a cached no-match Developer Docs result. They are still usable."
+msgid "Suggestions are running without developer-docs grounding right now because this request did not return any trusted Developer Docs matches. They are still usable."
 msgstr ""
 
 #: src/utils/docs-grounding-warning.js:60
-msgid "Suggestions are running without developer-docs grounding right now because this review check is cache-only and no docs result was cached for it. They are still usable."
+msgid "Suggestions are running without developer-docs grounding right now because this request reused a cached no-match Developer Docs result. They are still usable."
 msgstr ""
 
 #: src/utils/docs-grounding-warning.js:65
-msgid "Suggestions are running without developer-docs grounding right now because this request did not produce a Developer Docs query. They are still usable."
+msgid "Suggestions are running without developer-docs grounding right now because this review check is cache-only and no docs result was cached for it. They are still usable."
 msgstr ""
 
 #: src/utils/docs-grounding-warning.js:70
-msgid "Suggestions are running without developer-docs grounding right now because the built-in Developer Docs endpoint is not configured. They are still usable."
+msgid "Suggestions are running without developer-docs grounding right now because this request did not produce a Developer Docs query. They are still usable."
 msgstr ""
 
 #: src/utils/docs-grounding-warning.js:75
-msgid "Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable."
+msgid "Suggestions are running without developer-docs grounding right now because the built-in Developer Docs endpoint is not configured. They are still usable."
+msgstr ""
+
+#: src/utils/docs-grounding-warning.js:80
+msgid "Suggestions are running without developer-docs grounding right now. They are still usable."
 msgstr ""
 
 #. translators: %d: number of AI actions.

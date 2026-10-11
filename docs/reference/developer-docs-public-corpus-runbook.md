@@ -2,6 +2,34 @@
 
 This document is the contract reference for the built-in public Developer Docs grounding corpus.
 
+## v0.1.3 release scope
+
+On October 8, 2026 the maintainer explicitly approved: "approve and implement
+v0.1.3 without external docs grounding". v0.1.3 disables external Developer
+Docs by default at the shared client, before cached or live reads. Direct
+docs lookup and plugin configuration validation return
+`docs_grounding_disabled`; recommendations and signature checks report
+`reason=disabled`, `source=release_policy`, and no transport error. Settings
+and editor notices identify intentional suspension. Guidelines, optional
+core-roadmap guidance, private pattern retrieval, and apply/undo checks remain
+available under their existing contracts.
+
+This release's replacement gate is verified disabled behavior, including zero
+docs HTTP calls with a primed cache, truthful diagnostics, and preserved
+freshness/apply behavior. The [disabled-grounding validation record](../validation/2026-10-08-v0.1.3-disabled-docs-grounding.md)
+owns that proof. The [corpus investigation](../validation/2026-10-08-corpus-recovery.md)
+remains failed service evidence; suspension does not turn settlement or
+retrieval qualification green. It does not affect the independent MCP endpoint.
+
+`flavor_agent_docs_grounding_enabled` defaults to `false` and exists for
+controlled development and a future qualified restoration. There is no
+settings toggle. Do not enable it in the v0.1.3 release environment. Restoring
+external grounding requires a separate release decision, complete desired-key
+settlement, then unchanged public/managed/MCP freshness qualification. Docs
+cache schema 4 prevents reuse of pre-suspension schema-3 entries after such a
+restoration. Scheduler, retry, cleanup, corpus scopes, and freshness policy
+remain unchanged.
+
 Use it when you need to answer:
 
 - Who owns the public Cloudflare AI Search corpus used for Developer Docs grounding?
@@ -137,10 +165,10 @@ Corpus validation:
 - Record the observed `retrieved_at`, `published_at`, source URLs, and result count in the release notes or verification log.
 - Record the validation evidence under `docs/validation/`; this runbook is the decision record for corpus refreshes.
 
-Runtime behavior:
+Runtime behavior when external grounding is explicitly enabled:
 - Grounding is best-effort: each recommendation runs one cached corpus search (`AISearchClient::maybe_search_best_effort`, 6-hour query cache, bounded timeout). A transport failure attaches no guidance, records an `ok`/`unreachable` signal in `flavor_agent_docs_runtime_state`, and never blocks the recommendation; the editor shows a soft "running without docs grounding" notice.
 - There is no coverage probe, release-cycle gate, grace window, or 503 path at request time. Corpus currency is validated by the updater at ingestion/refresh time, not per request.
-- Validation paths (`AISearchClient::validate_configuration()` and the Settings page) still query the endpoint directly so admins can act on corpus drift.
+- Validation paths (`AISearchClient::validate_configuration()` and the Settings page) query the endpoint directly only when grounding is enabled. The v0.1.3 default returns the release-policy disabled error before transport; independent corpus validation remains available through the updater.
 
 ## MCP search endpoint behavior
 

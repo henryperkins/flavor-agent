@@ -384,6 +384,8 @@ final class StyleAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_style_resolve_signature_only_includes_docs_guidance_changes(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id']  = 'account-123';
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']   = 'token-xyz';
@@ -480,6 +482,8 @@ final class StyleAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_style_signatures_are_stable_between_recommendation_and_signature_modes(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		WordPressTestState::$ai_client_generate_text_result = wp_json_encode(
 			[
 				'suggestions' => [
@@ -1451,6 +1455,8 @@ final class StyleAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_style_includes_docs_guidance_template_identity_and_structure_in_prompt(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_account_id']  = 'account-123';
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_instance_id'] = 'wp-dev-docs';
 		WordPressTestState::$options['flavor_agent_cloudflare_ai_search_api_token']   = 'token-xyz';

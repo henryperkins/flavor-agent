@@ -152,7 +152,7 @@ const DOCS_GROUNDING_WARNING = {
 	reason: '',
 	errorCode: '',
 	message:
-		'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.',
+		'Suggestions are running without developer-docs grounding right now. They are still usable.',
 };
 
 function expectAbilityRunRequest( abilityKey, input ) {
@@ -5805,40 +5805,59 @@ describe( 'store action thunks', () => {
 		expect( dispatch ).not.toHaveBeenCalled();
 	} );
 
-	test( 'revalidateBlockReviewFreshness stores coverage-only docs grounding warnings', async () => {
-		apiFetch.mockResolvedValue( {
-			payload: {
-				resolvedContextSignature: 'resolved-block',
-				docsGrounding: DOCS_GROUNDING_PAYLOAD,
+	test.each( [
+		[ 'generic', DOCS_GROUNDING_PAYLOAD, DOCS_GROUNDING_WARNING ],
+		[
+			'release-disabled',
+			{
+				...DOCS_GROUNDING_PAYLOAD,
+				reason: 'disabled',
+				source: 'release_policy',
+				errorCode: '',
 			},
-		} );
-
-		const dispatch = jest.fn();
-		const select = {
-			getBlockResolvedContextSignature: jest
-				.fn()
-				.mockReturnValue( 'resolved-block' ),
-			getBlockDocsGroundingWarning: jest.fn().mockReturnValue( null ),
-		};
-
-		await actions.revalidateBlockReviewFreshness( 'block-1', {
-			clientId: 'block-1',
-			editorContext: {
-				block: PARAGRAPH_BLOCK_CONTEXT,
+			{
+				tone: 'info',
+				reason: 'disabled',
+				errorCode: '',
+				message:
+					'Developer Docs grounding is temporarily disabled in this release. Suggestions remain available.',
 			},
-			prompt: 'Refresh content.',
-		} )( {
-			dispatch,
-			select,
-		} );
+		],
+	] )(
+		'revalidateBlockReviewFreshness stores %s coverage-only docs grounding warnings without changing matching freshness',
+		async ( label, docsGrounding, warning ) => {
+			apiFetch.mockResolvedValue( {
+				payload: {
+					resolvedContextSignature: 'resolved-block',
+					docsGrounding,
+				},
+			} );
 
-		expect( dispatch ).toHaveBeenCalledWith(
-			actions.setBlockDocsGroundingWarning(
-				'block-1',
-				DOCS_GROUNDING_WARNING
-			)
-		);
-	} );
+			const dispatch = jest.fn();
+			const select = {
+				getBlockResolvedContextSignature: jest
+					.fn()
+					.mockReturnValue( 'resolved-block' ),
+				getBlockDocsGroundingWarning: jest.fn().mockReturnValue( null ),
+			};
+
+			await actions.revalidateBlockReviewFreshness( 'block-1', {
+				clientId: 'block-1',
+				editorContext: {
+					block: PARAGRAPH_BLOCK_CONTEXT,
+				},
+				prompt: 'Refresh content.',
+			} )( {
+				dispatch,
+				select,
+			} );
+
+			expect( dispatch ).toHaveBeenCalledWith(
+				actions.setBlockDocsGroundingWarning( 'block-1', warning )
+			);
+			expect( dispatch ).toHaveBeenCalledTimes( 1 );
+		}
+	);
 
 	test( 'revalidateBlockReviewFreshness ignores stale background responses after a newer block result is stored', async () => {
 		let resolveRevalidation;

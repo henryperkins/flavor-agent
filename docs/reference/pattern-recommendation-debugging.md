@@ -587,10 +587,10 @@ Low-priority suspect:
 
 Reason:
 
-- docs grounding is required before reranking
-- cache misses can perform one bounded foreground warm before async warming is queued
-- if trusted grounding remains unavailable after candidate retrieval, the request fails closed before reranking
-- live public docs AI Search requests may appear in foreground `/recommend-patterns` request traces when the docs cache is cold
+- external Developer Docs grounding is disabled by default in v0.1.3 before cached or live reads, with intentional disabled diagnostics
+- private pattern retrieval and Connectors reranking retain their separate readiness requirements; docs suspension does not block ranking
+- explicitly enabled development performs at most one cache-first best-effort docs search; signature-only checks use cached docs only, and no async docs warm is queued
+- a transport failure or empty docs result omits that prompt context while candidate retrieval and reranking continue under their existing contracts
 
 ## Fast Decision Rules
 

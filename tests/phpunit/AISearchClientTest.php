@@ -10,10 +10,122 @@ use PHPUnit\Framework\TestCase;
 
 final class AISearchClientTest extends TestCase {
 
+	private \Closure $enable_docs_grounding;
+
 	protected function setUp(): void {
 		parent::setUp();
 
 		WordPressTestState::reset();
+		$this->enable_docs_grounding = static fn(): bool => true;
+		\add_filter( 'flavor_agent_docs_grounding_enabled', $this->enable_docs_grounding );
+	}
+
+	protected function tearDown(): void {
+		\remove_filter( 'flavor_agent_docs_grounding_enabled', $this->enable_docs_grounding );
+
+		parent::tearDown();
+	}
+
+	public function test_release_default_disables_docs_configuration_and_scoped_override_is_reversible(): void {
+		\remove_filter( 'flavor_agent_docs_grounding_enabled', $this->enable_docs_grounding );
+
+		$this->assertFalse( AISearchClient::is_configured() );
+		$this->assertFalse( AISearchClient::is_enabled() );
+		$this->assertNull( AISearchClient::configured_instance_id() );
+
+		\add_filter( 'flavor_agent_docs_grounding_enabled', $this->enable_docs_grounding );
+		$this->assertTrue( AISearchClient::is_enabled() );
+		$this->assertTrue( AISearchClient::is_configured() );
+
+		\remove_filter( 'flavor_agent_docs_grounding_enabled', $this->enable_docs_grounding );
+		$this->assertFalse( AISearchClient::is_enabled() );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+	}
+
+	public function test_release_default_bypasses_primed_docs_cache_without_http_or_cache_mutation(): void {
+		$query                                        = 'template part area guidance';
+		$cache_key                                    = $this->build_cache_key( $query, 4 );
+		WordPressTestState::$transients[ $cache_key ] = [
+			[
+				'id'        => 'chunk-1',
+				'title'     => 'Template parts REST reference',
+				'sourceKey' => 'developer.wordpress.org/rest-api/reference/wp_template_parts',
+				'url'       => 'https://developer.wordpress.org/rest-api/reference/wp_template_parts/',
+				'excerpt'   => 'Template part areas define where a template part can be used.',
+				'score'     => 0.87,
+			],
+		];
+		$cached                                       = WordPressTestState::$transients;
+		\remove_filter( 'flavor_agent_docs_grounding_enabled', $this->enable_docs_grounding );
+
+		$this->assertSame( [], AISearchClient::maybe_search( $query, 4 ) );
+		$this->assertSame(
+			[
+				'guidance'    => [],
+				'diagnostics' => [
+					'reason'    => 'disabled',
+					'source'    => 'release_policy',
+					'errorCode' => '',
+				],
+			],
+			AISearchClient::maybe_search_best_effort_result( $query, 4 )
+		);
+		$this->assertSame( [], AISearchClient::maybe_search_best_effort( $query, 4 ) );
+		$this->assertSame( $cached, WordPressTestState::$transients );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+	}
+
+	public function test_release_default_blocks_direct_docs_lookup_and_validation_without_http(): void {
+		WordPressTestState::$remote_post_response = $this->trusted_docs_response(
+			[
+				$this->trusted_docs_chunk(
+					'developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph',
+					'https://developer.wordpress.org/block-editor/reference-guides/core-blocks/paragraph/',
+					'Paragraph typography guidance.',
+					'2026-10-08T10:00:00Z'
+				),
+			]
+		);
+		\remove_filter( 'flavor_agent_docs_grounding_enabled', $this->enable_docs_grounding );
+
+		foreach ( [ AISearchClient::search( 'block editor' ), AISearchClient::validate_configuration() ] as $result ) {
+			$this->assertInstanceOf( \WP_Error::class, $result );
+			$this->assertSame( 'docs_grounding_disabled', $result->get_error_code() );
+			$this->assertSame( [ 'status' => 503 ], $result->get_error_data() );
+		}
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
+		$this->assertSame( [], WordPressTestState::$transients );
+	}
+
+	public function test_release_default_reports_disabled_runtime_without_erasing_previous_live_evidence(): void {
+		$previous = [
+			'status'           => 'unreachable',
+			'lastSearchAt'     => '2026-10-08 10:00:00',
+			'lastResultCount'  => 0,
+			'lastReason'       => 'backend_unreachable',
+			'lastErrorCode'    => 'http_request_failed',
+			'lastErrorMessage' => 'Previous transport failure.',
+		];
+		WordPressTestState::$options[ AISearchClient::RUNTIME_STATE_OPTION ] = $previous;
+		\remove_filter( 'flavor_agent_docs_grounding_enabled', $this->enable_docs_grounding );
+
+		$this->assertSame(
+			[
+				'status'           => 'disabled',
+				'lastSearchAt'     => '',
+				'lastResultCount'  => 0,
+				'lastReason'       => 'disabled',
+				'lastErrorCode'    => '',
+				'lastErrorMessage' => '',
+			],
+			AISearchClient::get_runtime_state()
+		);
+		$this->assertSame( $previous, WordPressTestState::$options[ AISearchClient::RUNTIME_STATE_OPTION ] );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
+		$this->assertSame( [], WordPressTestState::$remote_get_calls );
 	}
 
 	public function test_search_queries_cloudflare_ai_search_and_normalizes_chunks(): void {
@@ -884,10 +996,42 @@ final class AISearchClientTest extends TestCase {
 	}
 
 	public function test_cache_namespace_changes_with_docs_grounding_schema_version(): void {
-		$reflection = new \ReflectionClass( AISearchClient::class );
-		$cache_key  = $this->build_cache_key( 'block editor guidance', 4 );
+		$reflection                                 = new \ReflectionClass( AISearchClient::class );
+		$query                                      = 'block editor guidance';
+		$cache_key                                  = $this->build_cache_key( $query, 4 );
+		$old_namespace                              = md5(
+			wp_json_encode(
+				[
+					'mode'               => 'public',
+					'instanceId'         => AISearchClient::configured_instance_id(),
+					'searchUrl'          => 'https://101d836c-480b-4b39-b14e-505a6aa58f47.search.ai.cloudflare.com/search',
+					'cacheSchemaVersion' => '3',
+				]
+			)
+		);
+		$old_key                                    = 'flavor_agent_ai_search_' . md5(
+			wp_json_encode(
+				[
+					'namespace'  => $old_namespace,
+					'query'      => $query,
+					'maxResults' => 4,
+				]
+			)
+		);
+		WordPressTestState::$transients[ $old_key ] = [
+			[
+				'url'       => 'https://developer.wordpress.org/block-editor/',
+				'sourceKey' => 'developer.wordpress.org/block-editor',
+				'excerpt'   => 'Previously attached developer documentation.',
+			],
+		];
+		$cached                                     = WordPressTestState::$transients;
 
-		$this->assertSame( 3, $reflection->getConstant( 'CACHE_SCHEMA_VERSION' ) );
+		$this->assertSame( 4, $reflection->getConstant( 'CACHE_SCHEMA_VERSION' ) );
+		$this->assertNotSame( $old_key, $cache_key );
+		$this->assertSame( [], AISearchClient::maybe_search( $query, 4 ) );
+		$this->assertSame( $cached, WordPressTestState::$transients );
+		$this->assertSame( [], WordPressTestState::$remote_post_calls );
 		$this->assertMatchesRegularExpression( '/^flavor_agent_ai_search_[a-f0-9]{32}$/', $cache_key );
 	}
 

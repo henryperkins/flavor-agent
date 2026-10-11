@@ -41,6 +41,11 @@ export function getDocsGroundingWarningMessage( warning ) {
 
 function getDocsGroundingUnavailableMessage( reason ) {
 	switch ( reason ) {
+		case 'disabled':
+			return __(
+				'Developer Docs grounding is temporarily disabled in this release. Suggestions remain available.',
+				'flavor-agent'
+			);
 		case 'backend_unreachable':
 			return __(
 				'Suggestions are running without developer-docs grounding right now because the docs search request failed. They are still usable; grounding will return when the search backend is reachable.',
@@ -73,7 +78,7 @@ function getDocsGroundingUnavailableMessage( reason ) {
 			);
 		default:
 			return __(
-				'Suggestions are running without developer-docs grounding right now. They are still usable; grounding will return when the search backend is reachable.',
+				'Suggestions are running without developer-docs grounding right now. They are still usable.',
 				'flavor-agent'
 			);
 	}

@@ -268,6 +268,8 @@ final class TemplateAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_template_review_and_resolved_signatures_include_docs_guidance_changes(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
@@ -403,6 +405,8 @@ final class TemplateAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_template_signatures_are_stable_between_recommendation_and_signature_modes(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		$this->configure_text_generation_connector();
 		$this->route_docs_grounding_search(
 			[
@@ -471,6 +475,8 @@ final class TemplateAbilitiesTest extends TestCase {
 	}
 
 	public function test_recommend_template_part_review_and_resolved_signatures_include_docs_guidance_changes(): void {
+		\add_filter( 'flavor_agent_docs_grounding_enabled', '__return_true' );
+
 		WordPressTestState::$options = [
 			'flavor_agent_cloudflare_ai_search_account_id' => 'account-123',
 			'flavor_agent_cloudflare_ai_search_instance_id' => 'wp-dev-docs',
