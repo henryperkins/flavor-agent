@@ -10,6 +10,7 @@ import { createReduxStore, register } from '@wordpress/data';
 import { __, sprintf } from '@wordpress/i18n';
 
 import { buildBlockRecommendationContextSignature } from '../utils/block-recommendation-context';
+import { buildContextSignature } from '../utils/context-signature';
 import {
 	buildBlockRecommendationRequestSignature,
 	buildContentRecommendationRequestSignature,
@@ -1527,13 +1528,32 @@ function captureBlockApplyLiveContext( registry, clientId ) {
 
 function verifyBlockApplyLiveContextFreshness( {
 	baselineSignature,
+	currentRequestSignature,
+	requestInputSignature,
+	getLiveRequestState,
 	clientId,
 	registry,
 	localDispatch,
 	setApplyState,
 } ) {
 	const liveData = captureBlockApplyLiveContext( registry, clientId );
+	let hasCurrentRequest = true;
+	if ( typeof getLiveRequestState === 'function' ) {
+		try {
+			const liveRequest = getLiveRequestState();
+			hasCurrentRequest = Boolean(
+				liveRequest &&
+					liveRequest.requestSignature === currentRequestSignature &&
+					liveRequest.requestInput &&
+					buildContextSignature( liveRequest.requestInput ) ===
+						requestInputSignature
+			);
+		} catch {
+			hasCurrentRequest = false;
+		}
+	}
 	const isFresh =
+		hasCurrentRequest &&
 		Boolean( baselineSignature ) &&
 		Boolean( liveData?.signature ) &&
 		liveData.signature === baselineSignature;
@@ -2067,7 +2087,8 @@ const actions = {
 		clientId,
 		suggestion,
 		currentRequestSignature = null,
-		liveRequestInput = null
+		liveRequestInput = null,
+		getLiveRequestState = null
 	) {
 		return async ( { dispatch: localDispatch, registry, select } ) => {
 			if ( select.getBlockApplyStatus?.( clientId ) === 'applying' ) {
@@ -2116,14 +2137,21 @@ const actions = {
 				select.getBlockResolvedContextSignature?.( clientId ) || null;
 			const storedRequestToken =
 				select.getBlockRequestToken?.( clientId ) || 0;
+			const isCurrentResult = ( storedSignature ) =>
+				normalizeStringMessage(
+					select.getBlockResolvedContextSignature?.( clientId ) || ''
+				) === storedSignature &&
+				( select.getBlockRequestToken?.( clientId ) || 0 ) ===
+					storedRequestToken;
 
 			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
 
-			const capturedLiveData = captureBlockApplyLiveContext(
-				registry,
-				clientId
-			);
-			const baselineSignature = capturedLiveData?.signature;
+			const capturedLiveData = {
+				...captureBlockApplyLiveContext( registry, clientId ),
+				requestInputSignature:
+					buildContextSignature( liveRequestInput ),
+			};
+			const baselineSignature = capturedLiveData.signature;
 			const requestContextSignature = liveRequestInput?.contextSignature;
 			const hasBaselineSignature = Boolean(
 				normalizeStringMessage( baselineSignature )
@@ -2171,14 +2199,7 @@ const actions = {
 							clientId
 						) === true,
 					abortId: `block:${ clientId }`,
-					isCurrent: ( storedSignature ) =>
-						normalizeStringMessage(
-							select.getBlockResolvedContextSignature?.(
-								clientId
-							) || ''
-						) === storedSignature &&
-						( select.getBlockRequestToken?.( clientId ) || 0 ) ===
-							storedRequestToken,
+					isCurrent: isCurrentResult,
 					localDispatch,
 					setApplyState: ( status, error, staleReason = null ) =>
 						actions.setBlockApplyState(
@@ -2191,16 +2212,20 @@ const actions = {
 				}
 			);
 
+			// A newer request owns its state, even if it arrives between
+			// the preflight's final check and this async continuation.
+			if (
+				( select.getBlockRequestToken?.( clientId ) || 0 ) !==
+				storedRequestToken
+			) {
+				return false;
+			}
+
 			if ( ! resolvedFreshness.ok ) {
 				if ( resolvedFreshness.skipped ) {
-					if (
-						( select.getBlockRequestToken?.( clientId ) || 0 ) ===
-						storedRequestToken
-					) {
-						localDispatch(
-							actions.setBlockApplyState( clientId, 'idle' )
-						);
-					}
+					localDispatch(
+						actions.setBlockApplyState( clientId, 'idle' )
+					);
 				} else {
 					localDispatch(
 						actions.recordRecommendationOutcome( {
@@ -2217,8 +2242,22 @@ const actions = {
 				return false;
 			}
 
+			// Background revalidation can adopt a same-token baseline between
+			// successful preflight and this continuation.
+			if (
+				! isCurrentResult(
+					normalizeStringMessage( storedResolvedContextSignature )
+				)
+			) {
+				localDispatch( actions.setBlockApplyState( clientId, 'idle' ) );
+				return false;
+			}
+
 			const liveFreshness = verifyBlockApplyLiveContextFreshness( {
 				baselineSignature,
+				currentRequestSignature,
+				requestInputSignature: capturedLiveData.requestInputSignature,
+				getLiveRequestState,
 				clientId,
 				registry,
 				localDispatch,
@@ -2459,7 +2498,8 @@ const actions = {
 		clientId,
 		suggestions = [],
 		currentRequestSignature = null,
-		liveRequestInput = null
+		liveRequestInput = null,
+		getLiveRequestState = null
 	) {
 		return async ( { dispatch: localDispatch, registry, select } ) => {
 			if ( select.getBlockApplyStatus?.( clientId ) === 'applying' ) {
@@ -2545,14 +2585,21 @@ const actions = {
 				select.getBlockResolvedContextSignature?.( clientId ) || null;
 			const storedRequestToken =
 				select.getBlockRequestToken?.( clientId ) || 0;
+			const isCurrentResult = ( storedSignature ) =>
+				normalizeStringMessage(
+					select.getBlockResolvedContextSignature?.( clientId ) || ''
+				) === storedSignature &&
+				( select.getBlockRequestToken?.( clientId ) || 0 ) ===
+					storedRequestToken;
 
 			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
 
-			const capturedLiveData = captureBlockApplyLiveContext(
-				registry,
-				clientId
-			);
-			const baselineSignature = capturedLiveData?.signature;
+			const capturedLiveData = {
+				...captureBlockApplyLiveContext( registry, clientId ),
+				requestInputSignature:
+					buildContextSignature( liveRequestInput ),
+			};
+			const baselineSignature = capturedLiveData.signature;
 			const requestContextSignature = liveRequestInput?.contextSignature;
 			const hasBaselineSignature = Boolean(
 				normalizeStringMessage( baselineSignature )
@@ -2612,14 +2659,7 @@ const actions = {
 							clientId
 						) === true,
 					abortId: `block:${ clientId }`,
-					isCurrent: ( storedSignature ) =>
-						normalizeStringMessage(
-							select.getBlockResolvedContextSignature?.(
-								clientId
-							) || ''
-						) === storedSignature &&
-						( select.getBlockRequestToken?.( clientId ) || 0 ) ===
-							storedRequestToken,
+					isCurrent: isCurrentResult,
 					localDispatch,
 					setApplyState: ( status, error, staleReason = null ) =>
 						actions.setBlockApplyState(
@@ -2632,16 +2672,20 @@ const actions = {
 				}
 			);
 
+			// A newer request owns its state, even if it arrives between
+			// the preflight's final check and this async continuation.
+			if (
+				( select.getBlockRequestToken?.( clientId ) || 0 ) !==
+				storedRequestToken
+			) {
+				return false;
+			}
+
 			if ( ! resolvedFreshness.ok ) {
 				if ( resolvedFreshness.skipped ) {
-					if (
-						( select.getBlockRequestToken?.( clientId ) || 0 ) ===
-						storedRequestToken
-					) {
-						localDispatch(
-							actions.setBlockApplyState( clientId, 'idle' )
-						);
-					}
+					localDispatch(
+						actions.setBlockApplyState( clientId, 'idle' )
+					);
 				} else {
 					localDispatch(
 						actions.recordRecommendationOutcome( {
@@ -2670,8 +2714,22 @@ const actions = {
 				return false;
 			}
 
+			// Background revalidation can adopt a same-token baseline between
+			// successful preflight and this continuation.
+			if (
+				! isCurrentResult(
+					normalizeStringMessage( storedResolvedContextSignature )
+				)
+			) {
+				localDispatch( actions.setBlockApplyState( clientId, 'idle' ) );
+				return false;
+			}
+
 			const liveFreshness = verifyBlockApplyLiveContextFreshness( {
 				baselineSignature,
+				currentRequestSignature,
+				requestInputSignature: capturedLiveData.requestInputSignature,
+				getLiveRequestState,
 				clientId,
 				registry,
 				localDispatch,
@@ -2886,7 +2944,8 @@ const actions = {
 		clientId,
 		suggestion,
 		currentRequestSignature = null,
-		liveRequestInput = null
+		liveRequestInput = null,
+		getLiveRequestState = null
 	) {
 		return async ( { dispatch: localDispatch, registry, select } ) => {
 			if ( select.getBlockApplyStatus?.( clientId ) === 'applying' ) {
@@ -2935,14 +2994,21 @@ const actions = {
 				select.getBlockResolvedContextSignature?.( clientId ) || null;
 			const storedRequestToken =
 				select.getBlockRequestToken?.( clientId ) || 0;
+			const isCurrentResult = ( storedSignature ) =>
+				normalizeStringMessage(
+					select.getBlockResolvedContextSignature?.( clientId ) || ''
+				) === storedSignature &&
+				( select.getBlockRequestToken?.( clientId ) || 0 ) ===
+					storedRequestToken;
 
 			localDispatch( actions.setBlockApplyState( clientId, 'applying' ) );
 
-			const capturedLiveData = captureBlockApplyLiveContext(
-				registry,
-				clientId
-			);
-			const baselineSignature = capturedLiveData?.signature;
+			const capturedLiveData = {
+				...captureBlockApplyLiveContext( registry, clientId ),
+				requestInputSignature:
+					buildContextSignature( liveRequestInput ),
+			};
+			const baselineSignature = capturedLiveData.signature;
 			const requestContextSignature = liveRequestInput?.contextSignature;
 			const hasBaselineSignature = Boolean(
 				normalizeStringMessage( baselineSignature )
@@ -2986,14 +3052,7 @@ const actions = {
 					liveRequestInput,
 					storedResolvedContextSignature,
 					abortId: `block:${ clientId }`,
-					isCurrent: ( storedSignature ) =>
-						normalizeStringMessage(
-							select.getBlockResolvedContextSignature?.(
-								clientId
-							) || ''
-						) === storedSignature &&
-						( select.getBlockRequestToken?.( clientId ) || 0 ) ===
-							storedRequestToken,
+					isCurrent: isCurrentResult,
 					localDispatch,
 					setApplyState: ( status, error, staleReason = null ) =>
 						actions.setBlockApplyState(
@@ -3006,16 +3065,20 @@ const actions = {
 				}
 			);
 
+			// A newer request owns its state, even if it arrives between
+			// the preflight's final check and this async continuation.
+			if (
+				( select.getBlockRequestToken?.( clientId ) || 0 ) !==
+				storedRequestToken
+			) {
+				return false;
+			}
+
 			if ( ! resolvedFreshness.ok ) {
 				if ( resolvedFreshness.skipped ) {
-					if (
-						( select.getBlockRequestToken?.( clientId ) || 0 ) ===
-						storedRequestToken
-					) {
-						localDispatch(
-							actions.setBlockApplyState( clientId, 'idle' )
-						);
-					}
+					localDispatch(
+						actions.setBlockApplyState( clientId, 'idle' )
+					);
 				} else {
 					localDispatch(
 						actions.recordRecommendationOutcome( {
@@ -3032,8 +3095,22 @@ const actions = {
 				return false;
 			}
 
+			// Background revalidation can adopt a same-token baseline between
+			// successful preflight and this continuation.
+			if (
+				! isCurrentResult(
+					normalizeStringMessage( storedResolvedContextSignature )
+				)
+			) {
+				localDispatch( actions.setBlockApplyState( clientId, 'idle' ) );
+				return false;
+			}
+
 			const liveFreshness = verifyBlockApplyLiveContextFreshness( {
 				baselineSignature,
+				currentRequestSignature,
+				requestInputSignature: capturedLiveData.requestInputSignature,
+				getLiveRequestState,
 				clientId,
 				registry,
 				localDispatch,

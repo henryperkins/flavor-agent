@@ -2503,6 +2503,7 @@ function GovernanceEvidenceSection( {
 	onDecided,
 	onClaimResolved,
 	onClaimReleased,
+	isReviewClaimCurrent,
 	currentUserId,
 	isLocallyDecided = false,
 } ) {
@@ -2554,7 +2555,9 @@ function GovernanceEvidenceSection( {
 		apiFetch( buildClaimRequest( bootData, activityId ) )
 			.then( ( response ) => {
 				claimRequestSettled = true;
-				claimRequestSucceeded = true;
+				claimRequestSucceeded =
+					Number( response?.claim?.userId ) > 0 &&
+					Number( response.claim.userId ) === Number( currentUserId );
 
 				if ( active ) {
 					onClaimResolved?.( activityId, response );
@@ -2562,7 +2565,9 @@ function GovernanceEvidenceSection( {
 
 				if (
 					releaseAfterClaimSettles &&
-					! decisionSubmittedRef.current
+					claimRequestSucceeded &&
+					! decisionSubmittedRef.current &&
+					! isReviewClaimCurrent?.( activityId )
 				) {
 					releaseClaimOnAbandon();
 				}
@@ -2595,7 +2600,14 @@ function GovernanceEvidenceSection( {
 			// cleaned up immediately instead of lingering until TTL expiry.
 			releaseAfterClaimSettles = true;
 		};
-	}, [ canDecide, entry?.id, bootData, onClaimResolved ] );
+	}, [
+		canDecide,
+		entry?.id,
+		bootData,
+		onClaimResolved,
+		isReviewClaimCurrent,
+		currentUserId,
+	] );
 
 	if ( ! details ) {
 		return null;
@@ -2614,12 +2626,13 @@ function GovernanceEvidenceSection( {
 		Number.isFinite( viewerId ) && viewerId > 0 && viewerId === claimUserId;
 
 	const releaseClaim = async () => {
+		onClaimReleased?.( entry.id );
+
 		try {
 			const response = await apiFetch(
 				buildClaimReleaseRequest( bootData, entry.id )
 			);
 			onClaimResolved?.( entry.id, response );
-			onClaimReleased?.( entry.id );
 		} catch {
 			// Best-effort; the 5-minute TTL covers a missed release.
 		}
@@ -2842,6 +2855,7 @@ function ActivityEntryDetails( {
 	onFilterAction,
 	onClaimResolved,
 	onClaimReleased,
+	isReviewClaimCurrent,
 	currentUserId,
 	isLocallyDecided = false,
 } ) {
@@ -2903,6 +2917,7 @@ function ActivityEntryDetails( {
 						onDecided={ onDecided }
 						onClaimResolved={ onClaimResolved }
 						onClaimReleased={ onClaimReleased }
+						isReviewClaimCurrent={ isReviewClaimCurrent }
 						currentUserId={ currentUserId }
 						isLocallyDecided={ isLocallyDecided }
 					/>
@@ -2978,6 +2993,8 @@ export function ActivityLogApp( { bootData } ) {
 	const [ selectedEntryId, setSelectedEntryId ] = useState(
 		linkedActivityEntryId
 	);
+	const releasedClaimIdRef = useRef( null );
+	const reviewClaimGenerationRef = useRef( 0 );
 	const exitLinkedActivityMode = useCallback( () => {
 		if ( requestActivityId ) {
 			persistActivityViewRef.current = true;
@@ -3095,6 +3112,13 @@ export function ActivityLogApp( { bootData } ) {
 		},
 		[ normalizeAdminEntries ]
 	);
+	const isReleasedSelfClaim = useCallback(
+		( activityId, claim ) =>
+			releasedClaimIdRef.current === activityId &&
+			Number( claim?.userId ) > 0 &&
+			Number( claim.userId ) === Number( bootData.currentUserId ),
+		[ bootData.currentUserId ]
+	);
 
 	// Forward-declared this task as a Task 7 deliverable; the decision panel
 	// (onClaimResolved) and the focus/visibility refresh wire it in Tasks 9–10.
@@ -3133,6 +3157,17 @@ export function ActivityLogApp( { bootData } ) {
 			const claim = isPlainRecord( response.claim )
 				? response.claim
 				: null;
+			const releasedSelfClaim = isReleasedSelfClaim( activityId, claim );
+
+			// The initial selection claim can also settle after an explicit
+			// release. Keep its row permissions, but discard and clean up our
+			// late presence just as the focus-refresh owner does.
+			if ( releasedSelfClaim ) {
+				apiFetch(
+					buildClaimReleaseRequest( bootData, activityId )
+				).catch( () => {} );
+			}
+
 			const decisionPermission = isPlainRecord( responseEntry )
 				? { canDecide: responseEntry.canDecide === true }
 				: {};
@@ -3144,13 +3179,16 @@ export function ActivityLogApp( { bootData } ) {
 						? {
 								...existingEntry,
 								...decisionPermission,
-								apply: { ...existingEntry.apply, claim },
+								apply: {
+									...existingEntry.apply,
+									claim: releasedSelfClaim ? null : claim,
+								},
 						  }
 						: existingEntry
 				),
 			} ) );
 		},
-		[ handleEntryDecided ]
+		[ bootData, handleEntryDecided, isReleasedSelfClaim ]
 	);
 
 	useEffect( () => {
@@ -3202,6 +3240,10 @@ export function ActivityLogApp( { bootData } ) {
 				} );
 				const normalizedEntries = normalizeAdminEntries(
 					response?.entries || []
+				).map( ( entry ) =>
+					isReleasedSelfClaim( entry.id, entry.apply?.claim )
+						? { ...entry, apply: { ...entry.apply, claim: null } }
+						: entry
 				);
 
 				if ( ! isCurrent ) {
@@ -3285,7 +3327,13 @@ export function ActivityLogApp( { bootData } ) {
 		};
 		// requestUrl already encodes requestedView (page, perPage, filters), so it changes when those do.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [ bootData, invalidDayFilter, requestUrl, reloadToken ] );
+	}, [
+		bootData,
+		invalidDayFilter,
+		isReleasedSelfClaim,
+		requestUrl,
+		reloadToken,
+	] );
 
 	const fields = useMemo( () => {
 		const surfaceElements =
@@ -3651,9 +3699,25 @@ export function ActivityLogApp( { bootData } ) {
 	// (deps: [ bootData, applyClaimResponse ]) reads the live selection without a
 	// stale closure and without re-binding listeners on every selection change.
 	const selectedEntryRef = useRef( null );
+	const reviewClaimOwnerActiveRef = useRef( true );
 	useEffect( () => {
 		selectedEntryRef.current = selectedEntry;
 	}, [ selectedEntry ] );
+	useEffect( () => {
+		reviewClaimOwnerActiveRef.current = true;
+		return () => {
+			reviewClaimOwnerActiveRef.current = false;
+		};
+	}, [] );
+	const isReviewClaimCurrent = useCallback(
+		( activityId ) =>
+			reviewClaimOwnerActiveRef.current &&
+			selectedEntryRef.current?.id === activityId &&
+			selectedEntryRef.current?.status === 'pending' &&
+			selectedEntryRef.current?.canDecide === true &&
+			releasedClaimIdRef.current !== activityId,
+		[]
+	);
 
 	// Tracks a row whose claim the viewer explicitly released while staying on it.
 	// The focus/visibility refresh must NOT silently re-acquire that claim, or the
@@ -3661,12 +3725,13 @@ export function ActivityLogApp( { bootData } ) {
 	// changes — not when the selectedEntry object changes, because applyClaimResponse
 	// merges apply.claim and mints a new object on the same row, which would
 	// prematurely clear the suppression.
-	const releasedClaimIdRef = useRef( null );
 	const handleClaimReleased = useCallback( ( activityId ) => {
 		releasedClaimIdRef.current = activityId;
+		reviewClaimGenerationRef.current += 1;
 	}, [] );
 	useEffect( () => {
 		releasedClaimIdRef.current = null;
+		reviewClaimGenerationRef.current += 1;
 	}, [ selectedEntryId ] );
 
 	useEffect( () => {
@@ -3750,6 +3815,7 @@ export function ActivityLogApp( { bootData } ) {
 		}
 
 		let debounceTimer = null;
+		let isListening = true;
 
 		const handleFocusOrVisible = () => {
 			if ( document.visibilityState === 'hidden' ) {
@@ -3774,10 +3840,49 @@ export function ActivityLogApp( { bootData } ) {
 				selected.canDecide === true &&
 				selected.id !== releasedClaimIdRef.current
 			) {
+				const generation = reviewClaimGenerationRef.current;
+
 				apiFetch( buildClaimRequest( bootData, selected.id ) )
-					.then( ( response ) =>
-						applyClaimResponse( selected.id, response )
-					)
+					.then( ( response ) => {
+						const status = response?.entry?.apply?.status;
+
+						// Terminal evidence remains useful even after a release or
+						// selection change; only a pending review claim can be stale.
+						if ( status && status !== 'pending' ) {
+							if ( isListening ) {
+								applyClaimResponse( selected.id, response );
+							}
+							return;
+						}
+
+						const stillReviewing =
+							isListening && isReviewClaimCurrent( selected.id );
+
+						if (
+							stillReviewing &&
+							generation === reviewClaimGenerationRef.current
+						) {
+							applyClaimResponse( selected.id, response );
+							return;
+						}
+
+						// A late self-claim can have been acquired after the abandon
+						// DELETE. Release it, unless the same row now has a newer
+						// legitimate review. Foreign claims are never ours to release.
+						if (
+							! stillReviewing &&
+							Number( response?.claim?.userId ) > 0 &&
+							Number( response.claim.userId ) ===
+								Number( bootData.currentUserId )
+						) {
+							apiFetch(
+								buildClaimReleaseRequest(
+									bootData,
+									selected.id
+								)
+							).catch( () => {} );
+						}
+					} )
 					.catch( () => {} );
 			}
 		};
@@ -3786,6 +3891,7 @@ export function ActivityLogApp( { bootData } ) {
 		document.addEventListener( 'visibilitychange', handleFocusOrVisible );
 
 		return () => {
+			isListening = false;
 			window.removeEventListener( 'focus', handleFocusOrVisible );
 			document.removeEventListener(
 				'visibilitychange',
@@ -3796,7 +3902,7 @@ export function ActivityLogApp( { bootData } ) {
 				clearTimeout( debounceTimer );
 			}
 		};
-	}, [ bootData, applyClaimResponse ] );
+	}, [ bootData, applyClaimResponse, isReviewClaimCurrent ] );
 
 	const summaryCards = getSummaryCards( responseData.summary );
 	const isViewModified = ! areActivityViewsEqual(
@@ -4054,6 +4160,7 @@ export function ActivityLogApp( { bootData } ) {
 							onFilterAction={ applySelectedRowFilter }
 							onClaimResolved={ applyClaimResponse }
 							onClaimReleased={ handleClaimReleased }
+							isReviewClaimCurrent={ isReviewClaimCurrent }
 							currentUserId={ bootData?.currentUserId }
 							isLocallyDecided={ locallyDecidedEntryIds.has(
 								selectedEntry?.id

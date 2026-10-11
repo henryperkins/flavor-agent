@@ -769,6 +769,51 @@ EXAMPLE
 	}
 
 	/**
+	 * Overlay validated operations before resolving inherited complements.
+	 * Apply executors also check the complete resulting configuration, so a
+	 * root color written later in the list must affect element/block checks.
+	 *
+	 * @param array<int, array<string, mixed>> $operations
+	 * @param array<string, mixed>             $context
+	 * @return array<string, mixed>
+	 */
+	private static function build_candidate_contrast_context( array $operations, array $context ): array {
+		$style_context = is_array( $context['styleContext'] ?? null ) ? $context['styleContext'] : [];
+		$merged_config = is_array( $style_context['mergedConfig'] ?? null ) ? $style_context['mergedConfig'] : [];
+		$styles        = is_array( $merged_config['styles'] ?? null ) ? $merged_config['styles'] : [];
+
+		foreach ( $operations as $operation ) {
+			$type = $operation['type'] ?? '';
+			if ( ! in_array( $type, [ 'set_styles', 'set_block_styles' ], true ) ) {
+				continue;
+			}
+			$path = $operation['path'];
+			if ( 'set_block_styles' === $type ) {
+				$path = array_merge( [ 'blocks', $operation['blockName'] ], $path );
+			}
+			$styles = self::write_candidate_style_path( $styles, $path, $operation['value'] );
+		}
+
+		$merged_config['styles']       = $styles;
+		$style_context['mergedConfig'] = $merged_config;
+		$context['styleContext']       = $style_context;
+		return $context;
+	}
+
+	/**
+	 * @param string[] $path
+	 */
+	private static function write_candidate_style_path( mixed $value, array $path, mixed $next_value ): mixed {
+		if ( [] === $path ) {
+			return $next_value;
+		}
+		$value          = is_array( $value ) ? $value : [];
+		$head           = array_shift( $path );
+		$value[ $head ] = self::write_candidate_style_path( $value[ $head ] ?? null, $path, $next_value );
+		return $value;
+	}
+
+	/**
 	 * @param array<int, array<string, mixed>> $suggestions
 	 * @return array<int, array<string, mixed>>
 	 */
@@ -785,7 +830,10 @@ EXAMPLE
 			$operations_result = self::validate_operations( $input_operations, $context );
 			$operations        = $operations_result['operations'];
 			$operation_dropped = count( $input_operations ) !== count( $operations );
-			$contrast_result   = StyleContrastValidator::evaluate( $operations, $context );
+			$contrast_result   = StyleContrastValidator::evaluate(
+				$operations,
+				self::build_candidate_contrast_context( $operations, $context )
+			);
 			$contrast_failed   = ! $contrast_result['passed'];
 			$should_downgrade  = $operation_dropped || $contrast_failed;
 

@@ -16,6 +16,7 @@ import {
 	createPortal,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -40,6 +41,7 @@ function getRegionRoot() {
 	}
 
 	root.setAttribute( 'role', 'region' );
+	root.tabIndex = -1;
 	root.setAttribute(
 		'aria-label',
 		__( 'Flavor Agent recent changes', 'flavor-agent' )
@@ -82,6 +84,60 @@ function getSameOriginIframeDocument( iframe ) {
 	}
 }
 
+function getDeepActiveElement( targetDocument = document ) {
+	let activeElement = targetDocument?.activeElement || null;
+
+	while ( activeElement?.tagName === 'IFRAME' ) {
+		const frameDocument = getSameOriginIframeDocument( activeElement );
+		const frameActiveElement = frameDocument?.activeElement;
+
+		if ( ! frameActiveElement || frameActiveElement === activeElement ) {
+			break;
+		}
+
+		activeElement = frameActiveElement;
+	}
+
+	return activeElement;
+}
+
+function focusConnectedElement( element ) {
+	if (
+		! element?.isConnected ||
+		typeof element.focus !== 'function' ||
+		element.disabled ||
+		element.closest( '[hidden], [inert]' )
+	) {
+		return false;
+	}
+
+	const frames = [];
+	let ownerDocument = element.ownerDocument;
+
+	try {
+		while ( ownerDocument && ownerDocument !== document ) {
+			const frame = ownerDocument.defaultView?.frameElement;
+
+			if ( ! frame?.isConnected ) {
+				return false;
+			}
+
+			frames.unshift( frame );
+			ownerDocument = frame.ownerDocument;
+		}
+
+		if ( ownerDocument !== document ) {
+			return false;
+		}
+
+		frames.forEach( ( frame ) => frame.focus( { preventScroll: true } ) );
+		element.focus( { preventScroll: true } );
+		return getDeepActiveElement() === element;
+	} catch {
+		return false;
+	}
+}
+
 export default function ToastRegion() {
 	const toasts = useSelect( ( select ) => {
 		const flavorAgent = select( 'flavor-agent' );
@@ -94,6 +150,62 @@ export default function ToastRegion() {
 
 	const [ root, setRoot ] = useState( () => getRegionRoot() );
 	const regionRef = useRef( null );
+	const focusReturnRef = useRef( null );
+	const needsFallbackFocusRef = useRef( false );
+
+	const handleBeforeToastRemove = useCallback(
+		( toastElement ) => {
+			if ( ! toastElement?.contains( getDeepActiveElement() ) ) {
+				return;
+			}
+
+			if ( focusConnectedElement( focusReturnRef.current ) ) {
+				focusReturnRef.current = null;
+				return;
+			}
+
+			// Keep focus on a stable, named target until the commit finishes. The
+			// layout effect can then choose a toast that actually survived removal.
+			root?.focus( { preventScroll: true } );
+			needsFallbackFocusRef.current = true;
+		},
+		[ root ]
+	);
+
+	useLayoutEffect( () => {
+		if ( ! needsFallbackFocusRef.current ) {
+			return;
+		}
+
+		needsFallbackFocusRef.current = false;
+
+		if ( root?.ownerDocument.activeElement === root ) {
+			const buttons = regionRef.current?.querySelectorAll(
+				'.flavor-agent-toast__action'
+			);
+			buttons?.[ buttons.length - 1 ]?.focus();
+		}
+	} );
+
+	const handleRegionFocus = useCallback(
+		( event ) => {
+			const previous = event.relatedTarget;
+
+			if (
+				previous &&
+				previous !== root &&
+				! regionRef.current?.contains( previous )
+			) {
+				focusReturnRef.current =
+					previous.tagName === 'IFRAME'
+						? getDeepActiveElement(
+								getSameOriginIframeDocument( previous )
+						  )
+						: previous;
+			}
+		},
+		[ root ]
+	);
 
 	useEffect( () => {
 		// Lazily attach the root once after first render so SSR / Jest envs
@@ -120,6 +232,12 @@ export default function ToastRegion() {
 		const newest = undoButtons[ undoButtons.length - 1 ];
 
 		if ( newest && typeof newest.focus === 'function' ) {
+			const previous = getDeepActiveElement();
+
+			if ( previous && ! regionRef.current.contains( previous ) ) {
+				focusReturnRef.current = previous;
+			}
+
 			newest.focus();
 			return true;
 		}
@@ -282,7 +400,11 @@ export default function ToastRegion() {
 	}
 
 	return createPortal(
-		<div ref={ regionRef } className="flavor-agent-toast-region__inner">
+		<div
+			ref={ regionRef }
+			className="flavor-agent-toast-region__inner"
+			onFocusCapture={ handleRegionFocus }
+		>
 			{ renderedToasts.map( ( toast ) => (
 				<UndoToast
 					key={ toast.id }
@@ -297,6 +419,7 @@ export default function ToastRegion() {
 					onUndo={ handleUndo }
 					onDismiss={ handleDismiss }
 					onInteractionChange={ handleInteractionChange }
+					onBeforeRemove={ handleBeforeToastRemove }
 				/>
 			) ) }
 		</div>,

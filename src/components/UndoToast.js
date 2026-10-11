@@ -14,7 +14,13 @@
  *     the region can flag the queue entry for non-interacted FIFO eviction.
  */
 
-import { useCallback, useEffect, useRef, useState } from '@wordpress/element';
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from '@wordpress/element';
 import { Button } from '@wordpress/components';
 import { useReducedMotion } from '@wordpress/compose';
 import { check, closeSmall, undo } from '@wordpress/icons';
@@ -41,7 +47,10 @@ export default function UndoToast( {
 	onDismiss,
 	undoDisabled = false,
 	onInteractionChange = null,
+	onBeforeRemove = null,
 } ) {
+	const toastRef = useRef( null );
+	const onBeforeRemoveRef = useRef( onBeforeRemove );
 	const [ isHovered, setIsHovered ] = useState( false );
 	const [ isFocusWithin, setIsFocusWithin ] = useState( false );
 	const isPaused = isHovered || isFocusWithin;
@@ -50,6 +59,17 @@ export default function UndoToast( {
 	const startedAtRef = useRef( 0 );
 	const onDismissRef = useRef( onDismiss );
 	const timerConfigRef = useRef( { autoDismissMs, id, variant } );
+
+	useLayoutEffect( () => {
+		onBeforeRemoveRef.current = onBeforeRemove;
+	} );
+
+	// Layout cleanup runs while the focused control is still connected, before
+	// React removes it for a dismiss or a successful asynchronous Undo.
+	useLayoutEffect(
+		() => () => onBeforeRemoveRef.current?.( toastRef.current ),
+		[]
+	);
 
 	useEffect( () => {
 		onDismissRef.current = onDismiss;
@@ -219,6 +239,7 @@ export default function UndoToast( {
 		// tech does not announce Undo/Dismiss controls as changing status text.
 		// eslint-disable-next-line jsx-a11y/no-static-element-interactions
 		<div
+			ref={ toastRef }
 			className={ className }
 			onMouseEnter={ handleMouseEnter }
 			onMouseLeave={ handleMouseLeave }

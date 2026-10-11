@@ -280,9 +280,9 @@ final class StyleContrastValidator {
 		if ( null !== $candidate ) {
 			$resolved = self::resolve_color_value( $candidate, $theme_tokens );
 
-			if ( $resolved['resolved'] ) {
-				return $resolved['hex'];
-			}
+			// An explicit declaration still wins when its color cannot be resolved.
+			// Only a missing declaration can inherit the root complement.
+			return $resolved['resolved'] ? $resolved['hex'] : null;
 		}
 
 		$root_color = is_array( $merged_styles['color'] ?? null ) ? $merged_styles['color'] : [];

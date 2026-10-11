@@ -91,6 +91,8 @@ Style Book's client execution contract and server allowlist follow [WordPress bl
 
 For Style Book, both sides resolve `settings.blocks[blockName]` over global theme settings. Per-block control flags override global flags; presets are merged by slug after default/theme/custom precedence is resolved within each scope, and block presets override matching global values. Recommendation allowlists, server freshness signatures, and apply validation use the target block's resolved tokens. Contrast checks use those tokens for block-level colors and retain global tokens for an inherited root text or background color, so a block palette override cannot change the canvas color during validation. Both token scopes participate in Style Book freshness. A paragraph-specific restriction therefore blocks paragraph execution without disabling another block or the global style surface. The server token cache separates block scopes and refreshes when the resolved settings change.
 
+Contrast validation checks the complete candidate configuration after all validated style writes, including root colors inherited by an element or block even when the root write appears later in the operation list. Only an absent scoped complement inherits a root color. An explicit scoped color that the hex/preset resolver cannot resolve (for example RGB, an alpha color, or an unknown custom property) makes the recommendation advisory and blocks apply; it cannot borrow a different root color to claim safe contrast. Theme variations mixed with readable color overrides continue to require separate review.
+
 ## Guardrails And Failure Modes
 
 - The style surfaces are hidden outside the Site Editor Styles sidebar

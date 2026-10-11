@@ -73,6 +73,12 @@ Core AI Request Logging (`Tools > AI Request Logs`) captures AI Client HTTP call
 
 Enforced by `inc/Activity/RequestLoggingBridge.php`. Settings-screen copy lives in `docs/features/settings-backends-and-sync.md`.
 
+## Review Claim And Toast Focus Lifecycles
+
+An explicit Release keeps the current row released across focus/visibility refreshes and late pending claim or feed responses. Moving to another row permits a new review. Abandoned late self-claims receive a best-effort release unless a newer review of that row owns them; another reviewer's claim and terminal decision evidence remain visible. Claims remain advisory and never block approval or rejection.
+
+The editor toast shortcut (`Control+Alt+Shift+U`, or `Command+Option+Shift+U` on macOS) remembers the focused editor control, including same-origin nested iframe controls. Dismissal or successful Undo restores that control only if the removed toast still owns focus. If that control is gone, focus moves to a surviving toast or the named recent-changes region. Removing a different toast or moving focus elsewhere does not steal focus.
+
 ## Ordered Undo Rules
 
 Undo is tail-ordered and state-validated before a stored action can be reverted. The canonical state model, terminal transitions, per-surface undo inputs, and blocked/unavailable projections live in `docs/reference/activity-state-machine.md`.

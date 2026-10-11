@@ -1231,6 +1231,218 @@ final class StylePromptTest extends TestCase {
 		$this->assertArrayHasKey( 'raw_value_when_preset_available', $suggestion['ranking']['contextPenalties'] ?? [] );
 	}
 
+	/**
+	 * @dataProvider final_inherited_color_cases
+	 */
+	public function test_parse_response_checks_element_color_against_final_root_pair( array $element_path, string $element_slug, bool $element_first, string $expected_tone ): void {
+		$paths      = [ [ 'color', 'background' ], [ 'color', 'text' ], $element_path ];
+		$slugs      = [ 'dark', 'light', $element_slug ];
+		$operations = [];
+		foreach ( $paths as $index => $path ) {
+			$operations[] = [
+				'type'       => 'set_styles',
+				'path'       => $path,
+				'value'      => 'var:preset|color|' . $slugs[ $index ],
+				'valueType'  => 'preset',
+				'presetType' => 'color',
+				'presetSlug' => $slugs[ $index ],
+			];
+		}
+		if ( $element_first ) {
+			array_unshift( $operations, array_pop( $operations ) );
+		}
+		$context = [
+			'scope'        => [ 'surface' => 'global-styles' ],
+			'styleContext' => [
+				'themeTokens'         => [
+					'colors'       => [ 'light: #ffffff', 'dark: #000000' ],
+					'colorPresets' => [
+						[
+							'slug'  => 'light',
+							'color' => '#ffffff',
+						],
+						[
+							'slug'  => 'dark',
+							'color' => '#000000',
+						],
+					],
+				],
+				'mergedConfig'        => [
+					'styles' => [
+						'color' => [
+							'background' => '#ffffff',
+							'text'       => '#000000',
+						],
+					],
+				],
+				'currentConfig'       => [
+					'styles'   => [],
+					'settings' => [],
+				],
+				'supportedStylePaths' => array_map(
+					static fn( array $path ): array => [
+						'path'        => $path,
+						'valueSource' => 'color',
+					],
+					$paths
+				),
+			],
+		];
+		$before  = $context;
+		$parsed  = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Dark palette',
+							'description' => 'Adjust the palette.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'operations'  => $operations,
+						],
+					],
+				]
+			),
+			$context
+		);
+
+		$this->assertSame( $expected_tone, $parsed['suggestions'][0]['tone'] );
+		$this->assertCount( 'executable' === $expected_tone ? 3 : 0, $parsed['suggestions'][0]['operations'] );
+		$this->assertSame( 'executable' === $expected_tone, $parsed['suggestions'][0]['qualitySignals']['contrastPreserved'] ?? false );
+		$this->assertSame( $before, $context );
+	}
+
+	public static function final_inherited_color_cases(): array {
+		return [
+			'white links after root pair'    => [ [ 'elements', 'link', 'color', 'text' ], 'light', false, 'executable' ],
+			'white links before root pair'   => [ [ 'elements', 'link', 'color', 'text' ], 'light', true, 'executable' ],
+			'black links after root pair'    => [ [ 'elements', 'link', 'color', 'text' ], 'dark', false, 'advisory' ],
+			'black links before root pair'   => [ [ 'elements', 'link', 'color', 'text' ], 'dark', true, 'advisory' ],
+			'black buttons after root pair'  => [ [ 'elements', 'button', 'color', 'background' ], 'dark', false, 'executable' ],
+			'black buttons before root pair' => [ [ 'elements', 'button', 'color', 'background' ], 'dark', true, 'executable' ],
+			'white buttons after root pair'  => [ [ 'elements', 'button', 'color', 'background' ], 'light', false, 'advisory' ],
+			'white buttons before root pair' => [ [ 'elements', 'button', 'color', 'background' ], 'light', true, 'advisory' ],
+		];
+	}
+
+	/**
+	 * @dataProvider final_block_color_cases
+	 */
+	public function test_parse_response_checks_final_block_pair_with_block_preset_overrides( string $text_slug, bool $text_first, string $expected_tone ): void {
+		$operations = [];
+		foreach ( [
+			'background' => 'dark',
+			'text'       => $text_slug,
+		] as $side => $slug ) {
+			$operations[] = [
+				'type'       => 'set_block_styles',
+				'blockName'  => 'core/paragraph',
+				'path'       => [ 'color', $side ],
+				'value'      => 'var:preset|color|' . $slug,
+				'valueType'  => 'preset',
+				'presetType' => 'color',
+				'presetSlug' => $slug,
+			];
+		}
+		if ( $text_first ) {
+			$operations = array_reverse( $operations );
+		}
+		$context = [
+			'scope'        => [
+				'surface'   => 'style-book',
+				'blockName' => 'core/paragraph',
+			],
+			'styleContext' => [
+				'themeTokens'         => [
+					'colors'       => [ 'light: #ffffff', 'dark: #000000' ],
+					'colorPresets' => [
+						[
+							'slug'  => 'light',
+							'color' => '#ffffff',
+						],
+						[
+							'slug'  => 'dark',
+							'color' => '#000000',
+						],
+					],
+				],
+				'globalThemeTokens'   => [
+					'colorPresets' => [
+						[
+							'slug'  => 'light',
+							'color' => '#ffffff',
+						],
+						[
+							'slug'  => 'dark',
+							'color' => '#ffffff',
+						],
+					],
+				],
+				'mergedConfig'        => [
+					'styles' => [
+						'color'  => [
+							'background' => '#ffffff',
+							'text'       => '#000000',
+						],
+						'blocks' => [
+							'core/paragraph' => [
+								'color' => [
+									'background' => 'rgb(0, 0, 0)',
+									'text'       => '#ffffff',
+								],
+							],
+						],
+					],
+				],
+				'currentConfig'       => [
+					'styles'   => [],
+					'settings' => [],
+				],
+				'supportedStylePaths' => [
+					[
+						'path'        => [ 'color', 'background' ],
+						'valueSource' => 'color',
+					],
+					[
+						'path'        => [ 'color', 'text' ],
+						'valueSource' => 'color',
+					],
+				],
+			],
+		];
+		$before  = $context;
+		$parsed  = StylePrompt::parse_response(
+			wp_json_encode(
+				[
+					'suggestions' => [
+						[
+							'label'       => 'Paragraph palette',
+							'description' => 'Adjust the paragraph palette.',
+							'category'    => 'color',
+							'tone'        => 'executable',
+							'operations'  => $operations,
+						],
+					],
+				]
+			),
+			$context
+		);
+
+		$this->assertSame( $expected_tone, $parsed['suggestions'][0]['tone'] );
+		$this->assertCount( 'executable' === $expected_tone ? 2 : 0, $parsed['suggestions'][0]['operations'] );
+		$this->assertSame( 'executable' === $expected_tone, $parsed['suggestions'][0]['qualitySignals']['contrastPreserved'] ?? false );
+		$this->assertSame( $before, $context );
+	}
+
+	public static function final_block_color_cases(): array {
+		return [
+			'white text after background'  => [ 'light', false, 'executable' ],
+			'white text before background' => [ 'light', true, 'executable' ],
+			'black text after background'  => [ 'dark', false, 'advisory' ],
+			'black text before background' => [ 'dark', true, 'advisory' ],
+		];
+	}
+
 	public function test_parse_response_records_positive_contrast_signal_when_paired_color_ops_pass(): void {
 		$result = StylePrompt::parse_response(
 			wp_json_encode(

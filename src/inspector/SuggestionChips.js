@@ -4,7 +4,7 @@
  */
 import { Button, CheckboxControl } from '@wordpress/components';
 import { useDispatch, useSelect } from '@wordpress/data';
-import { useMemo } from '@wordpress/element';
+import { useCallback, useEffect, useMemo, useRef } from '@wordpress/element';
 import { check } from '@wordpress/icons';
 import { __ } from '@wordpress/i18n';
 
@@ -39,6 +39,7 @@ export default function SuggestionChips( {
 	label,
 	currentRequestSignature = null,
 	currentRequestInput = null,
+	getLiveRequestState = null,
 	disabled = false,
 	isStale = false,
 	interactive = true,
@@ -109,6 +110,22 @@ export default function SuggestionChips( {
 	const resolvedRequestSignature =
 		currentRequestSignature || fallbackRequestSignature;
 	const resolvedRequestInput = currentRequestInput || fallbackRequestInput;
+	const liveRequestRef = useRef( null );
+	liveRequestRef.current = {
+		requestSignature: resolvedRequestSignature,
+		requestInput: resolvedRequestInput,
+	};
+	const isMountedRef = useRef( true );
+	useEffect( () => {
+		isMountedRef.current = true;
+		return () => {
+			isMountedRef.current = false;
+		};
+	}, [] );
+	const getFallbackLiveRequestState = useCallback(
+		() => ( isMountedRef.current ? liveRequestRef.current : null ),
+		[]
+	);
 	const { appliedKey, feedback, handleApply, pendingKey } =
 		useSuggestionApplyFeedback( {
 			applySuggestion: ( targetClientId, suggestion ) =>
@@ -116,7 +133,8 @@ export default function SuggestionChips( {
 					targetClientId,
 					suggestion,
 					resolvedRequestSignature,
-					resolvedRequestInput
+					resolvedRequestInput,
+					getLiveRequestState || getFallbackLiveRequestState
 				),
 			buildFeedback: buildChipFeedback,
 			clientId,

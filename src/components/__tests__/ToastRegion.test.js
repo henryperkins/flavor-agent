@@ -17,7 +17,7 @@ import * as i18n from '@wordpress/i18n';
 const fs = require( 'fs' );
 const path = require( 'path' );
 
-const mockToasts = [];
+let mockToasts = [];
 const mockDispatch = {
 	dismissToast: jest.fn(),
 	markToastInteracted: jest.fn(),
@@ -41,8 +41,7 @@ import ToastRegion, { isToastUndoFocusShortcut } from '../ToastRegion';
 const { getRoot } = setupReactTest();
 
 function setToasts( next ) {
-	mockToasts.length = 0;
-	mockToasts.push( ...next );
+	mockToasts = [ ...next ];
 }
 
 function getRegionRoot() {
@@ -298,6 +297,184 @@ describe( 'ToastRegion — queue cap contract', () => {
 
 		expect( source ).toContain( 'TOAST_DEFAULTS.maxVisible' );
 		expect( source ).not.toContain( 'slice( 0, 3 )' );
+	} );
+} );
+
+describe( 'ToastRegion — focus return', () => {
+	let editorControl;
+	let iframe;
+	const toast = ( id ) => ( {
+		id,
+		title: 'Block updated',
+		activityId: `activity-${ id }`,
+		autoDismissMs: 6000,
+	} );
+	const renderQueue = () => getRoot().render( <ToastRegion /> );
+	const removeToast = ( id ) => {
+		setToasts( mockToasts.filter( ( entry ) => entry.id !== id ) );
+		renderQueue();
+	};
+	const focusShortcut = ( targetDocument = document ) => {
+		targetDocument.dispatchEvent(
+			new window.KeyboardEvent( 'keydown', {
+				key: 'u',
+				altKey: true,
+				ctrlKey: true,
+				metaKey: true,
+				shiftKey: true,
+				bubbles: true,
+			} )
+		);
+	};
+
+	beforeEach( () => {
+		editorControl = document.createElement( 'button' );
+		editorControl.textContent = 'Editor control';
+		document.body.appendChild( editorControl );
+		setToasts( [ toast( 't1' ) ] );
+		mockDispatch.dismissToast.mockImplementation( removeToast );
+		mockDispatch.undoToastAction.mockImplementation( removeToast );
+	} );
+
+	afterEach( () => {
+		editorControl.remove();
+		iframe?.remove();
+		iframe = null;
+	} );
+
+	test.each( [ 'Escape', 'Dismiss', 'Undo' ] )(
+		'returns shortcut focus to the editor after %s removes the toast',
+		( action ) => {
+			act( renderQueue );
+			editorControl.focus();
+			act( () => focusShortcut() );
+			const undoButton = getRegionRoot().querySelector(
+				'.flavor-agent-toast__action'
+			);
+			expect( document.activeElement ).toBe( undoButton );
+
+			act( () => {
+				if ( action === 'Escape' ) {
+					undoButton.dispatchEvent(
+						new window.KeyboardEvent( 'keydown', {
+							key: 'Escape',
+							bubbles: true,
+						} )
+					);
+				} else if ( action === 'Dismiss' ) {
+					const closeButton = getRegionRoot().querySelector(
+						'.flavor-agent-toast__close'
+					);
+					closeButton.focus();
+					closeButton.click();
+				} else {
+					undoButton.click();
+				}
+			} );
+
+			expect(
+				getRegionRoot().querySelector( '.flavor-agent-toast' )
+			).toBeNull();
+			expect( document.activeElement ).toBe( editorControl );
+		}
+	);
+
+	test( 'returns focus through nested same-origin editor iframes', () => {
+		iframe = document.createElement( 'iframe' );
+		document.body.appendChild( iframe );
+		const nested = iframe.contentDocument.createElement( 'iframe' );
+		iframe.contentDocument.body.appendChild( nested );
+		const canvasControl = nested.contentDocument.createElement( 'button' );
+		canvasControl.textContent = 'Canvas control';
+		nested.contentDocument.body.appendChild( canvasControl );
+		act( renderQueue );
+		iframe.focus();
+		nested.focus();
+		canvasControl.focus();
+		act( () => focusShortcut( nested.contentDocument ) );
+		act( () => removeToast( 't1' ) );
+
+		expect( document.activeElement ).toBe( iframe );
+		expect( iframe.contentDocument.activeElement ).toBe( nested );
+		expect( nested.contentDocument.activeElement ).toBe( canvasControl );
+	} );
+
+	test( 'keeps the original return target when the shortcut is repeated inside a toast', () => {
+		act( renderQueue );
+		editorControl.focus();
+		act( () => focusShortcut() );
+		act( () => focusShortcut() );
+		act( () => removeToast( 't1' ) );
+		expect( document.activeElement ).toBe( editorControl );
+	} );
+
+	test( 'returns focus after entering the toast directly from an editor control', () => {
+		act( renderQueue );
+		editorControl.focus();
+		act( () =>
+			getRegionRoot()
+				.querySelector( '.flavor-agent-toast__action' )
+				.focus()
+		);
+		act( () => removeToast( 't1' ) );
+		expect( document.activeElement ).toBe( editorControl );
+	} );
+
+	test( 'does not steal focus after the reviewer moves out of the toast before Undo finishes', () => {
+		act( renderQueue );
+		editorControl.focus();
+		act( () => focusShortcut() );
+		act( () => editorControl.focus() );
+		act( () => removeToast( 't1' ) );
+		expect( document.activeElement ).toBe( editorControl );
+	} );
+
+	test( 'does not move focus when another toast disappears', () => {
+		setToasts( [ toast( 't1' ), toast( 't2' ) ] );
+		act( renderQueue );
+		editorControl.focus();
+		act( () => focusShortcut() );
+		const focused = document.activeElement;
+		act( () => removeToast( 't1' ) );
+		expect( document.activeElement ).toBe( focused );
+	} );
+
+	test( 'focuses a surviving toast when the editor return target has been removed', () => {
+		setToasts( [ toast( 't1' ), toast( 't2' ) ] );
+		act( renderQueue );
+		editorControl.focus();
+		act( () => focusShortcut() );
+		editorControl.remove();
+		act( () => removeToast( 't2' ) );
+		expect( document.activeElement ).toBe(
+			getRegionRoot().querySelector( '.flavor-agent-toast__action' )
+		);
+	} );
+
+	test( 'does not return focus into an editor iframe that has been removed', () => {
+		setToasts( [ toast( 't1' ), toast( 't2' ) ] );
+		iframe = document.createElement( 'iframe' );
+		document.body.appendChild( iframe );
+		const canvasControl = iframe.contentDocument.createElement( 'button' );
+		iframe.contentDocument.body.appendChild( canvasControl );
+		act( renderQueue );
+		iframe.focus();
+		canvasControl.focus();
+		act( () => focusShortcut( iframe.contentDocument ) );
+		iframe.remove();
+		act( () => removeToast( 't2' ) );
+		expect( document.activeElement ).toBe(
+			getRegionRoot().querySelector( '.flavor-agent-toast__action' )
+		);
+	} );
+
+	test( 'uses the labelled region as a fallback when no return target or toast survives', () => {
+		act( renderQueue );
+		editorControl.focus();
+		act( () => focusShortcut() );
+		editorControl.remove();
+		act( () => removeToast( 't1' ) );
+		expect( document.activeElement ).toBe( getRegionRoot() );
 	} );
 } );
 

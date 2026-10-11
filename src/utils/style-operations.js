@@ -348,9 +348,9 @@ function getMergedComplementHex( scopeKey, side, context = {} ) {
 	if ( scopedValue !== null && scopedValue !== undefined ) {
 		const scopedColor = resolveColorValue( scopedValue, themeTokens );
 
-		if ( scopedColor.resolved ) {
-			return scopedColor.hex;
-		}
+		// An explicit declaration still wins when its color cannot be resolved.
+		// Only a missing declaration can inherit the root complement.
+		return scopedColor.resolved ? scopedColor.hex : null;
 	}
 
 	const rootValue = mergedStyles?.color?.[ side ];

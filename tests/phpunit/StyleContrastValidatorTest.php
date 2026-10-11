@@ -676,6 +676,71 @@ final class StyleContrastValidatorTest extends TestCase {
 		);
 	}
 
+	/**
+	 * @dataProvider unresolved_scoped_complement_cases
+	 */
+	public function test_explicit_unresolved_complement_does_not_inherit_root( string $scope, string $value ): void {
+		$styles    = [
+			'color' => [
+				'background' => '#ffffff',
+				'text'       => '#000000',
+			],
+		];
+		$tokens    = [
+			'colorPresets' => [
+				[
+					'slug'  => 'dark',
+					'color' => '#000000',
+				],
+			],
+		];
+		$operation = [
+			'type'  => 'set_styles',
+			'path'  => [ 'color', 'text' ],
+			'value' => 'var:preset|color|dark',
+		];
+
+		if ( 'root' === $scope ) {
+			$styles['color']['background'] = $value;
+		} elseif ( 'block' === $scope ) {
+			$styles['blocks']['core/paragraph']['color']['background'] = $value;
+			$operation['type']      = 'set_block_styles';
+			$operation['blockName'] = 'core/paragraph';
+		} else {
+			$operation['path'] = [ 'elements', 'button', 'color', 'text' ];
+			if ( 'element-token' === $scope ) {
+				$tokens['elementStyles']['button']['base']['background'] = $value;
+			} else {
+				$styles['elements']['button']['color']['background'] = $value;
+			}
+		}
+
+		$result = StyleContrastValidator::evaluate(
+			[ $operation ],
+			[
+				'styleContext' => [
+					'themeTokens'  => $tokens,
+					'mergedConfig' => [ 'styles' => $styles ],
+				],
+			]
+		);
+
+		$this->assertFalse( $result['passed'] );
+		$this->assertSame( 'unavailable', $result['kind'] );
+		$this->assertNull( $result['ratio'] );
+		$this->assertStringContainsString( 'unresolved background', (string) $result['reason'] );
+	}
+
+	public static function unresolved_scoped_complement_cases(): array {
+		$cases = [];
+		foreach ( [ 'root', 'element', 'element-token', 'block' ] as $scope ) {
+			foreach ( [ 'rgb(0, 0, 0)', '#00000080', 'var(--theme-background)', 'var:preset|color|missing' ] as $value ) {
+				$cases[ $scope . ' ' . $value ] = [ $scope, $value ];
+			}
+		}
+		return $cases;
+	}
+
 	public function test_evaluate_passes_high_contrast_pair(): void {
 		$result = StyleContrastValidator::evaluate(
 			[

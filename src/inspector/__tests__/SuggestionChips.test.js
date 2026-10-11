@@ -121,7 +121,8 @@ describe( 'SuggestionChips', () => {
 				},
 				contextSignature: 'live-context:block-1',
 				prompt: 'Keep the current direction.',
-			}
+			},
+			expect.any( Function )
 		);
 		expect(
 			getContainer().querySelector( '.flavor-agent-inline-feedback' )
@@ -130,6 +131,7 @@ describe( 'SuggestionChips', () => {
 	} );
 
 	test( 'prefers the live block request metadata passed from the main panel when applying', async () => {
+		const getLiveRequestState = jest.fn();
 		const currentRequestInput = {
 			clientId: 'block-1',
 			editorContext: {
@@ -146,6 +148,7 @@ describe( 'SuggestionChips', () => {
 					label="AI color suggestions"
 					currentRequestSignature="live-signature:block-1"
 					currentRequestInput={ currentRequestInput }
+					getLiveRequestState={ getLiveRequestState }
 					suggestions={ [
 						{
 							label: 'Use accent color',
@@ -168,7 +171,8 @@ describe( 'SuggestionChips', () => {
 				panel: 'color',
 			},
 			'live-signature:block-1',
-			currentRequestInput
+			currentRequestInput,
+			getLiveRequestState
 		);
 	} );
 

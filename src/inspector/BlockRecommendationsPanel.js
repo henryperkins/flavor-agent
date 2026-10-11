@@ -23,7 +23,10 @@ import {
 	getBlockSuggestionExecutionInfo,
 	orderBlockAttributeSuggestionsForBatch,
 } from '../store/update-helpers';
-import { getBlockRecommendationFreshness } from './block-recommendation-request';
+import {
+	buildBlockRecommendationRequestData,
+	getBlockRecommendationFreshness,
+} from './block-recommendation-request';
 import AIActivitySection from '../components/AIActivitySection';
 import AIAdvisorySection from '../components/AIAdvisorySection';
 import AIStatusNotice from '../components/AIStatusNotice';
@@ -467,9 +470,20 @@ export function BlockRecommendationsContent( {
 	);
 	const [ activeReviewState, setActiveReviewState ] = useState( null );
 	const currentPrompt = isPromptControlled ? prompt : uncontrolledPrompt;
-	const handlePromptChange = isPromptControlled
-		? onPromptChange
-		: setUncontrolledPrompt;
+	const livePromptRef = useRef( currentPrompt );
+	livePromptRef.current = currentPrompt;
+	const handlePromptChange = useCallback(
+		( nextPrompt ) => {
+			// The apply preflight can finish before React renders this draft.
+			livePromptRef.current = nextPrompt;
+			if ( isPromptControlled ) {
+				onPromptChange?.( nextPrompt );
+			} else {
+				setUncontrolledPrompt( nextPrompt );
+			}
+		},
+		[ isPromptControlled, onPromptChange ]
+	);
 	const {
 		currentRequestInput,
 		currentRequestSignature,
@@ -481,6 +495,24 @@ export function BlockRecommendationsContent( {
 		prompt: currentPrompt,
 		requestData,
 	} );
+	const liveRequestRef = useRef( null );
+	liveRequestRef.current = { clientId, liveContext, liveContextSignature };
+	const isMountedRef = useRef( true );
+	useEffect( () => {
+		isMountedRef.current = true;
+		return () => {
+			isMountedRef.current = false;
+		};
+	}, [] );
+	const getLiveRequestState = useCallback( () => {
+		if ( ! isMountedRef.current ) {
+			return null;
+		}
+		return buildBlockRecommendationRequestData( {
+			...liveRequestRef.current,
+			prompt: livePromptRef.current,
+		} );
+	}, [] );
 	// Keep a ref to the latest stored prompt without re-running the
 	// re-init effect on every result. The effect only fires when the
 	// edited block changes (or controlled-mode toggles), preserving
@@ -634,7 +666,8 @@ export function BlockRecommendationsContent( {
 			clientId,
 			executableSelectedSuggestions,
 			currentRequestSignature,
-			currentRequestInput
+			currentRequestInput,
+			getLiveRequestState
 		);
 
 		if ( didApply ) {
@@ -651,6 +684,7 @@ export function BlockRecommendationsContent( {
 		clientId,
 		currentRequestInput,
 		currentRequestSignature,
+		getLiveRequestState,
 		executableSelectedSuggestions,
 	] );
 	const { statusNotice } = useSelect( ( select ) => {
@@ -1011,7 +1045,8 @@ export function BlockRecommendationsContent( {
 				clientId,
 				suggestion,
 				currentRequestSignature,
-				currentRequestInput
+				currentRequestInput,
+				getLiveRequestState
 			);
 		},
 		[
@@ -1019,6 +1054,7 @@ export function BlockRecommendationsContent( {
 			clientId,
 			currentRequestInput,
 			currentRequestSignature,
+			getLiveRequestState,
 			isStaleResult,
 		]
 	);
@@ -1195,6 +1231,7 @@ export function BlockRecommendationsContent( {
 						label={ __( 'AI block suggestions', 'flavor-agent' ) }
 						currentRequestSignature={ currentRequestSignature }
 						currentRequestInput={ currentRequestInput }
+						getLiveRequestState={ getLiveRequestState }
 						isStale={ isStaleResult }
 						disabled={
 							isStaleResult || blockApplyStatus === 'applying'
@@ -1270,6 +1307,7 @@ export function BlockRecommendationsContent( {
 						) }
 						currentRequestSignature={ currentRequestSignature }
 						currentRequestInput={ currentRequestInput }
+						getLiveRequestState={ getLiveRequestState }
 						isStale={ isStaleResult }
 						disabled={
 							isStaleResult || blockApplyStatus === 'applying'
@@ -1303,6 +1341,7 @@ export function BlockRecommendationsContent( {
 						label={ __( 'AI style suggestions', 'flavor-agent' ) }
 						currentRequestSignature={ currentRequestSignature }
 						currentRequestInput={ currentRequestInput }
+						getLiveRequestState={ getLiveRequestState }
 						isStale={ isStaleResult }
 						disabled={
 							isStaleResult || blockApplyStatus === 'applying'

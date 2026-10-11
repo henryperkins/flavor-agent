@@ -161,7 +161,7 @@ jest.mock( '../SuggestionChips', () => ( props ) => {
 } );
 
 // eslint-disable-next-line import/no-extraneous-dependencies
-const { act } = require( 'react' );
+const { act, useState } = require( 'react' );
 const { setupReactTest } = require( '../../test-utils/setup-react-test' );
 
 import {
@@ -413,6 +413,17 @@ function renderContent( clientId = 'block-1' ) {
 			<BlockRecommendationsContent clientId={ clientId } />
 		);
 	} );
+}
+
+function ControlledBlockRecommendations() {
+	const [ prompt, setPrompt ] = useState( '' );
+	return (
+		<BlockRecommendationsContent
+			clientId="block-1"
+			prompt={ prompt }
+			onPromptChange={ setPrompt }
+		/>
+	);
 }
 
 function getTextarea() {
@@ -1917,7 +1928,8 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			expect.objectContaining( {
 				clientId: 'block-1',
 				editorContext: liveContext,
-			} )
+			} ),
+			expect.any( Function )
 		);
 
 		i18n.__.mockImplementation( ( text ) =>
@@ -3557,6 +3569,63 @@ describe( 'BlockRecommendationsDocumentPanel', () => {
 			)
 		).toEqual( [ 'block:settings:1', 'block:styles:1' ] );
 	} );
+
+	test.each( [ 'controlled', 'uncontrolled' ] )(
+		'pending batch apply reads immediate %s prompt edits and retains stale suggestions',
+		async ( promptMode ) => {
+			let finishApply;
+			const applySelectedSuggestions = jest.fn(
+				() => new Promise( ( resolve ) => ( finishApply = resolve ) )
+			);
+			renderBlockRecommendationsPanel( {
+				dispatchOverrides: { applySelectedSuggestions },
+				recommendations: buildPanelRecommendations(),
+			} );
+			if ( promptMode === 'controlled' ) {
+				act( () =>
+					getRoot().render( <ControlledBlockRecommendations /> )
+				);
+			}
+			act( () => findPanelButton( 'Select all' ).click() );
+			act( () => findPanelButton( 'Apply selected (2)' ).click() );
+			const getLiveRequestState =
+				applySelectedSuggestions.mock.calls[ 0 ][ 4 ];
+			expect( getLiveRequestState ).toEqual( expect.any( Function ) );
+			expect( getLiveRequestState() ).toEqual( {
+				requestSignature: applySelectedSuggestions.mock.calls[ 0 ][ 2 ],
+				requestInput: applySelectedSuggestions.mock.calls[ 0 ][ 3 ],
+			} );
+			const textarea = getTextarea();
+			const descriptor = Object.getOwnPropertyDescriptor(
+				window.HTMLTextAreaElement.prototype,
+				'value'
+			);
+			act( () => {
+				descriptor.set.call( textarea, 'A different direction.' );
+				textarea.dispatchEvent(
+					new window.Event( 'input', { bubbles: true } )
+				);
+				// Read before React commits the draft to a render.
+				expect( getLiveRequestState().requestInput.prompt ).toBe(
+					'A different direction.'
+				);
+			} );
+			await act( async () => finishApply( false ) );
+			expect( getContainer().textContent ).toContain( 'Wide layout' );
+			expect( getContainer().textContent ).toContain(
+				'Accent background'
+			);
+			expect( getContainer().textContent ).toContain(
+				'Block or prompt changed'
+			);
+			expect( findPanelButton( 'Apply selected (0)' ).disabled ).toBe(
+				true
+			);
+			expect( getTextarea().value ).toBe( 'A different direction.' );
+			act( () => getRoot().render( null ) );
+			expect( getLiveRequestState() ).toBeNull();
+		}
+	);
 
 	test( 'self apply keeps selectable result fresh through panel rerender', async () => {
 		const applySelectedSuggestions = jest.fn( async () => true );

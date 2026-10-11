@@ -446,6 +446,151 @@ describe( 'style-operations', () => {
 		);
 	} );
 
+	test.each(
+		[ 'root', 'element', 'element-token', 'block' ].flatMap( ( scope ) =>
+			[
+				'rgb(0, 0, 0)',
+				'#00000080',
+				'var(--theme-background)',
+				'var:preset|color|missing',
+			].map( ( value ) => [ scope, value ] )
+		)
+	)(
+		'rejects an unresolved %s complement %s without applying',
+		( scope, value ) => {
+			blockEditorSettings.features.color.palette = {
+				theme: [ { slug: 'dark', color: '#000000' } ],
+			};
+			baseConfig.styles = {
+				color: { background: '#ffffff', text: '#000000' },
+			};
+			currentRecord.styles = {};
+			const operation = {
+				type: 'set_styles',
+				path: [ 'color', 'text' ],
+				value: 'var:preset|color|dark',
+				valueType: 'preset',
+				presetType: 'color',
+				presetSlug: 'dark',
+			};
+			if ( scope === 'root' ) {
+				baseConfig.styles.color.background = value;
+			} else if ( scope === 'block' ) {
+				baseConfig.styles.blocks = {
+					'core/paragraph': { color: { background: value } },
+				};
+				operation.type = 'set_block_styles';
+				operation.blockName = 'core/paragraph';
+			} else {
+				blockEditorSettings.features.color.button = true;
+				operation.path = [ 'elements', 'button', 'color', 'text' ];
+				if ( scope === 'element-token' ) {
+					blockEditorSettings.features.styles = {
+						elements: { button: { color: { background: value } } },
+					};
+				} else {
+					baseConfig.styles.elements = {
+						button: { color: { background: value } },
+					};
+				}
+			}
+			const before = JSON.parse( JSON.stringify( currentRecord ) );
+			const result = applyGlobalStyleSuggestionOperations(
+				{ operations: [ operation ] },
+				undefined,
+				scope === 'block'
+					? {
+							surface: 'style-book',
+							scope: { blockName: 'core/paragraph' },
+					  }
+					: { surface: 'global-styles' }
+			);
+			expect( result ).toMatchObject( {
+				ok: false,
+				code: 'failed_contrast',
+			} );
+			expect( result.error ).toContain( 'unresolved background' );
+			expect( currentRecord ).toEqual( before );
+			expect( coreDispatch.editEntityRecord ).not.toHaveBeenCalled();
+		}
+	);
+
+	test.each(
+		[
+			[ 'link', 'text', 'light', true ],
+			[ 'link', 'text', 'dark', false ],
+			[ 'button', 'background', 'dark', true ],
+			[ 'button', 'background', 'light', false ],
+		].flatMap( ( values ) =>
+			[ false, true ].map( ( elementFirst ) => [
+				...values,
+				elementFirst,
+			] )
+		)
+	)(
+		'checks final root colors for %s %s preset %s (passes: %s, element first: %s)',
+		( element, side, slug, expectedOk, elementFirst ) => {
+			blockEditorSettings.features.color.palette = {
+				theme: [
+					{ slug: 'dark', color: '#000000' },
+					{ slug: 'light', color: '#ffffff' },
+				],
+			};
+			blockEditorSettings.features.color[ element ] = true;
+			baseConfig.styles = {
+				color: { background: '#ffffff', text: '#000000' },
+			};
+			currentRecord.styles = {};
+			const operations = [
+				[ [ 'color', 'background' ], 'dark' ],
+				[ [ 'color', 'text' ], 'light' ],
+				[ [ 'elements', element, 'color', side ], slug ],
+			].map( ( [ path, presetSlug ] ) => ( {
+				type: 'set_styles',
+				path,
+				value: `var:preset|color|${ presetSlug }`,
+				valueType: 'preset',
+				presetType: 'color',
+				presetSlug,
+			} ) );
+			if ( elementFirst ) {
+				operations.unshift( operations.pop() );
+			}
+			const before = JSON.parse( JSON.stringify( currentRecord ) );
+			const result = applyGlobalStyleSuggestionOperations( {
+				operations,
+			} );
+			expect( result.ok ).toBe( expectedOk );
+			expect( result.code ).toBe(
+				expectedOk ? undefined : 'failed_contrast'
+			);
+			const failedContrastError = expect.stringContaining( '1.0:1' );
+			expect( result.error ).toEqual(
+				expectedOk ? undefined : failedContrastError
+			);
+			expect( currentRecord.styles ).toEqual(
+				expectedOk
+					? {
+							color: {
+								background: 'var:preset|color|dark',
+								text: 'var:preset|color|light',
+							},
+							elements: {
+								[ element ]: {
+									color: {
+										[ side ]: `var:preset|color|${ slug }`,
+									},
+								},
+							},
+					  }
+					: before.styles
+			);
+			expect( coreDispatch.editEntityRecord ).toHaveBeenCalledTimes(
+				expectedOk ? 1 : 0
+			);
+		}
+	);
+
 	test( 'applyGlobalStyleSuggestionOperations rejects unsupported live style paths', () => {
 		blockEditorSettings = {
 			...blockEditorSettings,

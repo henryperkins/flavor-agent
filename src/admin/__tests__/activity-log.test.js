@@ -4491,4 +4491,351 @@ describe( 'ActivityLogApp', () => {
 
 		expect( claimPosts ).toBe( postsAfterRelease );
 	} );
+
+	test( 'does not restore a released review when the initial selection claim settles late', async () => {
+		window.history.replaceState( null, '', PENDING_DEEP_LINK );
+		const pending = createExternalApplyEntry( {
+			apply: {
+				...createExternalApplyEntry().apply,
+				claim: { userId: 7 },
+			},
+		} );
+		const initialClaim = createDeferred();
+		const releases = jest.fn();
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request?.url?.includes( '/claim' ) ) {
+				if ( request.method === 'DELETE' ) {
+					releases();
+					return Promise.resolve( { claim: null, entry: pending } );
+				}
+				return initialClaim.promise;
+			}
+			return Promise.resolve( buildResponse( [ pending ] ) );
+		} );
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+		await act( async () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find(
+					( button ) => button.textContent === 'Release review claim'
+				)
+				.click();
+		} );
+		await flushEffects();
+		expect( getContainer().textContent ).not.toContain(
+			'Release review claim'
+		);
+		await act( async () => {
+			initialClaim.resolve( { claim: { userId: 7 }, entry: pending } );
+			await initialClaim.promise;
+		} );
+		await flushEffects();
+		expect( getContainer().textContent ).not.toContain(
+			'Release review claim'
+		);
+		expect( releases ).toHaveBeenCalledTimes( 2 );
+	} );
+
+	test.each( [
+		[ 7, '' ],
+		[ 5, 'User #5 is reviewing' ],
+	] )(
+		'keeps release intent when a held feed response reports reviewer %s',
+		async ( reviewerId, expectedNote ) => {
+			window.history.replaceState( null, '', PENDING_DEEP_LINK );
+			const pending = createExternalApplyEntry( {
+				apply: {
+					...createExternalApplyEntry().apply,
+					claim: { userId: 7 },
+				},
+			} );
+			const delayedFeed = createDeferred();
+			let feedReads = 0;
+			apiFetch.mockImplementation( ( request ) => {
+				if ( request?.url?.includes( '/claim' ) ) {
+					return Promise.resolve( {
+						claim:
+							request.method === 'DELETE' ? null : { userId: 7 },
+						entry: pending,
+					} );
+				}
+				feedReads += 1;
+				return feedReads === 2
+					? delayedFeed.promise
+					: Promise.resolve( buildResponse( [ pending ] ) );
+			} );
+			await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+			await act( async () =>
+				window.dispatchEvent( new Event( 'focus' ) )
+			);
+			await act( async () => {
+				Array.from( getContainer().querySelectorAll( 'button' ) )
+					.find(
+						( button ) =>
+							button.textContent === 'Release review claim'
+					)
+					.click();
+			} );
+			await act( async () => {
+				delayedFeed.resolve(
+					buildResponse( [
+						{
+							...pending,
+							apply: {
+								...pending.apply,
+								claim: { userId: reviewerId },
+							},
+						},
+					] )
+				);
+				await delayedFeed.promise;
+			} );
+			await flushEffects();
+			expect( getContainer().textContent ).not.toContain(
+				'Release review claim'
+			);
+			expect( getContainer().textContent ).not.toContain(
+				'You’re reviewing this.'
+			);
+			expect(
+				getContainer().querySelector(
+					'.flavor-agent-activity-log__claim-note'
+				)?.textContent || ''
+			).toBe( expectedNote );
+		}
+	);
+
+	test.each( [ 'release', 'selection', 'unmount' ] )(
+		'cleans up a focus claim that resolves after %s abandons its review',
+		async ( abandon ) => {
+			window.history.replaceState( null, '', PENDING_DEEP_LINK );
+			const pending = createExternalApplyEntry( {
+				apply: {
+					...createExternalApplyEntry().apply,
+					claim: { userId: 7 },
+				},
+			} );
+			const other = createEntry( { id: 'activity-other' } );
+			const delayedClaim = createDeferred();
+			let claimPosts = 0;
+			const releases = jest.fn();
+			apiFetch.mockImplementation( ( request ) => {
+				if ( request?.url?.includes( '/claim' ) ) {
+					if ( request.method === 'DELETE' ) {
+						releases( request );
+						return Promise.resolve( {
+							claim: null,
+							entry: pending,
+						} );
+					}
+					claimPosts += 1;
+					return claimPosts === 2
+						? delayedClaim.promise
+						: Promise.resolve( {
+								claim: { userId: 7 },
+								entry: pending,
+						  } );
+				}
+				return Promise.resolve( buildResponse( [ pending, other ] ) );
+			} );
+			await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+			await act( async () =>
+				window.dispatchEvent( new Event( 'focus' ) )
+			);
+			await flushEffects();
+			expect( claimPosts ).toBe( 2 );
+			await act( async () => {
+				if ( abandon === 'release' ) {
+					Array.from( getContainer().querySelectorAll( 'button' ) )
+						.find(
+							( button ) =>
+								button.textContent === 'Release review claim'
+						)
+						.click();
+				} else if ( abandon === 'selection' ) {
+					getDataViewsMockState().latestProps.onClickItem( other );
+				} else {
+					getRoot().unmount();
+				}
+			} );
+			await flushEffects();
+			const releasesBeforeResponse = releases.mock.calls.length;
+			await act( async () => {
+				delayedClaim.resolve( {
+					claim: { userId: 7 },
+					entry: pending,
+				} );
+				await delayedClaim.promise;
+			} );
+			await flushEffects();
+			expect( releases ).toHaveBeenCalledTimes(
+				releasesBeforeResponse + 1
+			);
+			expect( releases ).toHaveBeenLastCalledWith(
+				expect.objectContaining( {
+					method: 'DELETE',
+					url: expect.stringContaining(
+						'/activity/activity-external-apply/claim'
+					),
+				} )
+			);
+			expect( getContainer().textContent ).not.toContain(
+				'Release review claim'
+			);
+			expect(
+				getContainer().querySelector(
+					'.flavor-agent-activity-log__claim-note'
+				)
+			).toBeNull();
+		}
+	);
+
+	test( 'does not release a newer review after leaving and reselecting the same row', async () => {
+		window.history.replaceState( null, '', PENDING_DEEP_LINK );
+		const pending = createExternalApplyEntry();
+		const other = createEntry( { id: 'activity-other' } );
+		const delayedClaim = createDeferred();
+		let posts = 0;
+		const releases = jest.fn();
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request?.url?.includes( '/claim' ) ) {
+				if ( request.method === 'DELETE' ) {
+					releases();
+					return Promise.resolve( { claim: null, entry: pending } );
+				}
+				posts += 1;
+				return posts === 2
+					? delayedClaim.promise
+					: Promise.resolve( {
+							claim: { userId: 7 },
+							entry: pending,
+					  } );
+			}
+			return Promise.resolve( buildResponse( [ pending, other ] ) );
+		} );
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+		await act( async () => window.dispatchEvent( new Event( 'focus' ) ) );
+		await act( async () =>
+			getDataViewsMockState().latestProps.onClickItem( other )
+		);
+		await act( async () =>
+			getDataViewsMockState().latestProps.onClickItem( pending )
+		);
+		await flushEffects();
+		expect( posts ).toBe( 3 );
+		const releasesBeforeResponse = releases.mock.calls.length;
+		await act( async () => {
+			delayedClaim.resolve( { claim: { userId: 7 }, entry: pending } );
+			await delayedClaim.promise;
+		} );
+		await flushEffects();
+		expect( releases ).toHaveBeenCalledTimes( releasesBeforeResponse );
+		expect( getContainer().textContent ).toContain(
+			'Release review claim'
+		);
+	} );
+
+	test( 'does not release a newer review when the initial selection claim settles after reselection', async () => {
+		window.history.replaceState( null, '', PENDING_DEEP_LINK );
+		const pending = createExternalApplyEntry();
+		const other = createEntry( { id: 'activity-other' } );
+		const delayedClaim = createDeferred();
+		let posts = 0;
+		const releases = jest.fn();
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request?.url?.includes( '/claim' ) ) {
+				if ( request.method === 'DELETE' ) {
+					releases();
+					return Promise.resolve( { claim: null, entry: pending } );
+				}
+				posts += 1;
+				return posts === 1
+					? delayedClaim.promise
+					: Promise.resolve( {
+							claim: { userId: 7 },
+							entry: pending,
+					  } );
+			}
+			return Promise.resolve( buildResponse( [ pending, other ] ) );
+		} );
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+		await act( async () =>
+			getDataViewsMockState().latestProps.onClickItem( other )
+		);
+		await act( async () =>
+			getDataViewsMockState().latestProps.onClickItem( pending )
+		);
+		await flushEffects();
+		expect( posts ).toBe( 2 );
+		await act( async () => {
+			delayedClaim.resolve( { claim: { userId: 7 }, entry: pending } );
+			await delayedClaim.promise;
+		} );
+		await flushEffects();
+		expect( releases ).not.toHaveBeenCalled();
+		expect( getContainer().textContent ).toContain(
+			'Release review claim'
+		);
+	} );
+
+	test( 'retains a terminal result from a late focus claim after explicit release', async () => {
+		window.history.replaceState( null, '', PENDING_DEEP_LINK );
+		const pending = createExternalApplyEntry( {
+			apply: {
+				...createExternalApplyEntry().apply,
+				claim: { userId: 7 },
+			},
+		} );
+		const terminal = {
+			...pending,
+			status: 'rejected',
+			statusLabel: 'Rejected',
+			executionResult: 'rejected',
+			apply: { ...pending.apply, status: 'rejected', claim: null },
+		};
+		const delayedClaim = createDeferred();
+		let posts = 0;
+		let terminalResolved = false;
+		apiFetch.mockImplementation( ( request ) => {
+			if ( request?.url?.includes( '/claim' ) ) {
+				if ( request.method === 'DELETE' ) {
+					return Promise.resolve( { claim: null, entry: pending } );
+				}
+				posts += 1;
+				return posts === 2
+					? delayedClaim.promise
+					: Promise.resolve( {
+							claim: { userId: 7 },
+							entry: pending,
+					  } );
+			}
+			return Promise.resolve(
+				buildResponse( [ terminalResolved ? terminal : pending ] )
+			);
+		} );
+		await renderApp( undefined, { bootData: { currentUserId: 7 } } );
+		await act( async () => window.dispatchEvent( new Event( 'focus' ) ) );
+		await act( async () => {
+			Array.from( getContainer().querySelectorAll( 'button' ) )
+				.find(
+					( button ) => button.textContent === 'Release review claim'
+				)
+				.click();
+		} );
+		await act( async () => {
+			terminalResolved = true;
+			delayedClaim.resolve( { claim: null, entry: terminal } );
+			await delayedClaim.promise;
+		} );
+		await flushEffects();
+		expect(
+			getContainer().querySelector(
+				'.flavor-agent-activity-log__decision'
+			)
+		).toBeNull();
+		expect(
+			getContainer().querySelector(
+				'.flavor-agent-activity-log__governance-banner.is-rejected'
+			)
+		).not.toBeNull();
+	} );
 } );
