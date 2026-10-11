@@ -1,6 +1,6 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-10-08
+> Last updated: 2026-10-11
 
 ## Current worktree contract (2026-10-11)
 
@@ -9,6 +9,12 @@ Cloudflare AI Search is the sole supported pattern store. Existing Qdrant instal
 Pattern catalog sync resumes after an interruption from its checkpointed uploads and deletes instead of uploading the catalog again. Cloudflare 429 responses keep their error code, follow-up syncs honor `Retry-After` for up to five minutes, and Settings shows a scheduled automatic retry as `Retrying` instead of `Error`. Exhausted monthly AI Search quotas are not retried. See the [sync runbook](docs/reference/pattern-recommendation-debugging.md#3-distinguish-queued-processing-and-unknown-sync-state).
 
 The entries below preserve their dated release/verification boundaries. Their earlier provider inventory, Guidelines export behavior, and verification counts do not establish the current worktree contract or qualification.
+
+## Current replacement deployment (2026-10-11)
+
+The [Codex recommendation release record](docs/validation/2026-10-11-codex-recommendation-release.md) qualifies clean candidate `a622fe0`: all nine strict gates passed, including 2,417 Jest tests, 2,653 PHP tests, Playground 49/49, and pinned Gutenberg Site Editor 78/78. The separate bundled editor passed 77 tests with one Gutenberg-dependent fixture excluded; the complete Gutenberg 24.1.0 compatibility leg passed 78/78. The first network-interrupted Playground run remains preserved separately.
+
+The 221-file ZIP, SHA-256 `c116d6eae1dad804a2b019aba4483bf2a8739de30542e02d9e222519950dc917`, passed extracted-package checks and was uploaded to hperkins.blog as active Flavor Agent 0.1.3. All nine public JavaScript/CSS assets match the qualified bytes, public health is HTTP 200, and plugin inventory is unchanged. Live Codex generation awaits the user's fresh Group-block request in their own authenticated browser; installed PHP hashes and an authenticated editor session have not been directly verified here. Automated source deployment remains off.
 
 ## v0.1.3 compatibility candidate
 
