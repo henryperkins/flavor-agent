@@ -240,6 +240,55 @@ test( 'AI Activity page loads entries, updates selection, and exposes the filter
 	).toBeVisible();
 } );
 
+test( 'AI Activity shows stored outcome provider attribution without inventing request diagnostics', async ( {
+	page,
+} ) => {
+	const entries = [
+		{
+			...ACTIVITY_ENTRIES[ 0 ],
+			type: 'recommendation_outcome',
+			request: {
+				recommendation: {
+					learningAttribution: {
+						generationId: 'gen-codex',
+						provider: 'codex',
+						model: 'gpt-6.1-sol',
+					},
+				},
+			},
+			after: { outcome: { event: 'shown', suggestionCount: 0 } },
+		},
+	];
+	await page.route(
+		'**/wp-json/flavor-agent/v1/activity**',
+		async ( route ) => {
+			await route.fulfill( {
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(
+					buildActivityResponse( route.request().url(), entries )
+				),
+			} );
+		}
+	);
+	await page.goto(
+		'/wp-admin/options-general.php?page=flavor-agent-activity',
+		{
+			waitUntil: 'domcontentloaded',
+		}
+	);
+	await waitForWordPressReady( page );
+	const sidebar = page.locator( '.flavor-agent-activity-log__sidebar' );
+	await sidebar.getByText( 'Provider diagnostics', { exact: true } ).click();
+	await expect( sidebar.getByText( 'codex', { exact: true } ) ).toBeVisible();
+	await expect(
+		sidebar.getByText( 'gpt-6.1-sol', { exact: true } )
+	).toBeVisible();
+	await expect(
+		sidebar.getByText( 'Not recorded', { exact: true } ).first()
+	).toBeVisible();
+} );
+
 test( 'AI Activity identifies a model response that exhausted its token budget', async ( {
 	page,
 } ) => {

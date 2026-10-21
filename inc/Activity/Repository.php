@@ -10,7 +10,7 @@ use FlavorAgent\Attestation\Repository as AttestationRepository;
 final class Repository {
 
 	public const SCHEMA_OPTION                       = 'flavor_agent_activity_schema_version';
-	public const SCHEMA_VERSION                      = 6;
+	public const SCHEMA_VERSION                      = 7;
 	public const PRUNE_CRON_HOOK                     = 'flavor_agent_prune_activity';
 	public const ADMIN_PROJECTION_BACKFILL_CRON_HOOK = 'flavor_agent_backfill_activity_admin_projection';
 	public const DEFAULT_RETENTION_DAYS              = 90;
@@ -147,7 +147,8 @@ final class Repository {
 		update_option( self::SCHEMA_OPTION, self::SCHEMA_VERSION, false );
 
 		if ( $table_previously_exists && $installed_version < self::SCHEMA_VERSION ) {
-			self::schedule_admin_projection_backfill( $installed_version < 5 );
+			// v7 adds outcome provider/model attribution to already-projected rows.
+			self::schedule_admin_projection_backfill( $installed_version < 7 );
 		}
 	}
 
@@ -2077,7 +2078,7 @@ final class Repository {
 			$surface,
 			$activity_type
 		);
-		$request_meta           = self::get_admin_request_meta( $request );
+		$request_meta           = self::get_admin_request_meta( $request, [], $activity_type, $after );
 		$prompt                 = trim( (string) ( $request['prompt'] ?? '' ) );
 		$request_reference      = trim( (string) ( $request['reference'] ?? '' ) );
 		$post_type              = self::get_admin_post_type(
@@ -3534,7 +3535,7 @@ final class Repository {
 		);
 		$operation_type  = $operation['value'];
 		$operation_label = $operation['label'];
-		$request_meta    = self::get_admin_request_meta( $request, $row );
+		$request_meta    = self::get_admin_request_meta( $request, $row, (string) ( $row['activity_type'] ?? '' ), $after );
 		$timestamp_data  = self::get_timestamp_data(
 			self::mysql_datetime_to_timestamp( (string) ( $row['created_at'] ?? '' ) ),
 			$timezone
@@ -4637,7 +4638,7 @@ final class Repository {
 	 *   requestRoute: string
 	 * }
 	 */
-	private static function get_admin_request_meta( array $request, array $row = [] ): array {
+	private static function get_admin_request_meta( array $request, array $row = [], string $activity_type = '', array $after = [] ): array {
 		$resolved_provider      = self::get_first_string(
 			$request,
 			[
@@ -4687,7 +4688,19 @@ final class Repository {
 				],
 				trim( (string) ( $row['admin_model'] ?? '' ) )
 			);
-		$selected_provider      = $resolved_provider;
+		// Outcomes retain allowlisted attribution without duplicating full requests.
+		if ( 'recommendation_outcome' === $activity_type ) {
+			$attribution = [];
+			foreach ( [ 'provider', 'model' ] as $key ) {
+				$attribution[ $key ] = self::get_first_string( $request, [ [ 'recommendation', 'learningAttribution', $key ] ] );
+				if ( '' === $attribution[ $key ] ) {
+					$attribution[ $key ] = self::get_first_string( $after, [ [ 'outcome', 'learningAttribution', $key ] ] );
+				}
+			}
+			$provider = '' !== $provider ? $provider : $attribution['provider'];
+			$model    = '' !== $model ? $model : $attribution['model'];
+		}
+		$selected_provider = $resolved_provider;
 
 		if ( '' === $selected_provider && 'default' === $model_selection_source ) {
 			$selected_provider = 'provider-managed';

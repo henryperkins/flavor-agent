@@ -1575,6 +1575,45 @@ final class ActivityRepositoryTest extends TestCase {
 		);
 	}
 
+	public function test_outcome_attribution_is_projected_and_backfilled_for_provider_search(): void {
+		Repository::install();
+		Repository::create(
+			$this->build_outcome_entry(
+				'outcome-codex',
+				'shown',
+				'block',
+				'set-codex',
+				'',
+				'',
+				'2026-10-21T05:05:37Z',
+				[
+					'learningAttribution' => [
+						'generationId' => 'gen-codex',
+						'provider'     => 'codex',
+						'model'        => 'gpt-6.1-sol',
+					],
+				]
+			)
+		);
+		$table = Repository::table_name();
+		$this->assertSame( 'codex', WordPressTestState::$db_tables[ $table ][0]['admin_provider'] );
+		$this->assertSame( 'gpt-6.1-sol', WordPressTestState::$db_tables[ $table ][0]['admin_model'] );
+		$this->assertSame( [ 'outcome-codex' ], array_column( Repository::query_admin( [ 'provider' => 'codex' ] )['entries'], 'id' ) );
+
+		// Already-projected v6 rows are missing only outcome attribution.
+		WordPressTestState::$db_tables[ $table ][0]['admin_provider']    = '';
+		WordPressTestState::$db_tables[ $table ][0]['admin_model']       = '';
+		WordPressTestState::$db_tables[ $table ][0]['admin_search_text'] = 'recommendation_outcome shown';
+		WordPressTestState::$options[ Repository::SCHEMA_OPTION ]        = 6;
+		Repository::maybe_install();
+		$this->assertNotFalse( wp_next_scheduled( Repository::ADMIN_PROJECTION_BACKFILL_CRON_HOOK ) );
+		$this->assertSame( [ 'outcome-codex' ], array_column( Repository::query_admin( [ 'provider' => 'codex' ] )['entries'], 'id' ), 'Filtering works while backfill is pending.' );
+		Repository::run_admin_projection_backfill();
+		$this->assertSame( 'codex', WordPressTestState::$db_tables[ $table ][0]['admin_provider'] );
+		$this->assertSame( 'gpt-6.1-sol', WordPressTestState::$db_tables[ $table ][0]['admin_model'] );
+		$this->assertSame( [ 'outcome-codex' ], array_column( Repository::query_admin( [ 'search' => 'gpt-6.1-sol' ] )['entries'], 'id' ) );
+	}
+
 	public function test_query_admin_supports_provider_filters_and_sorting(): void {
 		Repository::install();
 

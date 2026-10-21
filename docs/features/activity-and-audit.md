@@ -67,6 +67,9 @@ The [dismissal and fixture-export v1 contracts](../reference/recommendation-outc
 Core AI Request Logging (`Tools > AI Request Logs`) captures AI Client HTTP calls. Flavor Agent's activity repository captures apply/undo state. The two layers coexist; Flavor Agent does not replace core logs.
 
 - Flavor Agent enriches `wpai_request_logs.context` via `wpai_request_log_context` and captures the core `log_id` through `wpai_request_logged`.
+- Providers that write logs directly must apply `wpai_request_log_context` before calling the WordPress AI log manager. Codex's explicit writer does this for success and failure records; the active request token joins the saved AI log to Flavor Agent's request metadata. Logging failures do not fail generation.
+- Codex's SDK result `id` contains its sidecar request ID and is retained as `responseSummary.providerRequestId`. This fallback applies only to Codex; another provider's response ID is not treated as a request ID.
+- Recommendation outcomes display provider/model from their stored `learningAttribution` when full request metadata is absent. Activity schema version 7 backfills those fields into the admin search/filter projection. Outcome telemetry does not acquire transport, prompt, response, or token details, and a `shown` event still has no save verification or undo action.
 - **AI Activity Dual Logging is on by default** (`Settings > Flavor Agent > Experimental Features`). Flavor Agent keeps writing `request_diagnostic` rows (surface, result count, pipeline trace, undo lineage) alongside core, and apply rows carry `request.ai.requestLogId`.
 - Opting out restores suppress-and-defer: Flavor Agent skips `request_diagnostic` when core logging is on, and the admin page defers to `Tools > AI Request Logs`.
 - Apply/undo rows always stay in Flavor Agent activity. Core Request Logging does not record editor state transitions.

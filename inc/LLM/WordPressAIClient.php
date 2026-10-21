@@ -386,6 +386,10 @@ final class WordPressAIClient {
 
 		if ( is_wp_error( $result ) ) {
 			$result = self::normalize_ai_client_error( $result );
+			// Time-to-failure separates an immediate refusal from a timeout.
+			Provider::record_runtime_chat_metrics(
+				[ 'latencyMs' => max( 0, (int) round( ( microtime( true ) - $started_at ) * 1000 ) ) ]
+			);
 			Provider::record_runtime_chat_diagnostics(
 				self::with_error_summary( $request_diagnostics, $result )
 			);
@@ -2256,6 +2260,12 @@ final class WordPressAIClient {
 					return $value;
 				}
 			}
+		}
+
+		// Codex maps its sidecar requestId to the SDK result ID. Other providers
+		// may use that field for a response ID, so keep this fallback provider-specific.
+		if ( 'codex' === ( $result['providerMetadata']['id'] ?? null ) && is_string( $result['id'] ?? null ) ) {
+			return trim( $result['id'] );
 		}
 
 		return '';
