@@ -1,8 +1,8 @@
 # Flavor Agent - Status
 
-> Last updated: 2026-10-11
+> Last updated: 2026-10-21
 
-## Current worktree contract (2026-10-11)
+## Current worktree contract (2026-10-21)
 
 Cloudflare AI Search is the sole supported pattern store. Existing Qdrant installations require explicit Cloudflare setup and a new sync; the local migration does not provision remote storage, copy vectors/data, or reuse the old cosine threshold. Legacy URL/key/threshold options remain unused until uninstall cleanup. Cloudflare account/token/model settings remain for setup and validation; direct Workers AI embedding requests are validation probes, while managed AI Search owns catalog embeddings. See [pattern storage migration](docs/reference/pattern-storage-migration.md) and the [current settings contract](docs/features/settings-backends-and-sync.md).
 
@@ -10,11 +10,21 @@ Pattern catalog sync resumes after an interruption from its checkpointed uploads
 
 The entries below preserve their dated release/verification boundaries. Their earlier provider inventory, Guidelines export behavior, and verification counts do not establish the current worktree contract or qualification.
 
-## Current replacement deployment (2026-10-11)
+## Current local qualification and production provenance (2026-10-21)
+
+The [October 21 follow-up record](docs/validation/2026-10-21-followup-validation-and-provenance.md) qualifies candidate `1d87df9`, based on synchronized source `24034d6` containing merged PR #90 and diagnostics/outcome-attribution fixes. Its only new implementation change initializes the standalone test bootstrap to WordPress's UTC PHP timezone; production code and ranking are unchanged by this follow-up. The complete strict run passed all nine gates with zero skips: 2,420 Jest tests, 2,664 PHP tests / 13,256 assertions, Playground 50/50 and pinned Gutenberg Site Editor 78/78. Separate bundled coverage passed 77/77, excluding the Gutenberg-only shared-Guidelines fixture that passed pinned; targeted Gutenberg 24.2.0 compatibility passed 4/4. All browser runs used zero retries.
+
+The current-source 221-file 0.1.3 ZIP is 1,314,096 bytes, SHA-256 `2d2cb7ce1208d3a85e1a769701d4f4f6a4fff2bd154b87e40f65b503e76eb861`. Extracted-package source/build comparisons, all 202 packaged PHP lints, Plugin Check and a native extracted-source Codex-budget probe passed. Publication and production replacement remain separate decisions; the October 11 ZIP is preserved with its original identity.
+
+Fresh production inventory reports Flavor Agent 0.1.3, AI 1.4.0, Gutenberg 24.2.0 and Codex connector 2.1.4 active. Nine public assets and the homepage returned HTTP 200, but `build/activity-log.js` matches neither the October 11 artifact nor this candidate; the other eight assets match both. The mismatch persisted with a cache-busted request. Installed PHP/configuration identity remains unverified. Browser discovery of SSH/SFTP details stopped at WordPress.com's sign-in/browser check (HTTP 403); no provenance declaration or cohort was started. Keep the established five-fresh-shown-set/24-hour, 500-row, complete-join/privacy-reviewed pilot criteria and static ranking.
+
+Read-only Developer Docs service counts now report 26,596 completed and zero unfinished/error items. This does not verify the frozen desired-key set or source/hash/crawl identity, and unchanged public/managed/MCP freshness qualification is still pending. Grounding remains disabled. Six redundant worktrees and three local branches were retired only after recovery archive verification. GitHub's 19 development-scoped dependency alerts and the separate npm audit were triaged; no direct-advisory package appears in the traced bundle, while tooling alerts remain unresolved. The validation record retains scope limits and the unapplied compatible handlebars patch proposal.
+
+## Historical replacement deployment (2026-10-11)
 
 The [Codex recommendation release record](docs/validation/2026-10-11-codex-recommendation-release.md) qualifies clean candidate `a622fe0`: all nine strict gates passed, including 2,417 Jest tests, 2,653 PHP tests, Playground 49/49, and pinned Gutenberg Site Editor 78/78. The separate bundled editor passed 77 tests with one Gutenberg-dependent fixture excluded; the complete Gutenberg 24.1.0 compatibility leg passed 78/78. The first network-interrupted Playground run remains preserved separately.
 
-The 221-file ZIP, SHA-256 `c116d6eae1dad804a2b019aba4483bf2a8739de30542e02d9e222519950dc917`, passed extracted-package checks and was uploaded to hperkins.blog as active Flavor Agent 0.1.3. All nine public JavaScript/CSS assets match the qualified bytes, public health is HTTP 200, and plugin inventory is unchanged. The user confirmed that the fresh **Get Suggestions** request on the original Group block in page 6 returned recommendations in their authenticated browser, closing the live block recommendation check. The agent has not directly observed that editor interaction, inspected a fresh provider trace, or verified installed PHP hashes. Automated source deployment remains off.
+The 221-file ZIP, SHA-256 `c116d6eae1dad804a2b019aba4483bf2a8739de30542e02d9e222519950dc917`, passed extracted-package checks and was uploaded to hperkins.blog as active Flavor Agent 0.1.3. At that deployment boundary, all nine public JavaScript/CSS assets matched the qualified bytes, public health was HTTP 200, and plugin inventory was unchanged. The October 21 observations above own the later inventory and public-asset mismatch. The user confirmed that the fresh **Get Suggestions** request on the original Group block in page 6 returned recommendations in their authenticated browser, closing the live block recommendation check. The agent has not directly observed that editor interaction, inspected a fresh provider trace, or verified installed PHP hashes. Automated source deployment remains off.
 
 Clean immutable-candidate qualification, package proof, and replacement deployment are complete for `a622fe0`. Exact-tag verification and GitHub publication remain separate work. Installed whole-package/PHP and non-secret configuration provenance still gate a qualified post-deployment fixture cohort; the October 7 collection remains unqualified. Ranking remains static, and no measured recommendation-quality improvement is established. Developer Docs grounding remains disabled by default; full desired-key settlement followed by unchanged public/managed/MCP freshness qualification gates any separate restoration decision.
 
