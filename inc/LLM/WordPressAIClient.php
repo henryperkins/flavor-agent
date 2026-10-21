@@ -2258,6 +2258,12 @@ final class WordPressAIClient {
 			}
 		}
 
+		// Codex maps its sidecar requestId to the SDK result ID. Other providers
+		// may use that field for a response ID, so keep this fallback provider-specific.
+		if ( 'codex' === ( $result['providerMetadata']['id'] ?? null ) && is_string( $result['id'] ?? null ) ) {
+			return trim( $result['id'] );
+		}
+
 		return '';
 	}
 

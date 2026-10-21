@@ -1068,10 +1068,12 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( 'anthropic', WordPressTestState::$last_ai_client_prompt['provider'] ?? null );
 	}
 
-	public function test_chat_retries_without_output_schema_after_unpinned_grammar_limit_error(): void {
-		WordPressTestState::$ai_client_supported = true;
-		$attempt_schemas                         = [];
-		$capture_attempt                         = static function ( array $args ) use ( &$attempt_schemas ): array {
+	/** @dataProvider token_budget_support_cases */
+	public function test_chat_retries_without_output_schema_after_unpinned_grammar_limit_error( bool $supports_budget ): void {
+		WordPressTestState::$ai_client_supported                     = true;
+		WordPressTestState::$ai_client_feature_support['max_tokens'] = $supports_budget;
+		$attempt_schemas = [];
+		$capture_attempt = static function ( array $args ) use ( &$attempt_schemas ): array {
 			$attempt_schemas[]                                  = WordPressTestState::$last_ai_client_prompt['json_schema'] ?? null;
 			WordPressTestState::$ai_client_generate_text_result = 1 === count( $attempt_schemas )
 				? new \WP_Error(
@@ -1113,16 +1115,24 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertNull( $attempt_schemas[1] );
 		$this->assertArrayNotHasKey( 'json_schema', WordPressTestState::$last_ai_client_prompt );
 		$this->assertSame( 'grammar_limit', $meta['requestSummary']['outputSchemaFallback'] ?? null );
+		$this->assertSame( $supports_budget ? 16384 : null, $meta['requestSummary']['maxOutputTokens'] ?? null );
 
 		// The retry must build its own prompt rather than reuse a handle captured
 		// before the schema was applied: apply_output_schema() only shallow-clones,
 		// so a builder that keeps its output schema on a shared sub-object would
 		// hand the retry back the very schema it is dropping.
 		$this->assertSame(
-			2,
+			$supports_budget ? 2 : 3,
 			$prompt_builds,
 			'The grammar-limit retry should construct a fresh prompt builder.'
 		);
+	}
+
+	public static function token_budget_support_cases(): array {
+		return [
+			'with default budget'        => [ true ],
+			'without unsupported budget' => [ false ],
+		];
 	}
 
 	public function test_chat_retries_numeric_schema_rejection_with_bounds_removed_and_structure_preserved(): void {
@@ -1704,6 +1714,76 @@ final class WordPressAIClientTest extends TestCase {
 		$this->assertSame( 12, $meta['tokenUsage']['input'] ?? null );
 		$this->assertSame( 30, $meta['tokenUsage']['output'] ?? null );
 		$this->assertSame( 'anthropic-request-123', $meta['responseSummary']['providerRequestId'] ?? null );
+	}
+
+	/** @dataProvider provider_request_id_cases */
+	public function test_chat_preserves_codex_sdk_request_id_without_confusing_other_response_ids( array $metadata, ?string $expected ): void {
+		WordPressTestState::$ai_client_supported            = true;
+		WordPressTestState::$ai_client_generate_text_result = array_merge(
+			[ 'text' => '{"explanation":"OK."}' ],
+			$metadata
+		);
+
+		$this->assertSame( '{"explanation":"OK."}', WordPressAIClient::chat( 'System.', 'User.' ) );
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+		$this->assertSame( $expected, $meta['responseSummary']['providerRequestId'] ?? null );
+	}
+
+	public static function provider_request_id_cases(): array {
+		return [
+			'codex SDK ID'               => [
+				[
+					'id'               => 'codex-request-123',
+					'providerMetadata' => [ 'id' => 'codex' ],
+				],
+				'codex-request-123',
+			],
+			'explicit alias wins'        => [
+				[
+					'id'               => 'sdk-id',
+					'providerMetadata' => [ 'id' => 'codex' ],
+					'requestId'        => 'explicit-request',
+				],
+				'explicit-request',
+			],
+			'other provider response ID' => [
+				[
+					'id'               => 'response-123',
+					'providerMetadata' => [ 'id' => 'anthropic' ],
+				],
+				null,
+			],
+			'unknown provider'           => [ [ 'id' => 'response-123' ], null ],
+			'malformed ID'               => [
+				[
+					'id'               => [ 'secret' ],
+					'providerMetadata' => [ 'id' => 'codex' ],
+				],
+				null,
+			],
+			'empty ID'                   => [
+				[
+					'id'               => ' ',
+					'providerMetadata' => [ 'id' => 'codex' ],
+				],
+				null,
+			],
+		];
+	}
+
+	public function test_chat_retries_only_the_implicit_budget_when_connector_does_not_support_max_tokens(): void {
+		WordPressTestState::$ai_client_supported                     = true;
+		WordPressTestState::$ai_client_feature_support['max_tokens'] = false;
+		WordPressTestState::$ai_client_generate_text_result          = '{"explanation":"OK."}';
+		$this->assertSame( '{"explanation":"OK."}', WordPressAIClient::chat( 'System.', 'User.' ) );
+		$meta = \FlavorAgent\OpenAI\Provider::active_chat_request_meta();
+		$this->assertArrayNotHasKey( 'maxOutputTokens', $meta['requestSummary'] );
+		$this->assertSame( 2, array_count_values( WordPressTestState::$ai_client_prompt_calls )['User.'] );
+
+		$result = WordPressAIClient::chat( 'System.', 'User.', null, null, null, [ 'max_tokens' => 500 ] );
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'missing_text_generation_provider', $result->get_error_code() );
+		$this->assertSame( 3, array_count_values( WordPressTestState::$ai_client_prompt_calls )['User.'] );
 	}
 
 	public function test_chat_uses_ai_plugin_feature_developer_provider_and_model_when_no_provider_is_explicit(): void {

@@ -739,6 +739,88 @@ describe( 'activity log utils', () => {
 		expect( entries[ 0 ].latency ).toBe( 'Not recorded' );
 	} );
 
+	test.each( [ 'request', 'after' ] )(
+		'outcome diagnostics recover allowlisted attribution from %s',
+		( source ) => {
+			const attribution = {
+				provider: 'codex',
+				model: 'gpt-6.1-sol',
+				tokenUsage: 99,
+				providerRequestId: 'untrusted',
+			};
+			const entry = createEntry( {
+				type: 'recommendation_outcome',
+				request:
+					source === 'request'
+						? {
+								recommendation: {
+									learningAttribution: attribution,
+								},
+						  }
+						: {},
+				after: {
+					outcome: {
+						event: 'shown',
+						...( source === 'after'
+							? { learningAttribution: attribution }
+							: {} ),
+					},
+				},
+			} );
+			expect( normalizeActivityEntries( [ entry ] )[ 0 ] ).toMatchObject(
+				{
+					provider: 'codex',
+					model: 'gpt-6.1-sol',
+					tokenUsage: 'Not recorded',
+					providerRequestId: 'Not recorded',
+				}
+			);
+			entry.request.ai = {
+				provider: 'explicit-provider',
+				model: 'explicit-model',
+			};
+			expect( normalizeActivityEntries( [ entry ] )[ 0 ] ).toMatchObject(
+				{
+					provider: 'explicit-provider',
+					model: 'explicit-model',
+				}
+			);
+			entry.admin = { provider: 'admin-provider', model: 'admin-model' };
+			expect( normalizeActivityEntries( [ entry ] )[ 0 ] ).toMatchObject(
+				{
+					provider: 'admin-provider',
+					model: 'admin-model',
+				}
+			);
+		}
+	);
+
+	test( 'outcome attribution does not leak into unrelated events or stringify malformed values', () => {
+		const entry = createEntry( {
+			after: {
+				outcome: {
+					learningAttribution: {
+						provider: 'codex',
+						model: 'gpt-6.1-sol',
+					},
+				},
+			},
+		} );
+		expect( normalizeActivityEntries( [ entry ] )[ 0 ] ).toMatchObject( {
+			provider: 'Not recorded',
+			model: 'Not recorded',
+		} );
+		entry.type = 'recommendation_outcome';
+		entry.after.outcome.learningAttribution = {
+			provider: [ 'codex' ],
+			model: { id: 'model' },
+		};
+		expect( normalizeActivityEntries( [ entry ] )[ 0 ] ).toMatchObject( {
+			provider: 'Not recorded',
+			model: 'Not recorded',
+		} );
+	} );
+
 	test( 'normalizeActivityEntries prefers canonical admin metadata for dashboard display', () => {
 		const entries = normalizeActivityEntries( [
 			createEntry( {

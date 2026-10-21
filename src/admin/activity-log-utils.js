@@ -1137,7 +1137,15 @@ function summarizeActivityState( state ) {
 	}
 }
 
-function getRequestDiagnostics( request = {}, admin = {} ) {
+function getRequestDiagnostics( request = {}, admin = {}, outcomeEntry = {} ) {
+	// Outcome telemetry carries only allowlisted attribution, not transport details.
+	const outcomeAttribution = ( key ) =>
+		outcomeEntry.type === 'recommendation_outcome'
+			? getFirstString( outcomeEntry, [
+					[ 'request', 'recommendation', 'learningAttribution', key ],
+					[ 'after', 'outcome', 'learningAttribution', key ],
+			  ] )
+			: '';
 	const provider =
 		getAdminMetadataString( admin, 'provider' ) ||
 		getFirstString( request, [
@@ -1148,7 +1156,8 @@ function getRequestDiagnostics( request = {}, admin = {} ) {
 			[ 'metadata', 'provider' ],
 			[ 'ai', 'provider' ],
 			[ 'result', 'provider' ],
-		] );
+		] ) ||
+		outcomeAttribution( 'provider' );
 	const model =
 		getAdminMetadataString( admin, 'model' ) ||
 		getFirstString( request, [
@@ -1157,7 +1166,8 @@ function getRequestDiagnostics( request = {}, admin = {} ) {
 			[ 'modelName' ],
 			[ 'metadata', 'model' ],
 			[ 'result', 'model' ],
-		] );
+		] ) ||
+		outcomeAttribution( 'model' );
 	const providerPath =
 		getAdminMetadataString( admin, 'providerPath' ) ||
 		getFirstString( request, [ [ 'ai', 'pathLabel' ], [ 'pathLabel' ] ] );
@@ -3594,7 +3604,7 @@ function normalizeActivityEntry(
 	const request = isPlainObject( entry?.request ) ? entry.request : {};
 	const admin = getAdminMetadata( entry );
 	const { postType, entityId } = getDocumentContext( entry );
-	const diagnostics = getRequestDiagnostics( request, admin );
+	const diagnostics = getRequestDiagnostics( request, admin, entry );
 	if (
 		entry?.type === 'request_diagnostic' &&
 		diagnostics.transportError === EMPTY_VALUE &&
