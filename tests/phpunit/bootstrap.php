@@ -11,6 +11,9 @@ namespace {
 
 		define('ABSPATH', __DIR__ . '/');
 	}
+
+	// Match the UTC PHP timezone established by WordPress in wp-settings.php.
+	date_default_timezone_set('UTC');
 }
 
 namespace FlavorAgent\Tests\Support {
