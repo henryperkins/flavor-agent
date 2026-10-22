@@ -38,8 +38,6 @@ output
 output/**
 wpcom-artifact
 wpcom-artifact/**
-repomix
-repomix/**
 scripts
 scripts/**
 src
@@ -80,6 +78,5 @@ webpack.config.js
 *.ppt
 *.pptx
 *.zip
-repomix*.json
 google-cloud-cli-*.tar.gz
 20??-??-??-*-local-command-*.txt

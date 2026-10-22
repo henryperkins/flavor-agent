@@ -744,9 +744,6 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 				)
 			).toBe( false );
 			expect(
-				fs.existsSync( path.join( stagedPluginDirForFs, 'repomix' ) )
-			).toBe( false );
-			expect(
 				fs.existsSync(
 					path.join( stagedPluginDirForFs, 'eslint.config.js' )
 				)
@@ -805,9 +802,7 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 
 			expect( result.status ).toBe( 1 );
 			expect( result.stdout ).toContain( 'compressed_files' );
-			expect( result.stderr ).toContain(
-				'Plugin Check reported errors'
-			);
+			expect( result.stderr ).toContain( 'Plugin Check reported errors' );
 		} finally {
 			fs.rmSync( tempRoot, { recursive: true, force: true } );
 		}
@@ -864,9 +859,7 @@ describe( 'plugin-check.sh prerequisite handling', () => {
 
 			expect( result.status ).toBe( 1 );
 			expect( result.stdout ).toContain( 'compressed_files' );
-			expect( result.stderr ).toContain(
-				'Plugin Check reported errors'
-			);
+			expect( result.stderr ).toContain( 'Plugin Check reported errors' );
 		} finally {
 			fs.rmSync( tempRoot, { recursive: true, force: true } );
 		}

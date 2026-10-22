@@ -78,8 +78,5 @@
 			".": "0.32.2",
 			"minimatch": "^8.0.7"
 		}
-	},
-	"optionalDependencies": {
-		"repomix": "^1.14.1"
 	}
 }

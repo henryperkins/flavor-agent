@@ -14,8 +14,6 @@ npm ci
 
 Node runtimes for this repo must be **major 20 or 24** (matching `package.json` `engines.node: ^20 || ^24`), with **24** as the default selector via `.node-version`.
 
-Repomix is an optional repository-packaging tool and requires **Node 24** in this repo. A strict `npm ci` on Node 20 skips Repomix because its supported engine starts at Node 22; install, build, lint, and unit tests remain supported on Node 20. Switch to Node 24 and rerun `npm ci` before using the local Repomix CLI. Keep the `^1.14.1` minimum: the last Node 20-compatible release, 1.14.0, lacks the security fixes included in 1.14.1.
-
 The local WordPress stack also expects Docker, Docker Compose, PHP, Composer, WP-CLI, and Playwright browsers to be available on the host when running the full verification pipeline.
 
 ## WordPress Image Pinning
