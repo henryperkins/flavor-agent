@@ -25,8 +25,14 @@ module.exports = {
 		'<rootDir>/.claude/worktrees/',
 		'<rootDir>/output/',
 	],
+	// WordPress loads these ESM dependencies through Babel's CommonJS output.
+	// Transform them so Node 20 does not need Jest's newer require(esm) bridge.
+	transform: {
+		...baseConfig.transform,
+		'\\.mjs$': baseConfig.transform[ '\\.[jt]sx?$' ],
+	},
 	transformIgnorePatterns: [
-		'/node_modules/(?!(uuid)/)',
+		'/node_modules/(?!(uuid|marked|@wordpress/theme)/)',
 		'\\.pnp\\.[^\\/]+$',
 	],
 };

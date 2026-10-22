@@ -45,7 +45,6 @@
 		"eslint": "^10.3.0",
 		"eslint-import-resolver-typescript": "^3.10.1",
 		"playwright-core": "1.60.0",
-		"repomix": "^1.13.1",
 		"yaml": "1.10.3"
 	},
 	"dependencies": {
@@ -79,5 +78,8 @@
 			".": "0.32.2",
 			"minimatch": "^8.0.7"
 		}
+	},
+	"optionalDependencies": {
+		"repomix": "^1.14.1"
 	}
 }

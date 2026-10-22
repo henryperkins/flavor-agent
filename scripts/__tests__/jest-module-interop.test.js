@@ -1,11 +1,29 @@
 'use strict';
 
-// Exercise the real dependency boundary used by block apply/undo tests: UUID's
-// ESM source must load alongside Babel-transformed WordPress packages.
+// Exercise the real ESM dependencies used by WordPress block and Markdown
+// handling alongside Babel-transformed WordPress packages.
 const { cloneBlock } = jest.requireActual( '@wordpress/blocks' );
+const { ThemeProvider } = jest.requireActual( '@wordpress/theme' );
+const { Marked } = jest.requireActual( 'marked' );
 const { v4: uuid, validate, version } = jest.requireActual( 'uuid' );
 
 describe( 'Jest WordPress module interoperability', () => {
+	test( 'loads the real ThemeProvider from its published mjs entry', () => {
+		expect( ThemeProvider ).toEqual( expect.any( Function ) );
+	} );
+
+	test( 'renders Markdown through the real Marked ESM implementation', () => {
+		const parser = new Marked( { gfm: true } );
+
+		expect(
+			parser.parse( '# Heading\n\n**Bold** and `code`.\n', {
+				async: false,
+			} )
+		).toBe(
+			'<h1>Heading</h1>\n<p><strong>Bold</strong> and <code>code</code>.</p>\n'
+		);
+	} );
+
 	test( 'loads the real UUID implementation with its random-byte options', () => {
 		expect(
 			uuid( {
